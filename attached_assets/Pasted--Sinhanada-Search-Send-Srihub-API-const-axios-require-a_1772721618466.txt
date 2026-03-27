@@ -1,0 +1,76 @@
+/**
+ * Sinhanada Search & Send - Srihub API
+ */
+
+const axios = require('axios');
+
+module.exports = {
+  name: 'sinhanada',
+  aliases: ['snd', 'sndsearch'],
+  category: 'media',
+  description: 'Search Sinhanada and send song',
+  usage: '.sinhanada <song name>',
+
+  async execute(sock, msg, args, extra) {
+    const { from, reply, react } = extra;
+
+    const API_KEY = 'dew_FEIXBd8x3XE6eshtBtM1NwEV5IxSLI6PeRE2zLmi';
+
+    try {
+
+      const store = require('../../lib/lightweight_store');
+      const systemEnabled = await store.getSetting('system', 'src_commands_enabled');
+
+      if (systemEnabled === false) {
+        return reply("❌ Sinhanada command is currently disabled by the owner.");
+      }
+
+      const query = args.join(" ").trim();
+      if (!query) return reply("❌ Give song name.");
+
+      await react("⏳");
+
+      // SEARCH API
+      const searchUrl = `https://api.srihub.store/search/sinhanada?q=${encodeURIComponent(query)}&apikey=${API_KEY}`;
+      const { data } = await axios.get(searchUrl, { timeout: 30000 });
+
+      if (!data.success || !data.result || data.result.length === 0) {
+        await react("❌");
+        return reply("❌ No songs found.");
+      }
+
+      const songResult = data.result[0]; // first result
+      const songPage = songResult.link;
+
+      // DOWNLOAD API
+      const downloadUrl = `https://api.srihub.store/download/sinhanada?url=${encodeURIComponent(songPage)}&apikey=${API_KEY}`;
+      const { data: dlData } = await axios.get(downloadUrl, { timeout: 30000 });
+
+      if (!dlData.success || !dlData.result) {
+        await react("❌");
+        return reply("❌ Failed to download song.");
+      }
+
+      const song = dlData.result;
+
+      await sock.sendMessage(from, {
+        audio: { url: song.download_url },
+        mimetype: 'audio/mpeg',
+        ptt: false,
+        caption: `🎵 *${song.title}*
+👤 Artist: ${song.artist}
+💾 Size: ${song.size}
+📅 Uploaded: ${song.uploaded_on}
+
+> INFINITY MD`
+      }, { quoted: msg });
+
+      await react("✅");
+
+    } catch (err) {
+      console.log(err.response?.data || err.message);
+      await react("❌");
+      reply("❌ API Error. Check console.");
+    }
+  }
+};

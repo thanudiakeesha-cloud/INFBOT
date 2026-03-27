@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinity-MD 2026 · 500+ commits · 100% tested</title>
+    <!-- SEO & trust -->
+    <meta name="description" content="Infinity-MD 2026: 500+ commits, every command tested by the team. 100+ daily active users. 1‑second deploy, anti‑ban kernel.">
+    <meta name="keywords" content="WhatsApp bot, Infinity MD, tested commands, 500 commits, active users, anti-ban">
+    <meta name="author" content="Infinity Team 2026">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='90' font-size='90' text-anchor='middle' fill='%237c3aed' font-family='monospace'%3E∞%3C/text%3E%3C/svg%3E">
+    <!-- Preconnects -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <!-- Tailwind + Font Awesome -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #050507;
+            color: #ffffff;
+            scroll-behavior: smooth;
+            overflow-x: hidden;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #00f2fe 0%, #7c3aed 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+            z-index: -1;
+            filter: blur(20px);
+        }
+
+        .feature-card {
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: 1px solid rgba(255,255,255,0.03);
+        }
+        .feature-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            background: rgba(124, 58, 237, 0.1);
+            border-color: #7c3aed80;
+            box-shadow: 0 20px 40px -12px rgba(124, 58, 237, 0.3);
+        }
+
+        .dashboard-preview {
+            box-shadow: 0 0 60px -15px rgba(124, 58, 237, 0.4);
+            transition: box-shadow 0.3s;
+        }
+        .dashboard-preview:hover {
+            box-shadow: 0 0 80px -10px #7c3aed;
+        }
+
+        @keyframes pulse-border {
+            0% { border-color: rgba(124, 58, 237, 0.3); box-shadow: 0 0 0 0 rgba(124,58,237,0.3); }
+            50% { border-color: #7c3aed; box-shadow: 0 0 25px 5px rgba(124,58,237,0.5); }
+            100% { border-color: rgba(124, 58, 237, 0.3); box-shadow: 0 0 0 0 rgba(124,58,237,0.2); }
+        }
+        .animate-pulse-slow { animation: pulse-border 3.5s infinite; }
+
+        .status-dot {
+            width: 10px; height: 10px; background: #10b981; border-radius: 50%;
+            display: inline-block; box-shadow: 0 0 12px #10b981;
+            animation: pulse-green 1.8s infinite;
+        }
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 12px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        /* scan line animation */
+        @keyframes scan {
+            0% { top: 0; opacity: 0.4; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0.4; }
+        }
+        .animate-scan {
+            position: absolute; left: 0; width: 100%; height: 4px;
+            background: linear-gradient(90deg, transparent, #7c3aed, #00f2fe, transparent);
+            animation: scan 2.2s linear infinite; filter: blur(2px);
+        }
+
+        .bg-noise {
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.05'/%3E%3C/svg%3E");
+            pointer-...

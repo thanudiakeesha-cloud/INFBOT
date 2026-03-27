@@ -1,0 +1,342 @@
+Tik Tok Search
+API endpoint for Tik Tok Search
+
+
+Endpoint
+
+
+https://api.srihub.store/search/tiktok?q=sinhala video&apikey=dew_FEIXBd8x3XE6eshtBtM1NwEV5IxSLI6PeRE2zLmi
+Response
+
+{
+( Fold)
+  "creator": "Hansa Dewmina",
+  "status": 200,
+  "success": true,
+  "result": [
+    {
+      "video_id": "7593819975068962068",
+      "title": "#sinhalakatha #telekatha #trending #viralvideo #sinhala #teledrama #srilanka #slvlog #sinhalatiktok",
+      "region": "LK",
+      "duration": 98,
+      "size": 4869179,
+      "play_count": 1804,
+      "comment_count": 1,
+      "share_count": 1,
+      "cover": "https://www.tikwm.com/video/cover/7593819975068962068.webp",
+      "play": "https://www.tikwm.com/video/media/play/7593819975068962068.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7593819975068962068.mp4",
+      "music": "https://www.tikwm.com/video/music/7593819975068962068.mp3",
+      "author": {
+        "id": "7535322635354342407",
+        "unique_id": "telekatha.lk",
+        "avatar": "https://www.tikwm.com/video/avatar/7593819975068962068.jpeg"
+      },
+      "music_info": {
+        "id": "7593820052948814609",
+        "title": "original sound - telekatha.lk",
+        "play": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tiktok-obj/7602258458875939591.mp3",
+        "author": "Telekatha.lk",
+        "original": true,
+        "duration": 98
+      }
+    },
+    {
+      "video_id": "7517229498455035154",
+      "title": "ස්කූටර් නංගි ai funny video sinhala drama | scooter nangi #sinhalaai #scooternangi #funnyai #sinhaladrama #lankantiktok #aivideo",
+      "region": "LK",
+      "duration": 56,
+      "size": 5127797,
+      "play_count": 631672,
+      "comment_count": 660,
+      "share_count": 3023,
+      "cover": "https://www.tikwm.com/video/cover/7517229498455035154.webp",
+      "play": "https://www.tikwm.com/video/media/play/7517229498455035154.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7517229498455035154.mp4",
+      "music": "https://www.tikwm.com/video/music/7517229498455035154.mp3",
+      "author": {
+        "id": "7099787243942822917",
+        "unique_id": "saaalaka",
+        "avatar": "https://www.tikwm.com/video/avatar/7517229498455035154.jpeg"
+      },
+      "music_info": {
+        "id": "7517229552288942865",
+        "title": "original sound - saaalaka",
+        "play": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tiktok-obj/7517260660163136274.mp3",
+        "author": "Saalaka’s Interests",
+        "original": true,
+        "duration": 56
+      }
+    },
+    {
+      "video_id": "7598601801675328775",
+      "title": "#sinhalatiktok #viralvideo #funny #ජෝක්ස් #ආතල්_විතරමයි😂 ",
+      "region": "AE",
+      "duration": 527,
+      "size": 48947602,
+      "play_count": 228631,
+      "comment_count": 94,
+      "share_count": 315,
+      "cover": "https://www.tikwm.com/video/cover/7598601801675328775.webp",
+      "play": "https://www.tikwm.com/video/media/play/7598601801675328775.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7598601801675328775.mp4",
+      "music": "https://www.tikwm.com/video/music/7598601801675328775.mp3",
+      "author": {
+        "id": "7558550495453185031",
+        "unique_id": "kathandare77",
+        "avatar": "https://www.tikwm.com/video/avatar/7598601801675328775.jpeg"
+      },
+      "music_info": {
+        "id": "7598601959918127890",
+        "title": "original sound - kathandare77",
+        "play": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tiktok-obj/7598601962406628097.mp3",
+        "author": "කතන්දරේ | K A T H A N D A R E",
+        "original": true,
+        "duration": 527
+      }
+    },
+    {
+      "video_id": "7596899049668644103",
+      "title": "The Wife වයිෆ් - The Wife (2026) Sinhala Movie Fan Edit 🎬 Video & Audio Belong to Rightful Owners Created Purely for Entertainment  No Copyright Infringement Intended @Hemal_Ranasinghe_CinemaFanClub  @Udari.live💛  @Shameera Naotunna  @SINALI MEDIA  #fyp #trending #viral #thisvideo #10kviews ",
+      "region": "LK",
+      "duration": 45,
+      "size": 1843396,
+      "play_count": 2247624,
+      "comment_count": 955,
+      "share_count": 12554,
+      "cover": "https://www.tikwm.com/video/cover/7596899049668644103.webp",
+      "play": "https://www.tikwm.com/video/media/play/7596899049668644103.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7596899049668644103.mp4",
+      "music": "https://www.tikwm.com/video/music/7596899049668644103.mp3",
+      "author": {
+        "id": "7384018697461728264",
+        "unique_id": "itz.sithija",
+        "avatar": "https://www.tikwm.com/video/avatar/7596899049668644103.jpeg"
+      },
+      "music_info": {
+        "id": "7596899070879353616",
+        "title": "original sound - itz.sithija",
+        "play": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tiktok-obj/7596899075627305745.mp3",
+        "author": "Nimzz",
+        "original": true,
+        "duration": 45
+      }
+    },
+    {
+      "video_id": "7607025576997621000",
+      "title": "ආයේ මොකට මහන්සි වෙනවද 😪😅 #srilankan_tik_tok🇱🇰 #ai #athal #sinhalacomedy #funnyvideos ",
+      "region": "LK",
+      "duration": 14,
+      "size": 991639,
+      "play_count": 575221,
+      "comment_count": 379,
+      "share_count": 2710,
+      "cover": "https://www.tikwm.com/video/cover/7607025576997621000.webp",
+      "play": "https://www.tikwm.com/video/media/play/7607025576997621000.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7607025576997621000.mp4",
+      "music": "https://www.tikwm.com/video/music/7607025576997621000.mp3",
+      "author": {
+        "id": "7442276463728821303",
+        "unique_id": "dulakshax06",
+        "avatar": "https://www.tikwm.com/video/avatar/7607025576997621000.jpeg"
+      },
+      "music_info": {
+        "id": "7009845502275487746",
+        "title": "Monkeyshine NO PERC-JP",
+        "play": "https://sf16-ies-music-va.tiktokcdn.com/obj/tos-useast2a-ve-2774/a4e022c78c734480b60e6aabfb700f87",
+        "author": "Lt FitzGibbons Men",
+        "original": false,
+        "duration": 89
+      }
+    },
+    {
+      "video_id": "7378138474215492882",
+      "title": "බාප්පා පිට අතුල්ලන්න හොදට දන්නවනේ.. 🫣🤪 Part 2 #fypシ゚viral #sinhala #sinhalateledrama #vilage #sinhalamovie #movie #fyp #fypage #foryoupage #foryoupage #onemillionaudition #srilankangirl #tiktoksrilanka #romance #Love #sangili #sarangadisasekara #sinhalateledrama #sinhala #srilankanactress #actress  #sangili #movie #movieclips #trending #viral #srilankan_tik_tok🇱🇰 #tiktoksrilanka #tiktok #srilanka #srilankan ",
+      "region": "LK",
+      "duration": 51,
+      "size": 2991740,
+      "play_count": 1417426,
+      "comment_count": 295,
+      "share_count": 651,
+      "cover": "https://www.tikwm.com/video/cover/7378138474215492882.webp",
+      "play": "https://www.tikwm.com/video/media/play/7378138474215492882.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7378138474215492882.mp4",
+      "music": "https://www.tikwm.com/video/music/7378138474215492882.mp3",
+      "author": {
+        "id": "7239838273684964358",
+        "unique_id": "gallery_mixture",
+        "avatar": "https://www.tikwm.com/video/avatar/7378138474215492882.jpeg"
+      },
+      "music_info": {
+        "id": "7378138500106963728",
+        "title": "original sound - gallery_mixture",
+        "play": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tiktok-obj/7378138482063035152.mp3",
+        "author": "Gallery_Mixture",
+        "original": true,
+        "duration": 51
+      }
+    },
+    {
+      "video_id": "7586570054397873416",
+      "title": "හීනෙකින් හෝ තවකෙකුට ඔබ නොදෙමි මං... 🥹❤️ ©️Husmak Durin | Gayan Kavintha #frozenstatus #husmakdurin #lovestory #coversong #hiripodawassa ",
+      "region": "SG",
+      "duration": 27,
+      "size": 1652240,
+      "play_count": 587624,
+      "comment_count": 450,
+      "share_count": 1316,
+      "cover": "https://www.tikwm.com/video/cover/7586570054397873416.webp",
+      "play": "https://www.tikwm.com/video/media/play/7586570054397873416.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7586570054397873416.mp4",
+      "music": "https://www.tikwm.com/video/music/7586570054397873416.mp3",
+      "author": {
+        "id": "6757835160857969670",
+        "unique_id": "frozenstatus",
+        "avatar": "https://www.tikwm.com/video/avatar/7586570054397873416.jpeg"
+      },
+      "music_info": {
+        "id": "7585212659303090952",
+        "title": "original sound - gayankavintha13",
+        "play": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tiktok-obj/7585212660635978513.mp3",
+        "author": "gayankavintha13",
+        "original": true,
+        "duration": 38
+      }
+    },
+    {
+      "video_id": "7182231344787770650",
+      "title": "මේ වගේ ආතල් වදනක් කොටාන පලයල්ලා... සුපිරිම එක දානව 😁❤️🌏...  #fyp #fypシ゚viral #foryou #foryoupage #tiktok #viral #trending #whatsapp #status #whatsappstatus #sinhalastatusvideo #sinhalatiktok #Love #feelings #romantic #srilankan_tik_tok🇱🇰 #song #tiktokindia ",
+      "region": "LK",
+      "duration": 9,
+      "size": 203833,
+      "play_count": 2829754,
+      "comment_count": 1902,
+      "share_count": 6148,
+      "cover": "https://www.tikwm.com/video/cover/7182231344787770650.webp",
+      "play": "https://www.tikwm.com/video/media/play/7182231344787770650.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7182231344787770650.mp4",
+      "music": "https://www.tikwm.com/video/music/7182231344787770650.mp3",
+      "author": {
+        "id": "7152864552459519003",
+        "unique_id": "studio_voix",
+        "avatar": "https://www.tikwm.com/video/avatar/7182231344787770650.jpeg"
+      },
+      "music_info": {
+        "id": "7116630488302750491",
+        "title": "original sound - dironnishan",
+        "play": "https://sf16-ies-music.tiktokcdn.com/obj/ies-music-aiso/7116630532142025499.mp3",
+        "author": "𝙼𝚛×͜×𝚄𝚗𝚕𝚞𝚌𝚔𝚢 🎭 〽️⚡️",
+        "original": true,
+        "duration": 21
+      }
+    },
+    {
+      "video_id": "7519843466642197778",
+      "title": "කෙලින්ම ඇවිල්ලා මට කියන්න... 🥹❤️ ©️ Love Story Short Film | Brother And Sister  #frozenstatus #sinhalasong #lovestory #shortfilm #botherandsister #fyp ",
+      "region": "LK",
+      "duration": 21,
+      "size": 1466419,
+      "play_count": 878955,
+      "comment_count": 999,
+      "share_count": 2137,
+      "cover": "https://www.tikwm.com/video/cover/7519843466642197778.webp",
+      "play": "https://www.tikwm.com/video/media/play/7519843466642197778.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7519843466642197778.mp4",
+      "music": "https://www.tikwm.com/video/music/7519843466642197778.mp3",
+      "author": {
+        "id": "6757835160857969670",
+        "unique_id": "frozenstatus",
+        "avatar": "https://www.tikwm.com/video/avatar/7519843466642197778.jpeg"
+      },
+      "music_info": {
+        "id": "7519843483704773377",
+        "title": "original sound - frozenstatus",
+        "play": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tiktok-obj/7519843487476058881.mp3",
+        "author": "FROZEN STATUS",
+        "original": true,
+        "duration": 21
+      }
+    },
+    {
+      "video_id": "7563216153435213063",
+      "title": "හොඳට පිරිලා...🥺❤️‍🔥Video viral කරගන්න ඕනි කට්ටිය Inbox එන්න 👀❤️ #sinhalasong #lyricsvideo #whatsappstatus #lovelyrics",
+      "region": "LK",
+      "duration": 21,
+      "size": 1715229,
+      "play_count": 1517360,
+      "comment_count": 711,
+      "share_count": 3095,
+      "cover": "https://www.tikwm.com/video/cover/7563216153435213063.webp",
+      "play": "https://www.tikwm.com/video/media/play/7563216153435213063.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7563216153435213063.mp4",
+      "music": "https://www.tikwm.com/video/music/7563216153435213063.mp3",
+      "author": {
+        "id": "6960161411305784321",
+        "unique_id": "dinuumusic",
+        "avatar": "https://www.tikwm.com/video/avatar/7563216153435213063.jpeg"
+      },
+      "music_info": {
+        "id": "7563216186637355793",
+        "title": "original sound - dinuumusic",
+        "play": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tiktok-obj/7563216183093185281.mp3",
+        "author": "𝙳𝙸𝙽𝚄 𝙼𝚄𝚂𝙸𝙲 🤍🎧",
+        "original": true,
+        "duration": 21
+      }
+    },
+    {
+      "video_id": "7477079382683585808",
+      "title": "ආදර වසන්තේ💗🫣 ...film boy...  episode-23 #funnyvideo #fyp #trendingnow #film #capcut #sinhalavideo #tiktokviral #srilankan #viral #foryou #tvderana",
+      "region": "LK",
+      "duration": 266,
+      "size": 6971461,
+      "play_count": 537482,
+      "comment_count": 500,
+      "share_count": 114,
+      "cover": "https://www.tikwm.com/video/cover/7477079382683585808.webp",
+      "play": "https://www.tikwm.com/video/media/play/7477079382683585808.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7477079382683585808.mp4",
+      "music": "https://www.tikwm.com/video/music/7477079382683585808.mp3",
+      "author": {
+        "id": "7462448965150835720",
+        "unique_id": "filmboy80",
+        "avatar": "https://www.tikwm.com/video/avatar/7477079382683585808.jpeg"
+      },
+      "music_info": {
+        "id": "7477079492029729537",
+        "title": "original sound - filmboy80",
+        "play": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tiktok-obj/7477079476582222609.mp3",
+        "author": "maduu 🎼",
+        "original": true,
+        "duration": 266
+      }
+    },
+    {
+      "video_id": "7550981432475241736",
+      "title": "Tomy Tomy 😂😂 #funny #funnyvideos #sinhala #athal #trending ",
+      "region": "LK",
+      "duration": 28,
+      "size": 1639197,
+      "play_count": 231732,
+      "comment_count": 334,
+      "share_count": 1234,
+      "cover": "https://www.tikwm.com/video/cover/7550981432475241736.webp",
+      "play": "https://www.tikwm.com/video/media/play/7550981432475241736.mp4",
+      "wmplay": "https://www.tikwm.com/video/media/wmplay/7550981432475241736.mp4",
+      "music": "https://www.tikwm.com/video/music/7550981432475241736.mp3",
+      "author": {
+        "id": "7499863874553693191",
+        "unique_id": "ishara700_",
+        "avatar": "https://www.tikwm.com/video/avatar/7550981432475241736.jpeg"
+      },
+      "music_info": {
+        "id": "7550981449223097104",
+        "title": "original sound - ishara700_",
+        "play": "https://sf16-ies-music-sg.tiktokcdn.com/obj/tiktok-obj/7550981449446624016.mp3",
+        "author": "Ishara_Dilshan",
+        "original": true,
+        "duration": 28
+      }
+    }
+  ]
+}

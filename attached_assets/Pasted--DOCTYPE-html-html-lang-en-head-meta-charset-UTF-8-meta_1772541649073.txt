@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Infinity MD | Super Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#05070d;
+  --panel:#0f172a;
+  --panel-2:#111827;
+  --border:#1f2937;
+  --neon:#00f5ff;
+  --neon-soft:rgba(0,245,255,0.15);
+  --pink:#ff00c8;
+  --green:#00ff88;
+  --red:#ff3b3b;
+  --text:#e5e7eb;
+  --muted:#94a3b8;
+  --radius:16px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+  font-family:'Inter',sans-serif;
+  background:radial-gradient(circle at top,var(--neon-soft),transparent 40%),var(--bg);
+  color:var(--text);
+}
+
+.container{
+  max-width:1400px;
+  margin:auto;
+  padding:30px;
+}
+
+/* HEADER */
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:40px;
+}
+
+.brand h1{
+  font-family:'Orbitron',sans-serif;
+  font-size:2rem;
+  background:linear-gradient(90deg,var(--neon),var(--pink));
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+}
+
+.brand p{
+  font-size:0.9rem;
+  color:var(--muted);
+  margin-top:6px;
+}
+
+.btn{
+  padding:10px 18px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:var(--panel-2);
+  color:var(--text);
+  cursor:pointer;
+  transition:0.3s ease;
+  font-weight:600;
+}
+
+.btn:hover{
+  border-color:var(--neon);
+  box-shadow:0 0 12px var(--neon-soft);
+}
+
+.btn-primary{
+  background:linear-gradient(90deg,var(--neon),var(--pink));
+  border:none;
+  color:#000;
+}
+
+.btn-danger{
+  background:var(--red);
+  border:none;
+  color:#fff;
+}
+
+.card{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:22px;
+  margin-bottom:25px;
+  backdrop-filter:blur(12px);
+}
+
+.card h3{
+  margin-bottom:18px;
+  font-size:1rem;
+  font-weight:600;
+  color:var(--neon);
+}
+
+.grid{
+  display:grid;
+  gap:20px;
+}
+
+.grid-2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr));}
+.grid-3{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));}
+
+.stat{
+  background:var(--panel-2);
+  padding:20px;
+  border-radius:14px;
+  border:1px solid var(--border);
+  transition:0.3s;
+}
+
+.stat:hover{
+  border-color:var(--neon);
+  box-shadow:0 0 15px var(--neon-soft);
+}
+
+.stat span{
+  font-size:0.75rem;
+  color:var(--muted);
+}
+
+.stat strong{
+  font-size:1.6rem;
+  display:block;
+  margin-top:6px;
+}
+
+input,textarea{
+  width:100%;
+  padding:12px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:var(--panel-2);
+  color:var(--text);
+  margin-bottom:12px;
+}
+
+textarea{resize:none}
+
+.session-card{
+  background:var(--panel-2);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:18px;
+  transition:0.3s;
+}
+
+.session-card:hover{
+  border-color:var(--pink);
+  box-shadow:0 0 15px rgba(255,0,200,0.2);
+}
+
+.session-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:12px;
+}
+
+.badge{
+  padding:4px 10px;
+  border-radius:20px;
+  font-size:0.7rem;
+  font-weight:600;
+}
+
+.online{background:rgba(0,255,136,0.15);color:var(--green)}
+.offline{background:rgba(255,59,59,0.15);color:var(--red)}
+
+.session-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:12px;
+}
+
+footer{
+  margin-top:40px;
+  text-align:center;
+  color:var(--muted);
+  font-size:0.8rem;
+}
+
+@media(max-width:600px){
+  header{flex-direction:column;align-items:flex-start;gap:15px}
+}
+
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<header>
+  <div class="brand">
+    <h1>INFINITY MD</h1>
+    <p>Advanced WhatsApp Multi‑Device Bot Control System</p>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <button class="btn">System</button>
+    <button class="btn btn-danger" onclick="location.href='/login'">Logout</button>
+  </div>
+</header>
+
+<!-- SYSTEM OVERVIEW -->
+<div class="grid grid-3">
+  <div class="stat">
+    <span>Total Bots</span>
+    <strong id="stat-bots">0</strong>
+  </div>
+  <div class="stat">
+    <span>Active Bots</span>
+    <strong id="stat-online">0</strong>
+  </div>
+  <div class="stat">
+    <span>Server RAM</span>
+    <strong id="stat-ram">0 MB</strong>
+  </div>
+</div>
+
+<!-- DEPLOY BOT -->
+<div class="card">
+  <h3>Deploy New Bot Instance</h3>
+  <div class="grid grid-2">
+    <input type="text" id="botName" placeholder="Bot Name">
+    <input type="text" id="sessionId" placeholder="Session ID">
+    <input type="text" id="ownerName" placeholder="Owner Name">
+    <input type="text" id="ownerNumber" placeholder="Owner Number (94xxxx)">
+  </div>
+  <button class="btn btn-primary" onclick="addSession()">Deploy Bot</button>
+</div>
+
+<!-- ACTIVE SESSIONS -->
+<div class="card">
+  <h3>Active Bot Sessions</h3>
+  <div id="sessionsList" class="grid grid-2"></div>
+</div>
+
+<footer>
+Infinity MD • Futuristic WhatsApp Bot Dashboard
+</footer>
+
+</div>
+
+<script>
+function addSession(){
+  const id=document.getElementById('sessionId').value;
+  if(!id) return alert('Session ID required');
+  alert('Bot deployment request sent');
+}
+
+function renderDemoSession(){
+  const container=document.getElementById('sessionsList');
+  container.innerHTML=`
+  <div class="session-card">
+    <div class="session-header">
+      <div>
+        <strong>AlphaBot</strong><br>
+        <span class="badge online">ONLINE</span>
+      </div>
+    </div>
+    <div style="font-size:0.85rem;color:var(--muted);">
+      Owner: Savin (9477xxxxxxx)
+    </div>
+    <div class="session-actions">
+      <button class="btn">Restart</button>
+      <button class="btn">Settings</button>
+      <button class="btn btn-danger">Delete</button>
+    </div>
+  </div>`;
+}
+
+renderDemoSession();
+</script>
+
+</body>
+</html>

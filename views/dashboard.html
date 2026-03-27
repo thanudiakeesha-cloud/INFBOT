@@ -1,0 +1,1798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Infinity MD | Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Orbitron:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#04040c;--surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.05);--surface-3:rgba(255,255,255,0.08);
+  --border:rgba(255,255,255,0.08);--border-hover:rgba(139,92,246,0.35);--border-glow:rgba(6,182,212,0.25);
+  --cyan:#06b6d4;--cyan-dim:rgba(6,182,212,0.12);--cyan-glow:rgba(6,182,212,0.18);
+  --purple:#8b5cf6;--purple-dim:rgba(139,92,246,0.12);--purple-glow:rgba(139,92,246,0.18);
+  --green:#10b981;--green-dim:rgba(16,185,129,0.12);--green-glow:rgba(16,185,129,0.2);
+  --red:#ef4444;--red-dim:rgba(239,68,68,0.12);
+  --amber:#f59e0b;--amber-dim:rgba(245,158,11,0.12);--gold:#f59e0b;
+  --pink:#ec4899;--pink-dim:rgba(236,72,153,0.12);
+  --text:#f1f5f9;--muted:rgba(255,255,255,0.5);--dim:rgba(255,255,255,0.28);
+  --radius:16px;--radius-sm:10px;
+  --sidebar-w:272px;
+}
+
+/* Smooth scrolling */
+html{scroll-behavior:smooth}
+html,body{height:100%;overflow-x:hidden}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;position:relative}
+
+/* Custom scrollbar - global */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:rgba(13,21,38,0.5);border-radius:10px}
+::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--cyan),var(--purple));border-radius:10px;min-height:30px}
+::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#22d3ee,#c084fc)}
+::-webkit-scrollbar-corner{background:transparent}
+*{scrollbar-width:thin;scrollbar-color:var(--cyan) rgba(13,21,38,0.5)}
+
+/* Particle canvas */
+#particles-canvas{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.45}
+
+/* Background glow orbs */
+.bg-orbs{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);animation:orbFloat 14s ease-in-out infinite}
+.orb1{width:600px;height:600px;background:radial-gradient(circle,rgba(6,182,212,0.06),transparent 70%);top:-150px;left:-150px}
+.orb2{width:500px;height:500px;background:radial-gradient(circle,rgba(168,85,247,0.05),transparent 70%);bottom:-100px;right:-100px;animation-delay:-5s}
+.orb3{width:350px;height:350px;background:radial-gradient(circle,rgba(34,197,94,0.035),transparent 70%);top:40%;left:40%;transform:translate(-50%,-50%);animation-delay:-10s}
+@keyframes orbFloat{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(25px,-18px) scale(1.04)}66%{transform:translate(-12px,22px) scale(0.97)}}
+
+/* Layout */
+.layout{display:flex;min-height:100vh;position:relative}
+
+/* Sidebar */
+.sidebar{
+  width:var(--sidebar-w);
+  background:rgba(4,4,12,0.96);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;
+  transition:transform 0.35s cubic-bezier(.4,0,.2,1);
+  box-shadow:8px 0 60px rgba(0,0,0,0.7);
+  backdrop-filter:blur(32px);
+  -webkit-backdrop-filter:blur(32px);
+  overflow:hidden;
+}
+.sidebar::after{
+  content:'';position:absolute;top:0;right:0;width:1px;height:100%;
+  background:linear-gradient(180deg,transparent,rgba(6,182,212,0.4),rgba(168,85,247,0.25),rgba(34,197,94,0.15),transparent);
+}
+
+/* Sidebar header */
+.sidebar-header{
+  padding:20px 16px 16px;
+  border-bottom:1px solid rgba(30,48,82,0.7);
+  background:linear-gradient(135deg,rgba(6,182,212,0.05),rgba(168,85,247,0.04));
+  position:relative;overflow:hidden;flex-shrink:0;
+}
+.sidebar-header::before{
+  content:'';position:absolute;top:-40px;right:-40px;width:140px;height:140px;
+  border-radius:50%;background:radial-gradient(circle,rgba(6,182,212,0.1),transparent);pointer-events:none;
+}
+.sidebar-logo-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.sidebar-logo-icon{
+  width:44px;height:44px;border-radius:14px;
+  background:linear-gradient(135deg,#0891b2,#7c3aed);
+  display:flex;align-items:center;justify-content:center;font-size:1.2rem;
+  box-shadow:0 0 24px rgba(6,182,212,0.4),0 4px 16px rgba(0,0,0,0.4);flex-shrink:0;
+  animation:logoGlow 3s ease-in-out infinite;
+}
+@keyframes logoGlow{0%,100%{box-shadow:0 0 20px rgba(6,182,212,0.4),0 4px 14px rgba(0,0,0,0.3)}50%{box-shadow:0 0 40px rgba(6,182,212,0.6),0 4px 20px rgba(0,0,0,0.4)}}
+.sidebar-brand h1{font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:800;background:linear-gradient(135deg,#22d3ee,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px}
+.sidebar-brand p{font-size:0.62rem;color:var(--dim);margin-top:2px;letter-spacing:0.8px;text-transform:uppercase}
+.sidebar-version{display:inline-flex;align-items:center;gap:5px;background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.15);border-radius:20px;padding:3px 10px;font-size:0.6rem;color:var(--cyan);margin-top:6px}
+.sidebar-version::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan);animation:blink 1.5s ease-in-out infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.25}}
+
+/* Nav */
+.nav{flex:1;padding:12px 10px;overflow-y:auto;overflow-x:hidden}
+.nav-section{font-size:0.58rem;color:var(--dim);text-transform:uppercase;letter-spacing:2.5px;padding:10px 14px 5px;font-weight:700;margin-top:4px}
+.nav-item{
+  display:flex;align-items:center;gap:11px;padding:10px 13px;border-radius:12px;
+  cursor:pointer;color:var(--muted);font-size:0.85rem;font-weight:500;
+  transition:all 0.2s cubic-bezier(.4,0,.2,1);margin-bottom:2px;
+  border:1px solid transparent;position:relative;overflow:hidden;user-select:none;
+}
+.nav-item::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--cyan),var(--purple));border-radius:0 3px 3px 0;transform:scaleY(0);transition:transform 0.2s}
+.nav-item:hover{background:rgba(30,48,82,0.55);color:var(--text);border-color:rgba(30,48,82,0.7)}
+.nav-item.active{background:linear-gradient(135deg,rgba(139,92,246,0.14),rgba(6,182,212,0.07));color:#c4b5fd;border-color:rgba(139,92,246,0.28);box-shadow:inset 0 0 20px rgba(139,92,246,0.06)}
+.nav-item.active::before{transform:scaleY(1)}
+.nav-item .icon{font-size:1rem;width:20px;text-align:center;flex-shrink:0}
+.nav-badge{margin-left:auto;background:linear-gradient(135deg,var(--cyan),var(--purple));color:#000;font-size:0.58rem;font-weight:800;padding:2px 8px;border-radius:10px;flex-shrink:0}
+.nav-badge.green{background:var(--green)}
+
+/* Sidebar footer */
+.sidebar-footer{padding:12px;border-top:1px solid rgba(30,48,82,0.7);flex-shrink:0}
+.user-info{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(30,48,82,0.35);border:1px solid rgba(30,48,82,0.7);margin-bottom:10px;transition:all 0.2s;cursor:default}
+.user-info:hover{border-color:rgba(30,48,82,0.95);background:rgba(30,48,82,0.55)}
+.user-avatar{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--cyan),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;flex-shrink:0;box-shadow:0 0 14px rgba(6,182,212,0.3)}
+.user-details{flex:1;min-width:0}
+.user-details .name{font-weight:600;font-size:0.84rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-details .role{font-size:0.65rem;color:var(--dim);margin-top:1px}
+.powered-badge{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:12px;background:linear-gradient(135deg,rgba(245,158,11,0.06),rgba(168,85,247,0.06),rgba(236,72,153,0.04));border:1px solid rgba(245,158,11,0.2);animation:badgePulse 4s ease-in-out infinite;position:relative;overflow:hidden}
+.powered-badge::before{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(245,158,11,0.04),transparent);animation:shimmer 3s ease-in-out infinite}
+@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@keyframes badgePulse{0%,100%{border-color:rgba(245,158,11,0.2)}50%{border-color:rgba(245,158,11,0.45);box-shadow:0 0 16px rgba(245,158,11,0.07)}}
+.badge-star{font-size:0.75rem;animation:starSpin 6s linear infinite;display:inline-block}
+@keyframes starSpin{to{transform:rotate(360deg)}}
+.badge-label{font-size:0.56rem;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+.badge-name{font-family:'Orbitron',sans-serif;font-size:0.68rem;font-weight:800;background:linear-gradient(135deg,#fbbf24,#f97316,#ec4899,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+/* Main content area */
+.main{flex:1;margin-left:var(--sidebar-w);min-height:100vh;display:flex;flex-direction:column}
+
+/* Topbar */
+.topbar{
+  padding:14px 28px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;
+  background:rgba(4,4,12,0.88);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);
+  position:sticky;top:0;z-index:50;flex-shrink:0;
+}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-title{font-weight:700;font-size:1rem;letter-spacing:0.2px}
+.topbar-breadcrumb{font-size:0.7rem;color:var(--dim);padding:3px 10px;background:var(--surface-2);border-radius:6px;border:1px solid var(--border)}
+.topbar-right{display:flex;gap:8px;align-items:center}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:statusPulse 2s ease-in-out infinite;flex-shrink:0}
+@keyframes statusPulse{0%,100%{box-shadow:0 0 8px var(--green)}50%{box-shadow:0 0 18px var(--green),0 0 28px rgba(34,197,94,0.25)}}
+.status-label{font-size:0.7rem;color:var(--green);font-weight:600}
+
+/* Content */
+.content{padding:26px 28px;flex:1;overflow-y:auto}
+
+/* Page transitions */
+.page{display:none;animation:pageIn 0.28s ease}
+.page.active{display:block}
+@keyframes pageIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* Cards */
+.card{
+  background:rgba(8,8,18,0.75);border:1px solid var(--border);border-radius:var(--radius);
+  padding:22px;margin-bottom:20px;transition:border-color 0.25s,box-shadow 0.25s;
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);position:relative;overflow:hidden;
+}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(139,92,246,0.25),rgba(6,182,212,0.2),transparent)}
+.card:hover{border-color:rgba(139,92,246,0.25);box-shadow:0 8px 40px rgba(0,0,0,0.3),0 0 0 1px rgba(139,92,246,0.05)}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:8px}
+.card-title{font-weight:700;font-size:0.9rem;display:flex;align-items:center;gap:8px}
+.dot{width:7px;height:7px;border-radius:50%;box-shadow:0 0 7px currentColor;flex-shrink:0}
+
+/* Stat cards */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:20px}
+.stat-card{
+  background:rgba(11,19,36,0.78);border:1px solid var(--border);border-radius:var(--radius);
+  padding:20px;transition:all 0.3s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;
+  backdrop-filter:blur(12px);cursor:default;
+}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--card-color,var(--cyan)),transparent);opacity:0.65}
+.stat-card::after{content:'';position:absolute;top:-25px;right:-25px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,var(--card-color,var(--cyan)),transparent 70%);opacity:0.05;pointer-events:none;transition:opacity 0.3s}
+.stat-card:hover{border-color:var(--card-color,var(--cyan));transform:translateY(-3px);box-shadow:0 10px 35px rgba(0,0,0,0.25),0 0 18px rgba(var(--card-rgb,6,182,212),0.07)}
+.stat-card:hover::after{opacity:0.1}
+.stat-card.cyan{--card-color:var(--cyan);--card-rgb:6,182,212;border-color:rgba(6,182,212,0.16)}
+.stat-card.green{--card-color:var(--green);--card-rgb:34,197,94;border-color:rgba(34,197,94,0.16)}
+.stat-card.purple{--card-color:var(--purple);--card-rgb:168,85,247;border-color:rgba(168,85,247,0.16)}
+.stat-card.amber{--card-color:var(--amber);--card-rgb:245,158,11;border-color:rgba(245,158,11,0.16)}
+.stat-card.pink{--card-color:var(--pink);--card-rgb:236,72,153;border-color:rgba(236,72,153,0.16)}
+.stat-icon{font-size:1.5rem;margin-bottom:12px;filter:drop-shadow(0 0 7px var(--card-color,var(--cyan)))}
+.stat-value{font-size:1.7rem;font-weight:800;font-family:'Orbitron',sans-serif;margin-bottom:4px;color:var(--card-color,var(--cyan));text-shadow:0 0 18px rgba(var(--card-rgb,6,182,212),0.35)}
+.stat-label{font-size:0.66rem;color:var(--dim);text-transform:uppercase;letter-spacing:1.5px;font-weight:700}
+.stat-sub{font-size:0.68rem;color:var(--green);margin-top:5px;display:flex;align-items:center;gap:3px}
+
+/* Grids */
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.form-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* Buttons */
+.btn{
+  padding:9px 16px;border-radius:10px;border:1px solid var(--border);
+  background:var(--surface-2);color:var(--text);cursor:pointer;
+  transition:all 0.2s cubic-bezier(.4,0,.2,1);font-weight:600;font-size:0.84rem;font-family:inherit;
+  display:inline-flex;align-items:center;gap:6px;text-decoration:none;white-space:nowrap;vertical-align:middle;
+}
+.btn:hover{border-color:var(--border-hover);background:var(--surface-3)}
+.btn:active{transform:scale(0.97)}
+.btn-sm{padding:6px 11px;font-size:0.77rem;border-radius:8px}
+.btn-xs{padding:4px 9px;font-size:0.72rem;border-radius:7px}
+.btn-primary{background:linear-gradient(135deg,#7c3aed,#5b21b6);border:none;color:#fff;box-shadow:0 4px 14px rgba(124,58,237,0.25)}
+.btn-primary:hover{box-shadow:0 6px 22px rgba(124,58,237,0.45);transform:translateY(-1px)}
+.btn-danger{background:linear-gradient(135deg,#dc2626,#b91c1c);border:none;color:#fff;box-shadow:0 4px 14px rgba(239,68,68,0.2)}
+.btn-danger:hover{box-shadow:0 6px 22px rgba(239,68,68,0.38);transform:translateY(-1px)}
+.btn-success{background:linear-gradient(135deg,#16a34a,#15803d);border:none;color:#fff}
+.btn-success:hover{box-shadow:0 6px 22px rgba(34,197,94,0.28);transform:translateY(-1px)}
+.btn-ghost{background:transparent;border:none;color:var(--muted);padding:6px 10px}
+.btn-ghost:hover{color:var(--text);background:rgba(30,48,82,0.45)}
+.btn-purple{background:linear-gradient(135deg,#7c3aed,#6d28d9);border:none;color:#fff}
+.btn-purple:hover{box-shadow:0 6px 22px rgba(168,85,247,0.28);transform:translateY(-1px)}
+.btn-amber{background:linear-gradient(135deg,#d97706,#b45309);border:none;color:#fff}
+.btn-amber:hover{box-shadow:0 6px 22px rgba(245,158,11,0.28);transform:translateY(-1px)}
+.btn-ping{
+  background:linear-gradient(135deg,#059669,#047857);border:none;color:#fff;
+  box-shadow:0 4px 14px rgba(5,150,105,0.3);font-size:0.9rem;padding:12px 22px;
+  animation:pingBtnGlow 3s ease-in-out infinite;
+}
+.btn-ping:hover{box-shadow:0 8px 30px rgba(5,150,105,0.5);transform:translateY(-2px)}
+@keyframes pingBtnGlow{0%,100%{box-shadow:0 4px 14px rgba(5,150,105,0.3)}50%{box-shadow:0 4px 20px rgba(5,150,105,0.5)}}
+
+/* Inputs */
+input,textarea,select{
+  width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(30,48,82,0.9);
+  background:rgba(15,26,46,0.9);color:var(--text);font-family:inherit;font-size:0.87rem;
+  transition:border-color 0.22s,box-shadow 0.22s;outline:none;
+}
+input:focus,textarea:focus,select:focus{border-color:rgba(6,182,212,0.55);box-shadow:0 0 0 3px var(--cyan-glow),0 0 18px rgba(6,182,212,0.05)}
+input::placeholder,textarea::placeholder{color:var(--dim)}
+textarea{resize:vertical;min-height:80px}
+label.field-label{display:block;font-size:0.7rem;color:var(--dim);margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+
+/* Toggles */
+.toggle-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.toggle-label{display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 13px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);transition:all 0.18s;font-size:0.83rem;font-weight:500}
+.toggle-label:hover{border-color:var(--border-hover);background:var(--surface-3)}
+.toggle-label input[type="checkbox"]{width:14px;height:14px;margin:0;accent-color:var(--cyan);cursor:pointer;flex-shrink:0}
+.toggle-label.checked{border-color:rgba(6,182,212,0.32);background:rgba(6,182,212,0.07);color:var(--cyan)}
+
+/* Session cards */
+.session-card{
+  background:rgba(8,8,18,0.8);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px;transition:all 0.25s;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);position:relative;overflow:hidden;
+}
+.session-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--purple),var(--cyan));opacity:0;transition:opacity 0.25s}
+.session-card:hover{border-color:rgba(139,92,246,0.35);box-shadow:0 0 28px rgba(139,92,246,0.08),0 8px 32px rgba(0,0,0,0.3)}
+.session-card:hover::before{opacity:1}
+.session-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.session-name{font-weight:700;font-size:1rem;margin-bottom:4px}
+.session-meta{font-size:0.78rem;color:var(--dim);line-height:1.8;margin-bottom:12px}
+.session-actions{display:flex;gap:6px;flex-wrap:wrap;padding-top:12px;border-top:1px solid rgba(30,48,82,0.55)}
+.session-tag{display:inline-flex;align-items:center;gap:4px;font-size:0.63rem;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:2px 7px;margin-top:3px}
+
+/* Badges */
+.badge{padding:3px 9px;border-radius:20px;font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;flex-shrink:0}
+.badge-online{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
+.badge-offline{background:rgba(239,68,68,0.1);color:var(--red);border:1px solid rgba(239,68,68,0.2)}
+.badge-connecting{background:rgba(245,158,11,0.1);color:var(--amber);border:1px solid rgba(245,158,11,0.2)}
+
+/* Edit panel */
+.edit-panel{margin-top:14px;padding:16px;background:rgba(0,0,0,0.25);border-radius:12px;display:none;border:1px solid rgba(30,48,82,0.8);animation:slideDown 0.2s ease}
+@keyframes slideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.edit-panel .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.edit-panel label{display:flex;align-items:center;gap:7px;font-size:0.83rem;color:var(--muted);cursor:pointer;padding:5px 0}
+.edit-panel label input[type="checkbox"]{width:auto;margin:0;accent-color:var(--cyan)}
+
+/* Admin */
+.admin-card{border-color:rgba(168,85,247,0.22)}
+.admin-card::before{background:linear-gradient(90deg,transparent,rgba(168,85,247,0.22),transparent)}
+.admin-card:hover{border-color:rgba(168,85,247,0.45)}
+.admin-tag{font-size:0.62rem;color:var(--purple);border:1px solid rgba(168,85,247,0.28);padding:2px 7px;border-radius:6px;font-weight:700}
+
+/* Lists */
+.list-item{display:flex;justify-content:space-between;align-items:center;padding:11px 13px;border-bottom:1px solid var(--border);font-size:0.83rem;transition:background 0.12s}
+.list-item:last-child{border-bottom:none}
+.list-item:hover{background:rgba(30,48,82,0.28)}
+.list-scroll{max-height:230px;overflow-y:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface-2)}
+
+/* Toast */
+.toast-container{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{padding:12px 16px;border-radius:12px;font-size:0.83rem;font-weight:600;backdrop-filter:blur(20px);animation:toastIn 0.32s cubic-bezier(.4,0,.2,1);min-width:260px;display:flex;align-items:center;gap:9px;box-shadow:0 10px 36px rgba(0,0,0,0.5);pointer-events:all}
+.toast.success{background:rgba(22,163,74,0.14);border:1px solid rgba(34,197,94,0.28);color:var(--green)}
+.toast.error{background:rgba(220,38,38,0.14);border:1px solid rgba(239,68,68,0.28);color:var(--red)}
+.toast.info{background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.28);color:var(--cyan)}
+@keyframes toastIn{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* Deploy tabs */
+.deploy-tab{flex:1;padding:11px 6px;border:none;cursor:pointer;font-family:inherit;font-size:0.8rem;font-weight:600;transition:all 0.2s;background:transparent;color:var(--muted)}
+.deploy-tab.active{background:linear-gradient(135deg,#0891b2,#0e7490)!important;color:#fff!important}
+.deploy-tab:hover:not(.active){background:rgba(30,48,82,0.45)!important;color:var(--text)!important}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Activity feed */
+.activity-feed{display:flex;flex-direction:column}
+.activity-item{display:flex;align-items:flex-start;gap:11px;padding:10px 0;border-bottom:1px solid rgba(30,48,82,0.45);animation:fadeSlide 0.35s ease}
+.activity-item:last-child{border-bottom:none}
+@keyframes fadeSlide{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+.activity-icon{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:0.85rem;flex-shrink:0}
+.activity-body{flex:1;min-width:0}
+.activity-body strong{font-size:0.83rem;font-weight:600;display:block}
+.activity-body span{font-size:0.74rem;color:var(--dim)}
+.activity-time{font-size:0.67rem;color:var(--dim);white-space:nowrap;padding-top:2px}
+
+/* Emoji picker */
+.emoji-picker{display:flex;flex-wrap:wrap;gap:7px;padding:12px;background:var(--surface-2);border-radius:12px;border:1px solid var(--border)}
+.emoji-opt{width:36px;height:36px;border-radius:9px;border:1px solid var(--border);background:var(--surface-3);cursor:pointer;font-size:1.15rem;display:flex;align-items:center;justify-content:center;transition:all 0.18s}
+.emoji-opt:hover{border-color:var(--cyan);transform:scale(1.12);box-shadow:0 0 10px var(--cyan-glow)}
+.emoji-opt.selected{border-color:var(--cyan);background:var(--cyan-dim)}
+
+/* Hero banner */
+.hero{border-radius:22px;padding:30px 34px;margin-bottom:22px;position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(6,182,212,0.06) 60%,rgba(245,158,11,0.03));border:1px solid rgba(139,92,246,0.2)}
+.hero::before{content:'';position:absolute;top:-80px;right:-80px;width:280px;height:280px;border-radius:50%;background:radial-gradient(circle,rgba(139,92,246,0.12),transparent 70%)}
+.hero::after{content:'';position:absolute;bottom:-50px;left:180px;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(6,182,212,0.08),transparent 70%)}
+.hero-content{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px}
+.hero-title{font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:800;background:linear-gradient(135deg,#22d3ee,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px}
+.hero-subtitle{color:var(--muted);font-size:0.83rem;margin:6px 0 4px}
+.hero-desc{font-size:0.73rem;color:var(--dim)}
+.hero-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.hero-badge{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,rgba(245,158,11,0.09),rgba(168,85,247,0.07));border:1px solid rgba(245,158,11,0.3);border-radius:14px;padding:11px 18px;animation:heroBadgePulse 4s ease-in-out infinite}
+@keyframes heroBadgePulse{0%,100%{border-color:rgba(245,158,11,0.3)}50%{border-color:rgba(245,158,11,0.55);box-shadow:0 0 36px rgba(245,158,11,0.09)}}
+
+/* Quick cards */
+.quick-card{background:rgba(13,22,40,0.75);border:1px solid var(--border);border-radius:12px;padding:12px 15px;cursor:pointer;transition:all 0.18s;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.quick-card:last-child{margin-bottom:0}
+.quick-card:hover{border-color:rgba(6,182,212,0.3);background:rgba(6,182,212,0.04);transform:translateX(2px)}
+
+/* Separator */
+.sep{height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);margin:18px 0}
+
+/* Ping result panel */
+.ping-result{
+  padding:18px;border-radius:14px;margin-top:14px;
+  background:rgba(5,150,105,0.06);border:1px solid rgba(5,150,105,0.2);
+  display:none;animation:slideDown 0.25s ease;
+}
+.ping-result.error{background:var(--red-dim);border-color:rgba(239,68,68,0.25)}
+.ping-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:12px}
+.ping-stat{background:rgba(0,0,0,0.2);border-radius:10px;padding:10px 14px;text-align:center;border:1px solid rgba(255,255,255,0.06)}
+.ping-stat-val{font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:800;color:var(--green)}
+.ping-stat-label{font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+
+/* Command browser */
+.cmd-category{margin-bottom:18px}
+.cmd-category-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;border-radius:10px;
+  background:var(--surface-2);border:1px solid var(--border);
+  cursor:pointer;transition:all 0.18s;margin-bottom:0;
+}
+.cmd-category-header:hover{border-color:var(--border-hover);background:var(--surface-3)}
+.cmd-category-header.open{border-color:rgba(6,182,212,0.25);background:rgba(6,182,212,0.04);border-radius:10px 10px 0 0;margin-bottom:0}
+.cmd-category-body{
+  display:none;border:1px solid rgba(6,182,212,0.15);border-top:none;
+  border-radius:0 0 10px 10px;padding:14px;
+  background:rgba(7,14,28,0.5);
+}
+.cmd-category-body.open{display:block}
+.cmd-chips{display:flex;flex-wrap:wrap;gap:7px}
+.cmd-chip{
+  font-family:'Inter',monospace;font-size:0.76rem;padding:4px 10px;
+  background:rgba(6,182,212,0.07);border:1px solid rgba(6,182,212,0.18);
+  border-radius:7px;color:var(--cyan);cursor:default;transition:all 0.15s;
+}
+.cmd-chip:hover{background:rgba(6,182,212,0.14);border-color:rgba(6,182,212,0.35)}
+.cmd-search{
+  width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);
+  background:rgba(15,26,46,0.9);color:var(--text);font-family:inherit;font-size:0.87rem;
+  outline:none;margin-bottom:16px;transition:border-color 0.2s,box-shadow 0.2s;
+}
+.cmd-search:focus{border-color:rgba(6,182,212,0.5);box-shadow:0 0 0 3px var(--cyan-glow)}
+
+/* Category emoji badge */
+.cat-icon{font-size:1rem;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:rgba(6,182,212,0.08);flex-shrink:0}
+.cat-name{font-weight:700;font-size:0.88rem}
+.cat-count{font-size:0.68rem;color:var(--dim);background:var(--surface-3);border:1px solid var(--border);padding:2px 8px;border-radius:8px;margin-left:auto;margin-right:8px}
+
+/* Mobile */
+.mobile-toggle{display:none;position:fixed;top:12px;left:12px;z-index:200;background:rgba(9,18,36,0.92);border:1px solid var(--border);padding:9px;border-radius:10px;color:var(--text);cursor:pointer;font-size:1.15rem;backdrop-filter:blur(14px);line-height:1}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99}
+
+/* Page header */
+.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.page-header-left{}
+.page-header-label{font-size:0.68rem;color:var(--dim);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:4px;font-weight:700}
+.page-header-title{font-size:1.05rem;font-weight:700}
+
+/* Info box */
+.info-box{padding:14px;border-radius:12px;background:var(--surface-2);border:1px solid var(--border);font-size:0.82rem;color:var(--muted);line-height:1.65}
+
+/* ── Feature Toggle Cards (v2) ── */
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px}
+.feat-card{
+  background:var(--surface-2);border:1px solid var(--border);border-radius:14px;
+  padding:16px 12px 14px;cursor:pointer;transition:all 0.22s cubic-bezier(.4,0,.2,1);
+  text-align:center;position:relative;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;gap:3px;user-select:none;
+}
+.feat-card:hover{border-color:var(--border-hover);background:var(--surface-3);transform:translateY(-1px)}
+.feat-card.active{border-color:rgba(6,182,212,0.42);background:rgba(6,182,212,0.07);box-shadow:0 0 22px rgba(6,182,212,0.07)}
+.feat-card input[type="checkbox"]{display:none}
+.feat-icon{font-size:1.45rem;margin-bottom:4px;transition:transform 0.2s}
+.feat-card.active .feat-icon{transform:scale(1.08)}
+.feat-name{font-weight:700;font-size:0.8rem;margin-bottom:2px}
+.feat-desc{font-size:0.65rem;color:var(--dim);line-height:1.4;margin-bottom:10px}
+.sw-track{
+  width:36px;height:20px;background:rgba(30,48,82,0.8);border:1px solid var(--border);
+  border-radius:10px;position:relative;margin-top:auto;transition:all 0.25s;flex-shrink:0;
+}
+.feat-card.active .sw-track{background:var(--cyan);border-color:var(--cyan);box-shadow:0 0 10px rgba(6,182,212,0.4)}
+.sw-thumb{
+  width:14px;height:14px;background:#fff;border-radius:50%;
+  position:absolute;top:2px;left:2px;transition:transform 0.25s;
+  box-shadow:0 1px 4px rgba(0,0,0,0.35);
+}
+.feat-card.active .sw-thumb{transform:translateX(16px)}
+
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar.open~.sidebar-overlay,.sidebar-overlay.active{display:block}
+  .main{margin-left:0}
+  .mobile-toggle{display:flex}
+  .topbar{padding:11px 14px;padding-left:52px}
+  .topbar-title{font-size:0.88rem}
+  .topbar-breadcrumb{display:none}
+  .content{padding:14px}
+  .stats-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .stat-card{padding:14px}
+  .stat-value{font-size:1.25rem}
+  .stat-label{font-size:0.6rem}
+  .stat-icon{font-size:1.15rem;margin-bottom:8px}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .edit-panel .form-grid{grid-template-columns:1fr}
+  .card{padding:14px;margin-bottom:14px}
+  .session-card{padding:13px}
+  .session-actions{gap:5px}
+  .toggle-row{gap:6px}
+  .hero{padding:18px}
+  .form-cols{grid-template-columns:1fr}
+  .ping-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:400px){
+  .stats-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<canvas id="particles-canvas"></canvas>
+<div class="bg-orbs"><div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div></div>
+<button class="mobile-toggle" onclick="toggleSidebar()" aria-label="Menu">&#9776;</button>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+<div class="toast-container" id="toasts"></div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo-row">
+        <div class="sidebar-logo-icon">♾️</div>
+        <div class="sidebar-brand">
+          <h1>INFINITY MD</h1>
+          <p>Bot Control System</p>
+        </div>
+      </div>
+      <div class="sidebar-version"><span>LIVE</span> v3.0.0</div>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-section">Main</div>
+      <div class="nav-item active" onclick="showPage('overview',this)">
+        <span class="icon">📊</span> Overview
+      </div>
+      <div class="nav-item" onclick="showPage('sessions',this)">
+        <span class="icon">🤖</span> Bot Sessions
+        <span class="nav-badge green" id="nb-online">0</span>
+      </div>
+      <div class="nav-item" onclick="showPage('deploy',this)">
+        <span class="icon">🚀</span> Deploy Bot
+      </div>
+      <div class="nav-item" onclick="showPage('commands',this)">
+        <span class="icon">⌨️</span> Commands
+        <span class="nav-badge" id="nb-cmds">—</span>
+      </div>
+
+      <div class="nav-section">Tools</div>
+      <div class="nav-item" onclick="showPage('settings',this)">
+        <span class="icon">⚙️</span> Settings
+      </div>
+      <div class="nav-item" id="nav-admin" style="display:none" onclick="showPage('admin',this)">
+        <span class="icon">⭐</span> Admin Panel
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <div class="user-details">
+          <div class="name" id="userName">Loading...</div>
+          <div class="role" id="userRole">User</div>
+        </div>
+        <div class="status-dot" style="flex-shrink:0"></div>
+      </div>
+      <div class="powered-badge">
+        <span class="badge-star">✦</span>
+        <div style="text-align:center">
+          <div class="badge-label">Powered by</div>
+          <div class="badge-name">INFINITY MD</div>
+        </div>
+        <span class="badge-star" style="animation-direction:reverse">✦</span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title" id="pageTitle">Overview</div>
+        <div class="topbar-breadcrumb" id="topbarBreadcrumb">Dashboard / Overview</div>
+      </div>
+      <div class="topbar-right">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="status-dot"></div>
+          <span class="status-label">System Online</span>
+        </div>
+        <div id="channelLinkWrap" style="display:none">
+          <a id="channelLink" href="#" target="_blank" class="btn btn-success btn-sm">📢 Channel</a>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="logout()">⏻ Logout</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ═══════════════ OVERVIEW PAGE ═══════════════ -->
+      <div class="page active" id="page-overview">
+
+        <div class="hero">
+          <div class="hero-content">
+            <div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                <span style="font-size:1.6rem">♾️</span>
+                <span class="hero-title">INFINITY MD</span>
+              </div>
+              <p class="hero-subtitle">WhatsApp Multi-Device Bot Control Panel</p>
+              <p class="hero-desc">Manage, monitor and deploy all your bot sessions from one powerful dashboard</p>
+              <div class="hero-actions">
+                <button class="btn btn-primary btn-sm" onclick="navTo('deploy')">🚀 Deploy New Bot</button>
+                <button class="btn btn-sm" onclick="navTo('sessions')">📋 Bot Sessions</button>
+                <button class="btn btn-amber btn-sm" onclick="navTo('commands')">📋 Commands</button>
+              </div>
+            </div>
+            <div class="hero-badge">
+              <span style="font-size:1.1rem;animation:starSpin 5s linear infinite;display:inline-block">✦</span>
+              <div>
+                <div style="font-size:0.56rem;color:var(--dim);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:3px">Powered by</div>
+                <div style="font-family:'Orbitron',sans-serif;font-size:0.9rem;font-weight:800;background:linear-gradient(135deg,#fbbf24,#f97316,#ec4899,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent">INFINITY MD</div>
+              </div>
+              <span style="font-size:1.1rem;animation:starSpin 5s linear infinite reverse;display:inline-block">✦</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+          <div class="stat-card cyan">
+            <div class="stat-icon">⏰</div>
+            <div class="stat-value" id="s-uptime">--</div>
+            <div class="stat-label">Uptime</div>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-icon">⚡</div>
+            <div class="stat-value" id="s-online">0</div>
+            <div class="stat-label">Active Bots</div>
+          </div>
+          <div class="stat-card purple">
+            <div class="stat-icon">💾</div>
+            <div class="stat-value" id="s-ram">0</div>
+            <div class="stat-label">RAM (MB)</div>
+          </div>
+          <div class="stat-card amber">
+            <div class="stat-icon">🤖</div>
+            <div class="stat-value" id="s-total">0</div>
+            <div class="stat-label">Total Bots</div>
+          </div>
+          <div class="stat-card pink">
+            <div class="stat-icon">⌨️</div>
+            <div class="stat-value" id="s-cmds">—</div>
+            <div class="stat-label">Commands</div>
+          </div>
+        </div>
+
+        <div class="grid-2" style="align-items:start">
+          <div class="card" style="margin-bottom:0">
+            <div class="card-header">
+              <div class="card-title"><span class="dot" style="background:var(--green)"></span> Bot Status</div>
+              <button class="btn btn-ghost btn-sm" onclick="loadQuickSessions()">↻ Refresh</button>
+            </div>
+            <div id="quickSessions" class="activity-feed"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:0">
+            <div class="card-header">
+              <div class="card-title"><span class="dot" style="background:var(--cyan)"></span> Live Activity</div>
+              <span style="font-size:0.66rem;color:var(--dim);background:var(--surface-2);padding:3px 8px;border-radius:6px;border:1px solid var(--border)">Auto updates</span>
+            </div>
+            <div id="activityFeed" class="activity-feed">
+              <div style="color:var(--dim);font-size:0.8rem;padding:6px 0">Loading activity...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Guide -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span class="dot" style="background:var(--cyan)"></span> User Manual</div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-sm btn-primary" id="manualEnBtn" onclick="switchManual('en')">English</button>
+              <button class="btn btn-sm" id="manualSiBtn" onclick="switchManual('si')">සිංහල</button>
+            </div>
+          </div>
+          <div id="manual-en">
+            <div style="display:grid;gap:12px">
+              <div class="info-box">
+                <h3 style="font-size:0.86rem;color:var(--cyan);margin-bottom:9px;font-weight:700">🚀 Getting Started</h3>
+                <ol style="line-height:2.1;padding-left:18px">
+                  <li>Go to <strong style="color:var(--text)">Deploy Bot</strong> from the sidebar</li>
+                  <li>Choose: <strong style="color:var(--text)">Session ID</strong>, <strong style="color:var(--text)">Pair Code</strong>, or <strong style="color:var(--text)">QR Code</strong></li>
+                  <li>Bot appears in <strong style="color:var(--text)">Bot Sessions</strong> once connected</li>
+                  <li>Customize behavior in <strong style="color:var(--text)">Settings</strong></li>
+                  <li>Browse all commands in <strong style="color:var(--text)">Commands</strong></li>
+                </ol>
+              </div>
+              <div class="grid-2" style="gap:12px">
+                <div class="info-box">
+                  <h3 style="font-size:0.86rem;color:var(--cyan);margin-bottom:9px;font-weight:700">⌨️ Key Commands</h3>
+                  <div style="display:grid;gap:5px">
+                    <div><code style="color:var(--cyan)">.menu</code> — Main menu</div>
+                    <div><code style="color:var(--cyan)">.settings</code> — Bot settings</div>
+                    <div><code style="color:var(--cyan)">.mode</code> — Private/Public mode</div>
+                    <div><code style="color:var(--cyan)">.alive</code> — Check bot status</div>
+                    <div><code style="color:var(--cyan)">.sticker</code> — Create stickers</div>
+                    <div><code style="color:var(--cyan)">.ai</code> — AI chat</div>
+                  </div>
+                </div>
+                <div class="info-box">
+                  <h3 style="font-size:0.86rem;color:var(--cyan);margin-bottom:9px;font-weight:700">🔗 Connection Methods</h3>
+                  <ul style="line-height:2.1;padding-left:16px">
+                    <li><strong style="color:var(--text)">Session ID</strong> — Paste your session string</li>
+                    <li><strong style="color:var(--text)">Pair Code</strong> — Enter number, link in WhatsApp</li>
+                    <li><strong style="color:var(--text)">QR Code</strong> — Scan from WhatsApp Linked Devices</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="manual-si" style="display:none">
+            <div style="display:grid;gap:12px">
+              <div class="info-box">
+                <h3 style="font-size:0.86rem;color:var(--cyan);margin-bottom:9px;font-weight:700">🚀 ආරම්භ කිරීම</h3>
+                <ol style="line-height:2.1;padding-left:18px">
+                  <li>Sidebar එකෙන් <strong style="color:var(--text)">Deploy Bot</strong> වෙත යන්න</li>
+                  <li><strong style="color:var(--text)">Session ID</strong>, <strong style="color:var(--text)">Pair Code</strong>, හෝ <strong style="color:var(--text)">QR Code</strong> ක්‍රමයක් තෝරන්න</li>
+                  <li>සම්බන්ධ වූ පසු, <strong style="color:var(--text)">Bot Sessions</strong> හි බොට් එක පෙනෙනු ඇත</li>
+                  <li><strong style="color:var(--text)">Commands</strong> වලින් සියලු commands බලන්න</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════ SESSIONS PAGE ═══════════════ -->
+      <div class="page" id="page-sessions">
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-header-label">Bot Network</div>
+            <div class="page-header-title">Your Bot Sessions</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-sm" onclick="renderSessions()">↻ Refresh</button>
+            <button class="btn btn-primary btn-sm" onclick="navTo('deploy')">+ Deploy New</button>
+          </div>
+        </div>
+        <div id="sessionsList" class="grid-2"></div>
+      </div>
+
+      <!-- ═══════════════ DEPLOY PAGE ═══════════════ -->
+      <div class="page" id="page-deploy">
+        <div class="card" style="max-width:620px">
+          <div class="card-header">
+            <div class="card-title"><span class="dot" style="background:var(--cyan)"></span> Deploy New Bot Instance</div>
+          </div>
+          <p class="info-box" style="margin-bottom:18px">Connect a new WhatsApp account as a bot. Choose your preferred method below.</p>
+
+          <div style="display:flex;border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-bottom:20px;background:var(--surface-2)">
+            <button class="deploy-tab active" onclick="switchDeployTab('session',this)">🔑 Session ID</button>
+            <button class="deploy-tab" onclick="switchDeployTab('pair',this)" style="border-left:1px solid var(--border);border-right:1px solid var(--border)">🔐 Pair Code</button>
+            <button class="deploy-tab" onclick="switchDeployTab('qr',this)">▦ QR Code</button>
+          </div>
+
+          <div id="deploy-session" class="deploy-panel">
+            <div style="display:grid;gap:14px">
+              <div><label class="field-label">Session ID</label><input type="text" id="inp-sessionId" placeholder="KnightBot!..."></div>
+              <div class="form-cols">
+                <div><label class="field-label">Bot Name</label><input type="text" id="inp-botName" placeholder="My Bot"></div>
+                <div><label class="field-label">Owner Name</label><input type="text" id="inp-ownerName" placeholder="Your Name"></div>
+              </div>
+              <div><label class="field-label">Owner Number</label><input type="text" id="inp-ownerNumber" placeholder="94xxxxxxxxx"></div>
+              <button class="btn btn-primary" style="width:100%;padding:13px;font-size:0.92rem" onclick="addSession()">🚀 Deploy Bot Instance</button>
+            </div>
+          </div>
+
+          <div id="deploy-pair" class="deploy-panel" style="display:none">
+            <div style="display:grid;gap:14px">
+              <div class="info-box">Enter your WhatsApp number. A pairing code will appear — enter it in <strong style="color:var(--text)">WhatsApp → Linked Devices → Link with phone number</strong>.</div>
+              <div><label class="field-label">WhatsApp Number</label><input type="text" id="inp-pairNumber" placeholder="94770612011 (country code, no +)"></div>
+              <div class="form-cols">
+                <div><label class="field-label">Bot Name</label><input type="text" id="inp-pairBotName" placeholder="My Bot"></div>
+                <div><label class="field-label">Owner Name</label><input type="text" id="inp-pairOwnerName" placeholder="Your Name"></div>
+              </div>
+              <div><label class="field-label">Owner Number (optional)</label><input type="text" id="inp-pairOwnerNumber" placeholder="94xxxxxxxxx"></div>
+              <button class="btn btn-primary" style="width:100%;padding:13px;font-size:0.92rem" id="pairBtn" onclick="generatePairCode()">🔐 Generate Pair Code</button>
+              <div id="pair-loading" style="display:none;text-align:center;padding:18px">
+                <div style="display:inline-block;width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--cyan);border-radius:50%;animation:spin 0.8s linear infinite"></div>
+                <p style="color:var(--muted);font-size:0.83rem;margin-top:10px">Generating pair code...</p>
+              </div>
+              <div id="pair-result" style="display:none">
+                <div style="padding:20px;border-radius:12px;background:var(--surface-2);border:1px solid rgba(6,182,212,0.28);text-align:center">
+                  <p style="font-size:0.7rem;color:var(--dim);margin-bottom:7px;text-transform:uppercase;letter-spacing:1px">Your Pair Code</p>
+                  <div id="pair-code" style="font-family:'Orbitron',monospace;font-size:2rem;font-weight:800;color:var(--cyan);letter-spacing:6px;margin-bottom:12px;text-shadow:0 0 20px rgba(6,182,212,0.45)"></div>
+                  <button class="btn btn-primary btn-sm" onclick="copyPairCode()" id="copyPairBtn">📋 Copy Code</button>
+                  <p style="font-size:0.77rem;color:var(--muted);margin-top:10px">Enter in WhatsApp within 60 seconds.</p>
+                </div>
+              </div>
+              <div id="pair-error" style="display:none">
+                <div style="padding:13px;border-radius:12px;background:var(--red-dim);border:1px solid rgba(239,68,68,0.28);text-align:center">
+                  <p style="color:var(--red);font-size:0.83rem" id="pair-error-msg"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="deploy-qr" class="deploy-panel" style="display:none">
+            <div style="display:grid;gap:14px">
+              <div class="info-box">Scan the QR code: <strong style="color:var(--text)">WhatsApp → Settings → Linked Devices → Link a Device</strong>. Bot auto-deploys once connected.</div>
+              <div class="form-cols">
+                <div><label class="field-label">Bot Name</label><input type="text" id="inp-qrBotName" placeholder="My Bot"></div>
+                <div><label class="field-label">Owner Name</label><input type="text" id="inp-qrOwnerName" placeholder="Your Name"></div>
+              </div>
+              <div><label class="field-label">Owner Number</label><input type="text" id="inp-qrOwnerNumber" placeholder="94xxxxxxxxx"></div>
+              <button class="btn btn-primary" style="width:100%;padding:13px;font-size:0.92rem" id="qrBtn" onclick="generateQR()">▦ Generate QR Code</button>
+              <div id="qr-loading" style="display:none;text-align:center;padding:18px">
+                <div style="display:inline-block;width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--cyan);border-radius:50%;animation:spin 0.8s linear infinite"></div>
+                <p style="color:var(--muted);font-size:0.83rem;margin-top:10px">Generating QR code...</p>
+              </div>
+              <div id="qr-result" style="display:none;text-align:center">
+                <div style="padding:22px;border-radius:12px;background:var(--surface-2);border:1px solid rgba(6,182,212,0.28)">
+                  <img id="qr-image" src="" alt="QR Code" style="max-width:240px;border-radius:12px;margin-bottom:14px;box-shadow:0 4px 28px rgba(0,0,0,0.4)">
+                  <p style="font-size:0.77rem;color:var(--muted)">Scan with WhatsApp. Bot auto-deploys once connected.</p>
+                  <button class="btn btn-sm" style="margin-top:10px" onclick="generateQR()">↻ Refresh QR</button>
+                </div>
+              </div>
+              <div id="qr-error" style="display:none">
+                <div style="padding:13px;border-radius:12px;background:var(--red-dim);border:1px solid rgba(239,68,68,0.28);text-align:center">
+                  <p style="color:var(--red);font-size:0.83rem" id="qr-error-msg"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════ COMMANDS PAGE ═══════════════ -->
+      <div class="page" id="page-commands">
+        <div class="page-header">
+          <div class="page-header-left">
+            <div class="page-header-label">Command Browser</div>
+            <div class="page-header-title">All Available Commands</div>
+          </div>
+          <span id="total-cmd-badge" style="font-size:0.78rem;color:var(--cyan);background:var(--cyan-dim);border:1px solid rgba(6,182,212,0.2);padding:5px 14px;border-radius:10px;font-weight:700"></span>
+        </div>
+        <input class="cmd-search" type="text" id="cmdSearchInput" placeholder="🔍 Search commands..." oninput="filterCmds(this.value)">
+        <div id="cmdBrowser"></div>
+      </div>
+
+      <!-- ═══════════════ SETTINGS PAGE ═══════════════ -->
+      <div class="page" id="page-settings">
+        <div class="card" style="max-width:720px">
+          <div class="card-header">
+            <div class="card-title"><span class="dot" style="background:var(--cyan)"></span> My Bot Settings</div>
+            <span style="font-size:0.68rem;color:var(--dim);background:var(--surface-2);padding:4px 10px;border-radius:8px;border:1px solid var(--border)">Applies to all your bots</span>
+          </div>
+          <p style="font-size:0.8rem;color:var(--dim);margin-bottom:16px">These settings apply to all your bots as a default. You can override per-bot from each bot's edit panel in Sessions.</p>
+          <div class="feat-grid" id="userToggleRow">
+            <div class="feat-card" onclick="toggleFeat('u-antidelete',this)"><input type="checkbox" id="u-antidelete"><div class="feat-icon">🛡️</div><div class="feat-name">Anti-Delete</div><div class="feat-desc">Recover deleted messages</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+            <div class="feat-card" onclick="toggleFeat('u-autoReact',this)"><input type="checkbox" id="u-autoReact"><div class="feat-icon">🔥</div><div class="feat-name">Auto-React</div><div class="feat-desc">React to messages</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+            <div class="feat-card" onclick="toggleFeat('u-autoStatus',this)"><input type="checkbox" id="u-autoStatus"><div class="feat-icon">👀</div><div class="feat-name">Auto-Status</div><div class="feat-desc">Auto view statuses</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+            <div class="feat-card" onclick="toggleFeat('u-antiviewonce',this)"><input type="checkbox" id="u-antiviewonce"><div class="feat-icon">👁️</div><div class="feat-name">Anti-ViewOnce</div><div class="feat-desc">Save view-once media</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+            <div class="feat-card" onclick="toggleFeat('u-autoTyping',this)"><input type="checkbox" id="u-autoTyping"><div class="feat-icon">⌨️</div><div class="feat-name">Auto-Typing</div><div class="feat-desc">Show typing status</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+            <div class="feat-card" onclick="toggleFeat('u-autoVoice',this)"><input type="checkbox" id="u-autoVoice"><div class="feat-icon">🎙️</div><div class="feat-name">Auto-Voice</div><div class="feat-desc">Show recording status</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+          </div>
+          <div class="form-grid" style="margin-bottom:20px">
+            <div>
+              <label class="field-label">🔥 Auto-React Mode</label>
+              <select id="u-autoReactMode">
+                <option value="all">✨ All messages — random emoji</option>
+                <option value="cmd-only">⏳ Commands only — processing indicator</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">👁️ Anti-ViewOnce Emoji</label>
+              <input type="text" id="u-voEmoji" placeholder="👁️" style="font-size:1.2rem">
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="saveUserSettings()">💾 Save My Settings</button>
+        </div>
+
+        <!-- Auto-Reply Settings -->
+        <div class="card" style="max-width:720px">
+          <div class="card-header">
+            <div class="card-title"><span class="dot" style="background:var(--green)"></span> Auto-Reply Settings</div>
+            <span style="font-size:0.68rem;color:var(--dim);background:var(--surface-2);padding:4px 10px;border-radius:8px;border:1px solid var(--border)">Per-bot control</span>
+          </div>
+          <p style="font-size:0.8rem;color:var(--dim);margin-bottom:16px">Auto-reply to incoming messages without AI — or use AI modes. Settings can be configured per bot or globally. Use <code>.autoreply on/off</code> in WhatsApp to toggle.</p>
+
+          <div style="margin-bottom:18px">
+            <label class="field-label">Apply to</label>
+            <select id="ar-bot-select" style="width:100%" onchange="onARBotChange()">
+              <option value="global">🌐 Global — all bots</option>
+            </select>
+          </div>
+
+          <div class="toggle-row" style="margin-bottom:20px">
+            <label class="toggle-label"><input type="checkbox" id="ar-enabled" onchange="toggleARPanel(this.checked)"> Enable Auto-Reply</label>
+          </div>
+
+          <div id="ar-panel" style="display:none;border:1px solid var(--border);border-radius:12px;padding:20px;background:var(--surface-2);margin-bottom:20px">
+            <div class="form-cols" style="margin-bottom:18px">
+              <div>
+                <label class="field-label">Reply Mode</label>
+                <select id="ar-mode" onchange="updateARModeHint()">
+                  <option value="smart">💬 Smart — Natural replies (no AI)</option>
+                  <option value="custom">🔑 Keywords only</option>
+                  <option value="ai-always">🤖 AI — All the time</option>
+                  <option value="ai-offline">🌙 AI — When offline</option>
+                  <option value="ai-time">⏰ AI — Custom time window</option>
+                </select>
+                <p id="ar-mode-hint" style="font-size:0.75rem;color:var(--dim);margin-top:6px"></p>
+              </div>
+              <div id="ar-time-wrap">
+                <label class="field-label">Active Time Window</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input type="time" id="ar-time-start" value="09:00" style="flex:1">
+                  <span style="color:var(--dim)">to</span>
+                  <input type="time" id="ar-time-end" value="18:00" style="flex:1">
+                </div>
+              </div>
+            </div>
+
+            <div id="ar-smart-wrap" style="margin-bottom:18px">
+              <label class="field-label">Smart Reply Messages <span style="color:var(--dim);font-weight:400">— bot picks one at random per message</span></label>
+              <p style="font-size:0.75rem;color:var(--dim);margin-bottom:10px">Add multiple natural replies. The bot will pick one randomly so responses feel varied and human.</p>
+              <div id="ar-smart-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+              <button class="btn btn-sm" onclick="addSmartMessage()" style="margin-top:2px">+ Add Message</button>
+            </div>
+
+            <div id="ar-message-wrap" style="margin-bottom:18px">
+              <label class="field-label">Fallback Message</label>
+              <textarea id="ar-message" rows="2" placeholder="Hi! I'm a bit busy right now. I'll get back to you soon! 😊" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+              <p style="font-size:0.75rem;color:var(--dim);margin-top:4px">Sent when AI is unavailable or no keyword matches.</p>
+            </div>
+
+            <div>
+              <label class="field-label">Custom Keywords <span style="color:var(--dim);font-weight:400">— trigger specific replies</span></label>
+              <p style="font-size:0.75rem;color:var(--dim);margin-bottom:10px">Active in <strong>all</strong> modes — keyword replies always take priority. Case-insensitive partial match.</p>
+              <div id="ar-kw-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+              <button class="btn btn-sm" onclick="addKeywordRow()" style="margin-top:2px">+ Add Keyword</button>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" onclick="saveARSettings()">💬 Save Auto-Reply Settings</button>
+        </div>
+
+        <!-- Global settings (owner only) -->
+        <div class="card admin-card" id="globalSettingsCard" style="max-width:720px;display:none">
+          <div class="card-header">
+            <div class="card-title"><span class="dot" style="background:var(--purple)"></span> Global Settings</div>
+            <span class="admin-tag">OWNER ONLY</span>
+          </div>
+          <p style="font-size:0.8rem;color:var(--dim);margin-bottom:20px">These settings apply to ALL users platform-wide as defaults. Individual users can override bot features from their own settings.</p>
+
+          <!-- ── Owner-only controls ── -->
+          <div style="border:1px solid rgba(239,68,68,0.2);border-radius:14px;padding:18px;margin-bottom:20px;background:rgba(239,68,68,0.04)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+              <span style="font-size:0.68rem;font-weight:800;letter-spacing:1.2px;color:#f87171;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.25);padding:3px 10px;border-radius:20px">🔒 OWNER CONTROLS</span>
+              <span style="font-size:0.72rem;color:var(--dim)">Platform-level switches — affect all bots immediately</span>
+            </div>
+            <div class="feat-grid">
+              <div class="feat-card" onclick="toggleFeat('g-maintenance',this)"><input type="checkbox" id="g-maintenance"><div class="feat-icon">🔧</div><div class="feat-name">Maintenance</div><div class="feat-desc">Block all users</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+              <div class="feat-card" onclick="toggleFeat('g-forceBot',this)"><input type="checkbox" id="g-forceBot"><div class="feat-icon">🤖</div><div class="feat-name">Force Bot</div><div class="feat-desc">Enforce bot mode globally</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+              <div class="feat-card" onclick="toggleFeat('g-anticall',this)"><input type="checkbox" id="g-anticall"><div class="feat-icon">📵</div><div class="feat-name">Anti-Call</div><div class="feat-desc">Reject & block callers</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+            </div>
+          </div>
+
+          <!-- ── Default bot features ── -->
+          <div style="border:1px solid rgba(139,92,246,0.2);border-radius:14px;padding:18px;margin-bottom:20px;background:rgba(139,92,246,0.04)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+              <span style="font-size:0.68rem;font-weight:800;letter-spacing:1.2px;color:#c4b5fd;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.25);padding:3px 10px;border-radius:20px">📋 DEFAULT BOT FEATURES</span>
+              <span style="font-size:0.72rem;color:var(--dim)">Used as fallback when users haven't set their own</span>
+            </div>
+            <div class="feat-grid" style="margin-bottom:16px">
+              <div class="feat-card" onclick="toggleFeat('g-antidelete',this)"><input type="checkbox" id="g-antidelete"><div class="feat-icon">🛡️</div><div class="feat-name">Anti-Delete</div><div class="feat-desc">Recover deleted msgs</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+              <div class="feat-card" onclick="toggleFeat('g-autoReact',this)"><input type="checkbox" id="g-autoReact"><div class="feat-icon">🔥</div><div class="feat-name">Auto-React</div><div class="feat-desc">React to messages</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+              <div class="feat-card" onclick="toggleFeat('g-autoStatus',this)"><input type="checkbox" id="g-autoStatus"><div class="feat-icon">👀</div><div class="feat-name">Auto-Status</div><div class="feat-desc">Auto view statuses</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+              <div class="feat-card" onclick="toggleFeat('g-antiviewonce',this)"><input type="checkbox" id="g-antiviewonce"><div class="feat-icon">👁️</div><div class="feat-name">Anti-ViewOnce</div><div class="feat-desc">Intercept view-once</div><div class="sw-track"><div class="sw-thumb"></div></div></div>
+            </div>
+            <div class="form-grid">
+              <div>
+                <label class="field-label">🔥 Default Auto-React Mode</label>
+                <select id="g-autoReactMode">
+                  <option value="all">✨ All messages — random emoji reaction</option>
+                  <option value="cmd-only">⏳ Commands only — processing indicator</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label">👁️ Default Anti-ViewOnce Emoji</label>
+                <div class="emoji-picker" id="emojiPicker" style="margin-bottom:8px">
+                  <div class="emoji-opt selected" data-emoji="👁️" onclick="selectEmoji('👁️',this)">👁️</div>
+                  <div class="emoji-opt" data-emoji="🔒" onclick="selectEmoji('🔒',this)">🔒</div>
+                  <div class="emoji-opt" data-emoji="👀" onclick="selectEmoji('👀',this)">👀</div>
+                  <div class="emoji-opt" data-emoji="🕵️" onclick="selectEmoji('🕵️',this)">🕵️</div>
+                  <div class="emoji-opt" data-emoji="🤫" onclick="selectEmoji('🤫',this)">🤫</div>
+                  <div class="emoji-opt" data-emoji="🫣" onclick="selectEmoji('🫣',this)">🫣</div>
+                  <div class="emoji-opt" data-emoji="🙈" onclick="selectEmoji('🙈',this)">🙈</div>
+                  <div class="emoji-opt" data-emoji="📸" onclick="selectEmoji('📸',this)">📸</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span id="selectedEmojiDisplay" style="font-size:1.3rem">👁️</span>
+                  <input type="hidden" id="g-voEmoji" value="👁️">
+                  <input type="text" id="customEmojiInput" placeholder="Custom emoji..." style="max-width:140px;font-size:1rem" oninput="syncCustomEmoji(this.value)">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-purple" style="width:100%" onclick="saveGlobalSettings()">🌐 Save Global Settings</button>
+        </div>
+      </div>
+
+      <!-- ═══════════════ ADMIN PAGE ═══════════════ -->
+      <div class="page" id="page-admin">
+        <div class="card admin-card">
+          <div class="card-header">
+            <div class="card-title"><span class="dot" style="background:var(--purple)"></span> Admin Overview</div>
+            <span class="admin-tag">RESTRICTED</span>
+          </div>
+          <div class="stats-grid" style="margin-bottom:0">
+            <div class="stat-card purple"><div class="stat-icon">👥</div><div class="stat-value" id="a-users">0</div><div class="stat-label">Total Users</div></div>
+            <div class="stat-card cyan"><div class="stat-icon">🤖</div><div class="stat-value" id="a-bots">0</div><div class="stat-label">Total Bots</div></div>
+            <div class="stat-card green"><div class="stat-icon">⚡</div><div class="stat-value" id="a-active">0</div><div class="stat-label">Active Bots</div></div>
+            <div class="stat-card amber"><div class="stat-icon">💾</div><div class="stat-value" id="a-mem">0</div><div class="stat-label">Memory</div></div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card admin-card" style="margin-bottom:0">
+            <div class="card-header">
+              <div class="card-title"><span class="dot" style="background:var(--purple)"></span> User Management</div>
+            </div>
+            <div class="list-scroll" id="adm-usersList">
+              <div style="padding:16px;color:var(--dim);font-size:0.8rem">Loading users...</div>
+            </div>
+          </div>
+
+          <div class="card admin-card" style="margin-bottom:0">
+            <div class="card-header">
+              <div class="card-title"><span class="dot" style="background:var(--cyan)"></span> All Bot Sessions</div>
+            </div>
+            <div class="list-scroll" id="adm-sessionsList">
+              <div style="padding:16px;color:var(--dim);font-size:0.8rem">Loading sessions...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card admin-card">
+          <div class="card-header">
+            <div class="card-title"><span class="dot" style="background:var(--amber)"></span> Global Broadcast</div>
+          </div>
+          <div style="display:grid;gap:12px">
+            <textarea id="adm-broadcast" placeholder="Message to send to all bot owners..." rows="3"></textarea>
+            <button class="btn btn-amber" onclick="sendBroadcast()">📢 Send Broadcast</button>
+          </div>
+        </div>
+
+        <div class="card admin-card">
+          <div class="card-header">
+            <div class="card-title"><span class="dot" style="background:var(--green)"></span> WhatsApp Channel</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <input type="text" id="adm-channel" placeholder="WhatsApp Channel link..." style="flex:1;min-width:200px">
+            <button class="btn btn-success" onclick="saveAdminChannel()">💾 Save</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<script>
+/* ─── Particles ─── */
+(()=>{
+  const c=document.getElementById('particles-canvas');
+  const ctx=c.getContext('2d');
+  let W,H,particles=[];
+  function resize(){W=c.width=window.innerWidth;H=c.height=window.innerHeight}
+  function initParticles(){
+    particles=[];
+    const n=Math.min(Math.floor((W*H)/16000),60);
+    for(let i=0;i<n;i++){
+      particles.push({
+        x:Math.random()*W,y:Math.random()*H,
+        vx:(Math.random()-0.5)*0.35,vy:(Math.random()-0.5)*0.35,
+        r:Math.random()*1.5+0.5,
+        a:Math.random(),da:(Math.random()-0.5)*0.006,
+        col:Math.random()<0.5?'6,182,212':'168,85,247'
+      });
+    }
+  }
+  let animId;
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    for(const p of particles){
+      p.x+=p.vx;p.y+=p.vy;p.a+=p.da;
+      if(p.x<0||p.x>W)p.vx*=-1;
+      if(p.y<0||p.y>H)p.vy*=-1;
+      p.a=Math.max(0.05,Math.min(0.7,p.a));
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(${p.col},${p.a})`;ctx.fill();
+    }
+    for(let i=0;i<particles.length;i++){
+      for(let j=i+1;j<particles.length;j++){
+        const dx=particles[i].x-particles[j].x,dy=particles[i].y-particles[j].y;
+        const d=Math.sqrt(dx*dx+dy*dy);
+        if(d<100){
+          ctx.beginPath();ctx.moveTo(particles[i].x,particles[i].y);ctx.lineTo(particles[j].x,particles[j].y);
+          ctx.strokeStyle=`rgba(6,182,212,${(1-d/100)*0.08})`;ctx.lineWidth=0.6;ctx.stroke();
+        }
+      }
+    }
+    animId=requestAnimationFrame(draw);
+  }
+  window.addEventListener('resize',()=>{resize();initParticles()});
+  resize();initParticles();draw();
+})();
+
+/* ─── Toggle labels ─── */
+document.querySelectorAll('.toggle-label input[type="checkbox"]').forEach(cb=>{
+  cb.addEventListener('change',function(){
+    this.closest('.toggle-label').classList.toggle('checked',this.checked);
+  });
+});
+
+/* ─── Emoji picker ─── */
+let selectedEmoji='👁️';
+function selectEmoji(emoji,el){
+  selectedEmoji=emoji;
+  document.querySelectorAll('.emoji-opt').forEach(e=>e.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('g-voEmoji').value=emoji;
+  document.getElementById('selectedEmojiDisplay').textContent=emoji;
+}
+function syncCustomEmoji(val){
+  if(!val)return;
+  selectedEmoji=val;
+  document.querySelectorAll('.emoji-opt').forEach(e=>e.classList.remove('selected'));
+  document.getElementById('selectedEmojiDisplay').textContent=val;
+}
+function setEmojiPickerValue(emoji){
+  selectedEmoji=emoji||'👁️';
+  document.getElementById('g-voEmoji').value=selectedEmoji;
+  document.getElementById('selectedEmojiDisplay').textContent=selectedEmoji;
+  document.querySelectorAll('.emoji-opt').forEach(e=>e.classList.toggle('selected',e.dataset.emoji===selectedEmoji));
+}
+
+/* ─── Sidebar ─── */
+function toggleSidebar(){
+  const sb=document.querySelector('.sidebar');
+  const ov=document.getElementById('sidebarOverlay');
+  sb.classList.toggle('open');
+  ov.classList.toggle('active');
+}
+function closeSidebar(){
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('active');
+}
+
+/* ─── Toast ─── */
+function toast(msg,type='info'){
+  const c=document.getElementById('toasts');
+  const t=document.createElement('div');
+  t.className='toast '+type;
+  const icons={success:'✅',error:'❌',info:'ℹ️'};
+  t.innerHTML=`<span>${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(()=>{t.style.transition='all 0.28s';t.style.opacity='0';t.style.transform='translateX(110%)';setTimeout(()=>t.remove(),300)},3500);
+}
+
+/* ─── Page navigation ─── */
+let currentUser=null;
+const pageTitles={overview:'Overview',sessions:'Bot Sessions',deploy:'Deploy Bot',commands:'Commands',settings:'Settings',admin:'Admin Panel'};
+
+function navTo(id){
+  const items=document.querySelectorAll('.nav-item');
+  const map={overview:0,sessions:1,deploy:2,commands:3,settings:4,admin:5};
+  showPage(id, items[map[id]||0]);
+}
+
+function showPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const pg=document.getElementById('page-'+id);
+  if(pg)pg.classList.add('active');
+  if(el)el.classList.add('active');
+  document.getElementById('pageTitle').textContent=pageTitles[id]||id;
+  document.getElementById('topbarBreadcrumb').textContent='Dashboard / '+(pageTitles[id]||id);
+  closeSidebar();
+  if(id==='sessions')renderSessions();
+  if(id==='admin')loadAdminData();
+  if(id==='commands')loadCommandBrowser();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ─── API helper ─── */
+async function apiFetch(url,opts){
+  const res=await fetch(url,opts);
+  if(res.status===401){window.location.href='/login';throw new Error('Not authenticated')}
+  const ct=res.headers.get('content-type')||'';
+  if(!ct.includes('application/json'))throw new Error(res.ok?'Unexpected response':'Server error ('+res.status+')');
+  const data=await res.json();
+  if(!res.ok&&data.message)throw new Error(data.message);
+  return data;
+}
+
+function logout(){fetch('/api/auth/logout').then(()=>window.location.href='/login')}
+
+/* ─── Activity feed ─── */
+const activityLog=[];
+function addActivity(icon,color,title,sub){
+  const now=new Date();
+  const time=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  activityLog.unshift({icon,color,title,sub,time});
+  if(activityLog.length>14)activityLog.pop();
+  renderActivity();
+}
+function renderActivity(){
+  const el=document.getElementById('activityFeed');
+  if(!activityLog.length){el.innerHTML='<div style="color:var(--dim);font-size:0.8rem;padding:6px 0">No recent activity.</div>';return}
+  el.innerHTML=activityLog.map(a=>`
+    <div class="activity-item">
+      <div class="activity-icon" style="background:${a.color}20;border:1px solid ${a.color}25;color:${a.color}">${a.icon}</div>
+      <div class="activity-body"><strong>${a.title}</strong><span>${a.sub}</span></div>
+      <div class="activity-time">${a.time}</div>
+    </div>`).join('');
+}
+
+/* ─── Dashboard loader ─── */
+async function loadDashboard(){
+  try{
+    const stats=await apiFetch('/api/stats');
+    document.getElementById('s-uptime').textContent=stats.uptime;
+    document.getElementById('s-ram').textContent=stats.ram;
+    if(stats.commands){
+      animateCounter('s-cmds',stats.commands);
+      document.getElementById('nb-cmds').textContent=stats.commands;
+    }
+    addActivity('📊','var(--purple)','Stats updated',`RAM: ${stats.ram}MB · Uptime: ${stats.uptime}`);
+  }catch(e){}
+
+  try{
+    const user=await apiFetch('/api/user-info');
+    currentUser=user;
+    document.getElementById('userName').textContent=user.username;
+    document.getElementById('userAvatar').textContent=user.username[0].toUpperCase();
+    if(user.isOwner){
+      document.getElementById('userRole').textContent='👑 Owner';
+      document.getElementById('nav-admin').style.display='';
+      document.getElementById('globalSettingsCard').style.display='';
+    }else{
+      document.getElementById('userRole').textContent='User';
+      document.getElementById('globalSettingsCard').style.display='none';
+    }
+    addActivity('👤','var(--cyan)','Logged in',`Welcome back, ${user.username}`);
+  }catch(e){}
+
+  try{
+    const uSettings=await apiFetch('/api/user-settings');
+    setFeat('u-antidelete',uSettings.antidelete);
+    setFeat('u-autoReact',uSettings.autoReact);
+    setFeat('u-autoStatus',uSettings.autoStatus);
+    setFeat('u-antiviewonce',uSettings.antiviewonce);
+    setFeat('u-autoTyping',uSettings.autoTyping);
+    setFeat('u-autoVoice',uSettings.autoVoice);
+    const uArMode=document.getElementById('u-autoReactMode');
+    if(uArMode)uArMode.value=uSettings.autoReactMode||'all';
+    const uVoEmoji=document.getElementById('u-voEmoji');
+    if(uVoEmoji)uVoEmoji.value=uSettings.antiviewonceEmoji||'👁️';
+  }catch(e){}
+
+  try{
+    const settings=await apiFetch('/api/global-settings');
+    setFeat('g-maintenance',settings.maintenance);
+    setFeat('g-forceBot',settings.forceBot);
+    setFeat('g-anticall',settings.anticall);
+    setFeat('g-antidelete',settings.antidelete);
+    setFeat('g-autoReact',settings.autoReact);
+    setFeat('g-autoStatus',settings.autoStatus);
+    setFeat('g-antiviewonce',settings.antiviewonce);
+    const arMode=document.getElementById('g-autoReactMode');
+    if(arMode)arMode.value=settings.autoReactMode||'all';
+    setEmojiPickerValue(settings.antiviewonceEmoji||'👁️');
+    if(settings.autoReply)loadARSettings(settings.autoReply);
+    await loadARSessions();
+  }catch(e){}
+
+  try{
+    const ch=await apiFetch('/api/user/channel');
+    if(ch.channel){document.getElementById('channelLinkWrap').style.display='';document.getElementById('channelLink').href=ch.channel}
+  }catch(e){}
+
+  loadQuickSessions();
+}
+
+async function loadQuickSessions(){
+  try{
+    const sessions=await apiFetch('/api/sessions');
+    const el=document.getElementById('quickSessions');
+    let onlineCount=0;
+    sessions.forEach(s=>{if(s.status==='Online')onlineCount++});
+    animateCounter('s-online',onlineCount);
+    animateCounter('s-total',sessions.length);
+    document.getElementById('nb-online').textContent=onlineCount;
+    if(!sessions.length){el.innerHTML='<p style="color:var(--dim);font-size:0.8rem;padding:6px 0">No bots deployed yet. Go to Deploy Bot to get started.</p>';return}
+    el.innerHTML=sessions.map(s=>`
+      <div class="quick-card" onclick="navTo('sessions')">
+        <div>
+          <div style="font-weight:600;font-size:0.86rem;margin-bottom:2px">${s.name}</div>
+          <div style="font-size:0.74rem;color:var(--dim)">${s.ownerName||'Unknown'}</div>
+        </div>
+        <span class="badge badge-${s.status.toLowerCase()}">${s.status}</span>
+      </div>`).join('');
+  }catch(e){}
+}
+
+/* ─── Counter animation ─── */
+function animateCounter(id,target){
+  const el=document.getElementById(id);
+  if(!el)return;
+  const start=parseInt(el.textContent)||0;
+  if(start===target)return;
+  const dur=700,steps=24;
+  let step=0;
+  const iv=setInterval(()=>{
+    step++;
+    el.textContent=Math.round(start+(target-start)*(step/steps));
+    if(step>=steps){el.textContent=target;clearInterval(iv)}
+  },dur/steps);
+}
+
+/* ─── Sessions ─── */
+async function renderSessions(){
+  try{
+    const data=await apiFetch('/api/sessions');
+    const el=document.getElementById('sessionsList');
+    if(!data.length){el.innerHTML='<p style="color:var(--dim);grid-column:1/-1;padding:20px 0">No bot sessions found. Deploy a bot to get started.</p>';return}
+    el.innerHTML=data.map(s=>`
+      <div class="session-card">
+        <div class="session-top">
+          <div style="flex:1;min-width:0">
+            <div class="session-name">${s.name}</div>
+            ${currentUser&&currentUser.isOwner?`<span class="admin-tag">USER: ${s.userId}</span>`:''}
+            <div class="session-tag">📱 ${s.ownerNumber||'—'}</div>
+          </div>
+          <span class="badge badge-${s.status.toLowerCase()}">${s.status}</span>
+        </div>
+        <div class="session-meta">👤 ${s.ownerName||'Unknown'}</div>
+        <div class="session-actions">
+          <button class="btn btn-sm btn-primary" onclick="restartSession('${esc(s.id)}')">↻ Restart</button>
+          <button class="btn btn-sm" onclick="toggleEdit('${esc(s.id)}')">✏️ Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSession('${esc(s.id)}')">🗑️ Delete</button>
+        </div>
+        <div id="edit-${esc(s.id)}" class="edit-panel">
+          <div class="form-grid" style="margin-bottom:12px">
+            <input type="text" id="en-${esc(s.id)}" value="${s.name}" placeholder="Bot Name">
+            <input type="text" id="eo-${esc(s.id)}" value="${s.ownerName||''}" placeholder="Owner Name">
+            <input type="text" id="em-${esc(s.id)}" value="${s.ownerNumber||''}" placeholder="Owner Number">
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+            <label><input type="checkbox" id="ead-${esc(s.id)}" ${s.settings?.antidelete?'checked':''} style="width:auto;margin:0;accent-color:var(--cyan)"> Anti-Delete</label>
+            <label><input type="checkbox" id="ear-${esc(s.id)}" ${s.settings?.autoreact?'checked':''} style="width:auto;margin:0;accent-color:var(--cyan)"> Auto-React</label>
+            <label><input type="checkbox" id="eac-${esc(s.id)}" ${s.settings?.anticall?'checked':''} style="width:auto;margin:0;accent-color:var(--cyan)"> Anti-Call</label>
+            <label><input type="checkbox" id="eav-${esc(s.id)}" ${s.settings?.antiviewonce?'checked':''} style="width:auto;margin:0;accent-color:var(--cyan)"> Anti-ViewOnce</label>
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:0.7rem;color:var(--dim);display:block;margin-bottom:4px">📵 Call Reject Message <span style="color:var(--dim);font-weight:400">(sent to caller when Anti-Call fires)</span></label>
+            <textarea id="ecrm-${esc(s.id)}" rows="3" style="width:100%;resize:vertical;font-size:0.8rem" placeholder="📵 Sorry, I cannot receive calls! I am a WhatsApp bot...">${s.settings?.callRejectMsg||''}</textarea>
+          </div>
+          <div class="form-grid" style="margin-bottom:12px">
+            <div>
+              <label style="font-size:0.7rem;color:var(--dim);display:block;margin-bottom:4px">🔥 Auto-React Mode</label>
+              <select id="earm-${esc(s.id)}">
+                <option value="all" ${(s.settings?.autoReactMode||'all')==='all'?'selected':''}>✨ All messages</option>
+                <option value="cmd-only" ${s.settings?.autoReactMode==='cmd-only'?'selected':''}>⏳ Commands only</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.7rem;color:var(--dim);display:block;margin-bottom:4px">👁️ Anti-ViewOnce Emoji</label>
+              <input type="text" id="eavoe-${esc(s.id)}" value="${s.settings?.antiviewonceEmoji||'👁️'}" placeholder="👁️" style="font-size:1.2rem">
+            </div>
+          </div>
+          <button class="btn btn-primary" style="width:100%" onclick="updateSession('${esc(s.id)}')">💾 Save Changes</button>
+        </div>
+      </div>`).join('');
+  }catch(e){toast('Failed to load sessions','error')}
+}
+
+function esc(str){return String(str).replace(/'/g,"\\'")}
+function toggleEdit(id){
+  const el=document.getElementById('edit-'+id);
+  if(el)el.style.display=el.style.display==='block'?'none':'block';
+}
+
+/* ─── Session actions ─── */
+async function addSession(){
+  const sid=document.getElementById('inp-sessionId').value.trim();
+  if(!sid){toast('Session ID is required','error');return}
+  try{
+    const data=await apiFetch('/api/session/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      sessionId:sid,botName:document.getElementById('inp-botName').value||'Infinity MD',
+      ownerName:document.getElementById('inp-ownerName').value,ownerNumber:document.getElementById('inp-ownerNumber').value
+    })});
+    if(data.success){
+      toast('Bot deployed successfully!','success');
+      addActivity('🚀','var(--green)','Bot deployed',document.getElementById('inp-botName').value||'Infinity MD');
+      navTo('sessions');loadQuickSessions();
+    }else toast('Error: '+(data.message||'Deploy failed'),'error');
+  }catch(e){toast('Deploy failed: '+e.message,'error')}
+}
+
+async function restartSession(id){
+  try{
+    await apiFetch('/api/session/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id})});
+    toast('Restart signal sent','success');
+    addActivity('↻','var(--amber)','Session restarted','Bot session restarting...');
+    setTimeout(()=>renderSessions(),2000);
+  }catch(e){toast('Restart failed','error')}
+}
+
+async function deleteSession(id){
+  if(!confirm('Delete this bot instance permanently?'))return;
+  try{
+    await apiFetch('/api/session/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id})});
+    toast('Bot deleted','success');
+    addActivity('🗑️','var(--red)','Session deleted','A bot instance was removed');
+    renderSessions();loadQuickSessions();
+  }catch(e){toast('Delete failed','error')}
+}
+
+async function updateSession(id){
+  const settings={
+    antidelete:document.getElementById('ead-'+id)?.checked||false,
+    autoreact:document.getElementById('ear-'+id)?.checked||false,
+    anticall:document.getElementById('eac-'+id)?.checked||false,
+    antiviewonce:document.getElementById('eav-'+id)?.checked||false,
+    callRejectMsg:document.getElementById('ecrm-'+id)?.value.trim()||'',
+    autoReactMode:document.getElementById('earm-'+id)?.value||'all',
+    antiviewonceEmoji:document.getElementById('eavoe-'+id)?.value.trim()||'👁️'
+  };
+  try{
+    await apiFetch('/api/session/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      sessionId:id,botName:document.getElementById('en-'+id)?.value,
+      ownerName:document.getElementById('eo-'+id)?.value,ownerNumber:document.getElementById('em-'+id)?.value,settings
+    })});
+    toast('Settings saved','success');
+    addActivity('⚙️','var(--cyan)','Session updated','Bot settings changed');
+    renderSessions();
+  }catch(e){toast('Update failed','error')}
+}
+
+
+/* ─── Command browser ─── */
+const cmdCategories=[
+  {id:'admin',name:'Admin',emoji:'🛡️',color:'#a855f7',cmds:['add','admins','announce','antigroupmention','antilink','antitag','autosticker','clean','delete','demote','ephemeral','goodbye','grouplink','hidetag','kick','lock','members','mute','poll','promote','resetwarn','revoke','setdesc','setgoodbye','seticon','setname','setwelcome','tagall','unlock','unmute','warn','welcome']},
+  {id:'ai',name:'AI',emoji:'🤖',color:'#06b6d4',cmds:['ai','aimaths','code','explain','gpt','grammar','imagine','magicstudio','poem','story','summarize']},
+  {id:'anime',name:'Anime',emoji:'🌸',color:'#ec4899',cmds:['animechar','animequote','cosplay','cuddle','hneko','hug','hwaifu','konachan','loli','manga','megumin','milf','neko','random','shinobu','slap','waifu']},
+  {id:'converter',name:'Converter',emoji:'🔄',color:'#f59e0b',cmds:['blur','circle','emojimix','grayscale','invert','togif','toimg','tomp3','toptt','tourl']},
+  {id:'fun',name:'Fun',emoji:'🎉',color:'#22c55e',cmds:['8ball','ascii','badluck','charades','clap','coinflip','complimentry','curseme','dare','emoji','emojistory','fact','flirt','fortune','gayrate','haiku','horror','howold','insult','iq','joke','lovematch','meme','memesearch','mock','numerology','pickup','pies','quote','rate','reverse','riddle','roast','roll','rps','ship','simp','trivia','truth','vaporwave','wouldyourather','wyr','zodiac']},
+  {id:'game',name:'Games',emoji:'🎮',color:'#f59e0b',cmds:['blackjack','guess','hangman','mathquiz','quiz','roulette','scramble','slots','tictactoe','wordchain']},
+  {id:'general',name:'General',emoji:'📋',color:'#06b6d4',cmds:['alive','attp','botlist','broadcast','creator','crop','donate','getpp','github','groupinfo','groupstats','info','list','mainmenu','menu','myactivity','owner','ping','qr','report','rules','runtime','script','simage','source','speed','ssweb','sticker','support','take','totalcmds','translate','tts','uptime','viewonce','whois']},
+  {id:'media',name:'Media',emoji:'🎵',color:'#ec4899',cmds:['bass','facebook','fast','igsc','igs','instagram','lyrics','mediainfo','pinterest','play','sinhanada','slow','song','tiktok','toaudio','video','wallpaper','yt','ytmp3','ytmp4']},
+  {id:'owner',name:'Owner',emoji:'👑',color:'#fbbf24',cmds:['anticall','antidelete','antiviewonce','autopp','autoreact','autostatus','autotyping','autovoice','banuser','block','broadcast','chatlist','clearall','eval','exec','join','leave','maintenance','mode','newsletter','restart','save','setbio','setbotname','setbotpp','setmenuimage','setnewsletter','setprefix','settings','status','unblock','update']},
+  {id:'textmaker',name:'TextMaker',emoji:'✏️',color:'#a855f7',cmds:['1917','arena','blackpink','carbon','devil','fire','galaxy','glitch','gold','gradient','hacker','ice','impressive','lava','leaves','light','matrix','metallic','neon','purple','rainbow','sand','snow','steel','thunder','toxic','vintage','water']},
+  {id:'utility',name:'Utility',emoji:'🛠️',color:'#06b6d4',cmds:['base64','binary','calc','charcount','color','countdown','flip','get','hash','hex','json','lorem','morse','password','remind','rot13','shorten','sticker','timestamp','tiny','translate','uuid','weather','wiki','wordcount']},
+  {id:'movie',name:'Movie',emoji:'🎬',color:'#f97316',cmds:['film2','filmsearch','movie']},
+];
+
+let cmdData=cmdCategories;
+
+function loadCommandBrowser(){
+  const total=cmdData.reduce((a,c)=>a+c.cmds.length,0);
+  const badge=document.getElementById('total-cmd-badge');
+  if(badge)badge.textContent=`${total} Commands`;
+  renderCmdBrowser(cmdData,'');
+}
+
+function renderCmdBrowser(cats,query){
+  const container=document.getElementById('cmdBrowser');
+  if(!container)return;
+  const q=query.toLowerCase().trim();
+  let html='';
+  for(const cat of cats){
+    const filtered=q?cat.cmds.filter(c=>c.toLowerCase().includes(q)||cat.name.toLowerCase().includes(q)):cat.cmds;
+    if(!filtered.length)continue;
+    html+=`<div class="cmd-category">
+      <div class="cmd-category-header" onclick="toggleCmdCat(this)" style="border-left:3px solid ${cat.color}">
+        <div style="display:flex;align-items:center;gap:10px;flex:1">
+          <div class="cat-icon" style="background:${cat.color}18;color:${cat.color}">${cat.emoji}</div>
+          <div class="cat-name">${cat.name}</div>
+        </div>
+        <span class="cat-count">${filtered.length} cmds</span>
+        <span style="color:var(--dim);font-size:0.75rem">▼</span>
+      </div>
+      <div class="cmd-category-body ${q?'open':''}">
+        <div class="cmd-chips">${filtered.map(c=>`<span class="cmd-chip" style="border-color:${cat.color}28;color:${cat.color};background:${cat.color}0a">.${c}</span>`).join('')}</div>
+      </div>
+    </div>`;
+  }
+  container.innerHTML=html||'<div style="color:var(--dim);padding:20px 0;text-align:center">No commands found matching "'+query+'"</div>';
+}
+
+function toggleCmdCat(header){
+  const body=header.nextElementSibling;
+  const arrow=header.querySelector('span:last-child');
+  header.classList.toggle('open');
+  body.classList.toggle('open');
+  if(arrow)arrow.textContent=body.classList.contains('open')?'▲':'▼';
+}
+
+function filterCmds(query){
+  renderCmdBrowser(cmdData,query);
+}
+
+/* ─── Feature Card Toggles ─── */
+function toggleFeat(id, card){
+  const cb=document.getElementById(id);
+  cb.checked=!cb.checked;
+  card.classList.toggle('active',cb.checked);
+}
+function setFeat(id, val){
+  const cb=document.getElementById(id);
+  if(!cb)return;
+  cb.checked=!!val;
+  const card=cb.closest('.feat-card');
+  if(card)card.classList.toggle('active',!!val);
+}
+
+/* ─── Settings ─── */
+async function saveUserSettings(){
+  const settings={
+    antidelete:document.getElementById('u-antidelete').checked,
+    autoReact:document.getElementById('u-autoReact').checked,
+    autoStatus:document.getElementById('u-autoStatus').checked,
+    antiviewonce:document.getElementById('u-antiviewonce').checked,
+    autoTyping:document.getElementById('u-autoTyping').checked,
+    autoVoice:document.getElementById('u-autoVoice').checked,
+    autoReactMode:document.getElementById('u-autoReactMode')?.value||'all',
+    antiviewonceEmoji:document.getElementById('u-voEmoji')?.value.trim()||'👁️'
+  };
+  try{
+    await apiFetch('/api/user-settings/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});
+    toast('Your bot settings saved','success');
+    addActivity('💾','var(--green)','Settings saved','Personal bot settings updated');
+  }catch(e){toast('Failed to save settings','error')}
+}
+
+async function saveGlobalSettings(){
+  const settings={
+    maintenance:document.getElementById('g-maintenance').checked,
+    forceBot:document.getElementById('g-forceBot').checked,
+    anticall:document.getElementById('g-anticall').checked,
+    antidelete:document.getElementById('g-antidelete').checked,
+    autoReact:document.getElementById('g-autoReact').checked,
+    autoReactMode:document.getElementById('g-autoReactMode').value,
+    autoStatus:document.getElementById('g-autoStatus').checked,
+    antiviewonce:document.getElementById('g-antiviewonce').checked,
+    antiviewonceEmoji:selectedEmoji
+  };
+  try{
+    await apiFetch('/api/global-settings/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});
+    toast('Global settings saved','success');
+    addActivity('🌐','var(--purple)','Global settings saved',`React mode: ${settings.autoReactMode}`);
+  }catch(e){toast('Failed to save settings','error')}
+}
+
+/* ─── Auto-Reply ─── */
+const AR_MODE_HINTS={
+  'smart':'Bot picks a natural reply from your list at random. No AI needed — great for businesses.',
+  'custom':'Bot only replies when an incoming message matches one of your keywords.',
+  'ai-always':'Bot replies to every incoming message using AI. Works 24/7.',
+  'ai-offline':'Bot only replies when you appear offline on WhatsApp.',
+  'ai-time':'Bot replies only within the time window you set below.'
+};
+
+let _arSessions=[];
+
+async function loadARSessions(){
+  try{
+    const data=await apiFetch('/api/sessions');
+    _arSessions=Array.isArray(data)?data:[];
+    const sel=document.getElementById('ar-bot-select');
+    sel.innerHTML='<option value="global">🌐 Global — all bots</option>'+
+      _arSessions.map(s=>`<option value="${s.id}">${s.name||s.id} ${s.status==='Online'?'🟢':'⚪'}</option>`).join('');
+  }catch(e){}
+}
+
+async function onARBotChange(){
+  const val=document.getElementById('ar-bot-select').value;
+  document.getElementById('ar-enabled').checked=false;
+  toggleARPanel(false);
+  document.getElementById('ar-smart-list').innerHTML='';
+  document.getElementById('ar-kw-list').innerHTML='';
+  if(val==='global'){
+    try{
+      const settings=await apiFetch('/api/global-settings');
+      if(settings.autoReply)loadARSettings(settings.autoReply);
+    }catch(e){}
+  }else{
+    const sess=_arSessions.find(s=>s.id===val);
+    const ar=sess&&sess.settings&&sess.settings.autoReply;
+    if(ar)loadARSettings(ar);
+  }
+}
+
+function toggleARPanel(on){
+  document.getElementById('ar-panel').style.display=on?'block':'none';
+  if(on)updateARModeHint();
+}
+
+function updateARModeHint(){
+  const m=document.getElementById('ar-mode').value;
+  document.getElementById('ar-mode-hint').textContent=AR_MODE_HINTS[m]||'';
+  const isTime=m==='ai-time';
+  const isSmart=m==='smart';
+  const isAI=m.startsWith('ai-');
+  document.getElementById('ar-time-wrap').style.opacity=isTime?'1':'0.4';
+  document.getElementById('ar-time-wrap').style.pointerEvents=isTime?'auto':'none';
+  document.getElementById('ar-smart-wrap').style.display=isSmart?'':'none';
+  document.getElementById('ar-message-wrap').style.display=isAI?'':'none';
+}
+
+function addSmartMessage(value){
+  value=value||'';
+  const list=document.getElementById('ar-smart-list');
+  const row=document.createElement('div');
+  row.setAttribute('data-smart-row','');
+  row.style.cssText='display:flex;gap:8px;align-items:center';
+  const safeVal=value.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  row.innerHTML=`<input type="text" placeholder="How can I assist you? 😊" value="${safeVal}" style="flex:1;padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.85rem;font-family:inherit;outline:none"><button onclick="this.parentElement.remove()" style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);color:#ef4444;padding:5px 10px;border-radius:8px;cursor:pointer;font-size:0.75rem;white-space:nowrap;flex-shrink:0">✕</button>`;
+  list.appendChild(row);
+}
+
+function addKeywordRow(keyword,response){
+  keyword=keyword||'';response=response||'';
+  const list=document.getElementById('ar-kw-list');
+  const row=document.createElement('div');
+  row.setAttribute('data-kw-row','');
+  row.style.cssText='display:flex;gap:8px;align-items:center';
+  const sk=keyword.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  const sr=response.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  row.innerHTML=`<input type="text" placeholder="keyword" value="${sk}" style="width:130px;flex-shrink:0;padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.85rem;font-family:inherit;outline:none"><span style="color:var(--dim);font-size:0.9rem;flex-shrink:0">→</span><input type="text" placeholder="reply text…" value="${sr}" style="flex:1;padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.85rem;font-family:inherit;outline:none"><button onclick="this.parentElement.remove()" style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);color:#ef4444;padding:5px 10px;border-radius:8px;cursor:pointer;font-size:0.75rem;white-space:nowrap;flex-shrink:0">✕</button>`;
+  list.appendChild(row);
+}
+
+function loadARSettings(ar){
+  if(!ar)return;
+  document.getElementById('ar-enabled').checked=!!ar.enabled;
+  toggleARPanel(!!ar.enabled);
+  document.getElementById('ar-mode').value=ar.mode||'smart';
+  document.getElementById('ar-time-start').value=ar.timeStart||'09:00';
+  document.getElementById('ar-time-end').value=ar.timeEnd||'18:00';
+  document.getElementById('ar-message').value=ar.message||'';
+  document.getElementById('ar-smart-list').innerHTML='';
+  const msgs=ar.messages&&ar.messages.length?ar.messages:(ar.message?[ar.message]:[]);
+  if(msgs.length){msgs.forEach(m=>addSmartMessage(m));}
+  else{
+    ['Hi! How can I assist you today? 😊','Thanks for reaching out! How can I help you?','Hello! What can I do for you? 😊'].forEach(m=>addSmartMessage(m));
+  }
+  document.getElementById('ar-kw-list').innerHTML='';
+  if(ar.keywords&&ar.keywords.length)ar.keywords.forEach(k=>addKeywordRow(k.keyword,k.response));
+  updateARModeHint();
+}
+
+async function saveARSettings(){
+  const keywords=[...document.querySelectorAll('[data-kw-row]')].map(row=>{
+    const inputs=row.querySelectorAll('input[type=text]');
+    return{keyword:inputs[0].value.trim().toLowerCase(),response:inputs[1].value.trim()};
+  }).filter(k=>k.keyword&&k.response);
+  const messages=[...document.querySelectorAll('[data-smart-row] input')].map(i=>i.value.trim()).filter(Boolean);
+  const ar={
+    enabled:document.getElementById('ar-enabled').checked,
+    mode:document.getElementById('ar-mode').value,
+    timeStart:document.getElementById('ar-time-start').value,
+    timeEnd:document.getElementById('ar-time-end').value,
+    message:messages[0]||document.getElementById('ar-message').value.trim(),
+    messages,
+    keywords
+  };
+  const botVal=document.getElementById('ar-bot-select').value;
+  try{
+    if(botVal==='global'){
+      await apiFetch('/api/global-settings/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoReply:ar})});
+    }else{
+      const sess=_arSessions.find(s=>s.id===botVal);
+      const currentSettings=(sess&&sess.settings)||{};
+      await apiFetch('/api/session/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:botVal,settings:{...currentSettings,autoReply:ar}})});
+    }
+    toast('Auto-Reply settings saved','success');
+    addActivity('💬','var(--green)','Auto-Reply saved',`Bot: ${botVal==='global'?'Global':botVal} | Mode: ${ar.mode} | Keywords: ${keywords.length}`);
+  }catch(e){toast('Failed to save auto-reply settings','error')}
+}
+
+/* ─── Deploy ─── */
+function switchManual(lang){
+  document.getElementById('manual-en').style.display=lang==='en'?'block':'none';
+  document.getElementById('manual-si').style.display=lang==='si'?'block':'none';
+  document.getElementById('manualEnBtn').className=lang==='en'?'btn btn-sm btn-primary':'btn btn-sm';
+  document.getElementById('manualSiBtn').className=lang==='si'?'btn btn-sm btn-primary':'btn btn-sm';
+}
+
+function switchDeployTab(tab,el){
+  document.querySelectorAll('.deploy-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.deploy-panel').forEach(p=>p.style.display='none');
+  el.classList.add('active');
+  document.getElementById('deploy-'+tab).style.display='block';
+}
+
+async function generatePairCode(){
+  const num=document.getElementById('inp-pairNumber').value.trim();
+  if(!num){toast('Phone number is required','error');return}
+  document.getElementById('pairBtn').style.display='none';
+  document.getElementById('pair-loading').style.display='block';
+  document.getElementById('pair-result').style.display='none';
+  document.getElementById('pair-error').style.display='none';
+  try{
+    const data=await apiFetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      number:num,botName:document.getElementById('inp-pairBotName').value||'Infinity MD',
+      ownerName:document.getElementById('inp-pairOwnerName').value,ownerNumber:document.getElementById('inp-pairOwnerNumber').value
+    })});
+    if(data.success&&data.code){
+      document.getElementById('pair-code').textContent=data.code;
+      document.getElementById('pair-result').style.display='block';
+      toast('Pair code generated! Enter it in WhatsApp.','success');
+    }else{
+      document.getElementById('pair-error-msg').textContent=data.message||'Failed to generate pair code';
+      document.getElementById('pair-error').style.display='block';
+      toast(data.message||'Failed','error');
+    }
+  }catch(e){
+    document.getElementById('pair-error-msg').textContent=e.message||'Failed to generate pair code';
+    document.getElementById('pair-error').style.display='block';
+    toast(e.message||'Pair failed','error');
+  }finally{
+    document.getElementById('pair-loading').style.display='none';
+    document.getElementById('pairBtn').style.display='';
+  }
+}
+
+function copyPairCode(){
+  const code=document.getElementById('pair-code').textContent;
+  navigator.clipboard.writeText(code.replace(/-/g,'')).then(()=>{
+    const btn=document.getElementById('copyPairBtn');
+    btn.textContent='✅ Copied!';
+    setTimeout(()=>{btn.textContent='📋 Copy Code'},2000);
+  }).catch(()=>toast('Copy failed','error'));
+}
+
+async function generateQR(){
+  document.getElementById('qrBtn').style.display='none';
+  document.getElementById('qr-loading').style.display='block';
+  document.getElementById('qr-result').style.display='none';
+  document.getElementById('qr-error').style.display='none';
+  const params=new URLSearchParams();
+  const bn=document.getElementById('inp-qrBotName').value;
+  const on=document.getElementById('inp-qrOwnerName').value;
+  const onum=document.getElementById('inp-qrOwnerNumber').value;
+  if(bn)params.set('botName',bn);if(on)params.set('ownerName',on);if(onum)params.set('ownerNumber',onum);
+  try{
+    const data=await apiFetch('/api/qr?'+params.toString());
+    if(data.success&&data.qr){
+      document.getElementById('qr-image').src=data.qr;
+      document.getElementById('qr-result').style.display='block';
+      toast('QR code generated! Scan with WhatsApp.','success');
+    }else{
+      document.getElementById('qr-error-msg').textContent=data.message||'Failed to generate QR code';
+      document.getElementById('qr-error').style.display='block';
+      toast(data.message||'QR failed','error');
+    }
+  }catch(e){
+    document.getElementById('qr-error-msg').textContent='Failed to generate QR. Try again.';
+    document.getElementById('qr-error').style.display='block';
+    toast('QR failed','error');
+  }finally{
+    document.getElementById('qr-loading').style.display='none';
+    document.getElementById('qrBtn').style.display='';
+  }
+}
+
+/* ─── Admin ─── */
+async function loadAdminData(){
+  try{
+    const settings=await apiFetch('/api/admin/global-settings');
+    document.getElementById('adm-channel').value=settings.whatsappChannel||'';
+  }catch(e){}
+  try{
+    const stats=await apiFetch('/api/admin/stats');
+    animateCounter('a-users',stats.totalUsers||0);
+    animateCounter('a-bots',stats.totalBots||0);
+    animateCounter('a-active',stats.activeBots||0);
+    document.getElementById('a-mem').textContent=stats.memory||'0 MB';
+  }catch(e){}
+  try{
+    const users=await apiFetch('/api/admin/users');
+    const el=document.getElementById('adm-usersList');
+    el.innerHTML=users.length?users.map(u=>`
+      <div class="list-item">
+        <span style="font-weight:600">${u.username}</span>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-xs" onclick="userAction('${u.username}','pause')">Pause</button>
+          <button class="btn btn-danger btn-xs" onclick="userAction('${u.username}','delete')">Delete</button>
+        </div>
+      </div>`).join(''):'<div style="padding:14px;color:var(--dim);font-size:0.8rem">No users</div>';
+  }catch(e){}
+  try{
+    const sessions=await apiFetch('/api/admin/sessions');
+    const el=document.getElementById('adm-sessionsList');
+    el.innerHTML=sessions.length?sessions.map(s=>`
+      <div class="list-item">
+        <div>
+          <div style="font-weight:600;font-size:0.83rem">${s.name}</div>
+          <div style="font-size:0.7rem;color:var(--dim)">${s.ownerName||'—'}</div>
+        </div>
+        <span class="badge badge-${s.status.toLowerCase()}">${s.status}</span>
+      </div>`).join(''):'<div style="padding:14px;color:var(--dim);font-size:0.8rem">No sessions</div>';
+  }catch(e){}
+}
+
+async function sendBroadcast(){
+  const msg=document.getElementById('adm-broadcast').value.trim();
+  if(!msg){toast('Message is required','error');return}
+  try{
+    const data=await apiFetch('/api/admin/broadcast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});
+    if(data.success){toast('Broadcast sent!','success');document.getElementById('adm-broadcast').value='';addActivity('📢','var(--amber)','Broadcast sent','Global message delivered')}
+    else toast(data.message||'Broadcast failed','error');
+  }catch(e){toast('Broadcast failed','error')}
+}
+
+async function saveAdminChannel(){
+  const ch=document.getElementById('adm-channel').value.trim();
+  try{
+    await apiFetch('/api/admin/global-settings/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({whatsappChannel:ch})});
+    toast('Channel saved','success');
+  }catch(e){toast('Save failed','error')}
+}
+
+async function userAction(username,action){
+  if(!confirm(`${action} user "${username}"?`))return;
+  try{
+    const data=await apiFetch('/api/admin/user/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,action})});
+    if(data.success){toast(`User ${action} done`,'success');loadAdminData()}
+    else toast(data.message||'Action failed','error');
+  }catch(e){toast('Action failed','error')}
+}
+
+/* ─── Auto-refresh stats every 30s ─── */
+setInterval(async()=>{
+  try{
+    const stats=await apiFetch('/api/stats');
+    document.getElementById('s-uptime').textContent=stats.uptime;
+    document.getElementById('s-ram').textContent=stats.ram;
+  }catch(e){}
+},30000);
+
+/* ─── Init ─── */
+loadDashboard();
+</script>
+</body>
+</html>

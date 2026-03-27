@@ -1,0 +1,116 @@
+2026-03-08 09:05:23.90
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:24.78
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:25.03
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:25.85
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:25.99
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:26.83
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:28.36
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:28.52
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:29.94
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:30.57
+2e06ee8e
+User
+> node index.js
+2026-03-08 09:05:30.57
+2e06ee8e
+User
+> whatsapp-md-bot@1.0.0 start
+2026-03-08 09:05:31.36
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:31.54
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:33.14
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:33.73
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:34.85
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:35.79
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:37.67
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:39.20
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:40.92
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:41.81
+2e06ee8e
+System
+healthcheck failed error=healthcheck / returned status 500
+2026-03-08 09:05:43.04
+2e06ee8e
+User
+🧹 Starting temp file cleanup system...
+2026-03-08 09:05:43.04
+2e06ee8e
+User
+✅ All modules loaded successfully
+2026-03-08 09:05:43.04
+2e06ee8e
+User
+✅ Cleanup system started (runs every 10 minutes)
+2026-03-08 09:05:43.05
+2e06ee8e
+User
+✅ Web server listening on 3000
+2026-03-08 09:05:43.10
+2e06ee8e
+User
+✅ Global settings loaded into cache
+2026-03-08 09:05:43.10
+2e06ee8e
+User
+♻️ Auto-reconnecting session: qr_94770612011_1772940534398
+2026-03-08 09:05:43.68
+2e06ee8e
+User
+✅ Session qr_94770612011_1772940534398 connected!
+2026-03-08 09:05:43.68
+2e06ee8e
+User
+✅ Session qr_94770612011_1772940534398 connected!
