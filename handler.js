@@ -866,6 +866,7 @@ const handleMessage = async (sock, msg) => {
       // Bot Mode
       'mode_private': `${p}mode private`,
       'mode_public':  `${p}mode public`,
+      'mode_group':   `${p}mode group`,
       // AntiCall
       'anticall_on': `${p}anticall on`,
       'anticall_off': `${p}anticall off`,
@@ -971,9 +972,18 @@ const handleMessage = async (sock, msg) => {
       }
 
       if (command) {
-        if (globalSettings.forceBot && !isOwner(sender, sock)) {
-           await sock.sendMessage(from, { text: '⚠️ *Force Bot Mode is ON.*\nOnly owners can use commands right now.' }, { quoted: msg }).catch(() => {});
-           return;
+        // ── Bot Mode enforcement ──────────────────────────────────────────────
+        // Resolve mode: new botMode field takes priority; fall back to legacy forceBot.
+        const botMode = globalSettings.botMode || (globalSettings.forceBot ? 'private' : 'public');
+        if (!isOwner(sender, sock)) {
+          if (botMode === 'private') {
+            // Private mode: only owner can use commands, no response to outsiders
+            return;
+          }
+          if (botMode === 'group' && !isGroup) {
+            // Group mode: DM commands from non-owners are silently ignored
+            return;
+          }
         }
 
         // ── Owner-only command enforcement ────────────────────────────────────
