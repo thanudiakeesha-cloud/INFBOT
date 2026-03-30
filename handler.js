@@ -1190,29 +1190,42 @@ const handleMessage = async (sock, msg) => {
       }
 
       // ── AntiBadAI ─────────────────────────────────────────────────────────
-      if (groupSettings.antibadai && !msg.key.fromMe && body && body.trim().length > 1) {
-        const senderIsAdmin = await isAdmin(sock, sender, from, groupMetadata);
-        if (!senderIsAdmin && !isOwner(sender)) {
-          try {
-            const axios = require('axios');
-            const checkPrompt = `You are a content moderation AI. Analyze the following message and reply with ONLY "BAD" if it contains profanity, hate speech, sexual content, offensive language, slurs, or explicit bad words. Reply with ONLY "OK" if the message is clean. Do not explain. Message: "${body.replace(/"/g, "'")}"`;
-            const aiRes = await axios.get(
-              `https://api.shizo.top/ai/gpt?apikey=shizo&query=${encodeURIComponent(checkPrompt)}`,
-              { timeout: 8000 }
-            );
-            const verdict = (aiRes.data?.msg || aiRes.data?.result || '').toString().trim().toUpperCase();
-            if (verdict.startsWith('BAD')) {
-              if (await isBotAdmin(sock, from, groupMetadata)) {
-                await sock.sendMessage(from, { delete: msg.key }).catch(() => {});
-                const senderNum = sender.split('@')[0];
-                await sock.sendMessage(from, {
-                  text: `🤖 *AntiBadAI* | ⚠️ Inappropriate message from @${senderNum} was removed.`,
-                  mentions: [sender]
-                }).catch(() => {});
+      if (groupSettings.antibadai && !msg.key.fromMe) {
+        // Collect ALL text from every message type (text, captions, filenames)
+        const allText = [
+          body,
+          content.documentMessage?.caption,
+          content.documentMessage?.fileName,
+          content.imageMessage?.caption,
+          content.videoMessage?.caption,
+        ].filter(t => t && t.trim().length > 0).join(' ').trim();
+
+        if (allText.length > 1) {
+          const senderIsAdmin = await isAdmin(sock, sender, from, groupMetadata);
+          if (!senderIsAdmin && !isOwner(sender)) {
+            // Check bot has admin rights BEFORE wasting an AI call
+            const botHasAdmin = await isBotAdmin(sock, from, groupMetadata);
+            if (botHasAdmin) {
+              try {
+                const axios = require('axios');
+                const checkPrompt = `You are a content moderation AI. Your job is to detect harmful content in ANY language (English, Sinhala, Tamil, Arabic, etc.). Reply with ONLY the word "BAD" if the message contains ANY of: profanity, swear words, hate speech, sexual content, slurs, insults, threats, or offensive language. Reply with ONLY "OK" if the message is clean. Do NOT explain. Message: "${allText.replace(/"/g, "'").substring(0, 300)}"`;
+                const aiRes = await axios.get(
+                  `https://api.shizo.top/ai/gpt?apikey=shizo&query=${encodeURIComponent(checkPrompt)}`,
+                  { timeout: 10000 }
+                );
+                const verdict = (aiRes.data?.msg || aiRes.data?.result || '').toString().trim().toUpperCase();
+                if (verdict.startsWith('BAD')) {
+                  await sock.sendMessage(from, { delete: msg.key }).catch(() => {});
+                  const senderNum = sender.split('@')[0];
+                  await sock.sendMessage(from, {
+                    text: `🤖 *AntiBadAI*\n\n⚠️ Inappropriate message from @${senderNum} has been removed.\n_This group has bad word detection enabled._`,
+                    mentions: [sender]
+                  }).catch(() => {});
+                }
+              } catch (e) {
+                // AI check failed silently — message left as-is
               }
             }
-          } catch (e) {
-            // AI check failed silently — do not block message
           }
         }
       }
