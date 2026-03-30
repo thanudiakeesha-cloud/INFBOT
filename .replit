@@ -41,4 +41,4 @@ run = ["npm", "start"]
 [userenv]
 
 [userenv.development]
-DEV_MODE = "true"
+DEV_MODE = "false"
