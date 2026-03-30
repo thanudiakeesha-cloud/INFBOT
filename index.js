@@ -427,9 +427,10 @@ app.get('/api/sessions', isAuthenticated, async (req, res) => {
         name: sessions[id].name,
         ownerName: sessions[id].ownerName || config.ownerName[0],
         ownerNumber: sessions[id].ownerNumber || config.ownerNumber[0],
+        prefix: (sessions[id].settings && sessions[id].settings.prefix) || '.',
         settings: sessions[id].settings || {},
         status: activeSessions.has(id) ? 'Online' : 'Offline',
-        userId: sessions[id].userId // Helpful for owner to see whose bot it is
+        userId: sessions[id].userId
       }));
     res.json(userSessions);
   } catch (e) {
@@ -438,7 +439,7 @@ app.get('/api/sessions', isAuthenticated, async (req, res) => {
 });
 
 app.post('/api/session/update', isAuthenticated, async (req, res) => {
-  const { sessionId, botName, ownerName, ownerNumber, settings } = req.body;
+  const { sessionId, botName, ownerName, ownerNumber, settings, prefix } = req.body;
   if (!sessionId) return res.status(400).send('Missing session ID');
   
   try {
@@ -449,6 +450,7 @@ app.post('/api/session/update', isAuthenticated, async (req, res) => {
       sessions[sessionId].ownerName = ownerName || sessions[sessionId].ownerName;
       sessions[sessionId].ownerNumber = ownerNumber || sessions[sessionId].ownerNumber;
       sessions[sessionId].settings = settings || sessions[sessionId].settings || {};
+      if (prefix) sessions[sessionId].settings.prefix = prefix;
 
       // Update active socket config if session is online
       if (activeSessions.has(sessionId)) {

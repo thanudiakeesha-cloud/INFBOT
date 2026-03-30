@@ -857,7 +857,7 @@ function toggleEdit(id){const p=document.getElementById('edit-'+id);if(p)p.style
 
 async function restartSession(id){
   try{
-    const data=await apiFetch('/api/session/'+id+'/restart',{method:'POST'});
+    const data=await apiFetch('/api/session/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id})});
     if(data.success){toast('Bot restarting…','success');addActivity('↻','#22c55e','Bot restarted',id);setTimeout(renderSessions,2000)}
     else toast(data.message||'Restart failed','error');
   }catch(e){toast('Restart failed','error')}
@@ -866,7 +866,7 @@ async function restartSession(id){
 async function deleteSession(id,name){
   if(!confirm(`Delete bot "${name}"? This cannot be undone.`))return;
   try{
-    const data=await apiFetch('/api/session/'+id+'/delete',{method:'POST'});
+    const data=await apiFetch('/api/session/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id})});
     if(data.success){toast('Bot deleted','success');addActivity('🗑️','#ef4444','Bot deleted',name);renderSessions();loadQuickSessions()}
     else toast(data.message||'Delete failed','error');
   }catch(e){toast('Delete failed','error')}
@@ -876,9 +876,9 @@ async function saveSessionEdit(id){
   const name=document.getElementById('edit-name-'+id)?.value.trim();
   const ownerName=document.getElementById('edit-ownerName-'+id)?.value.trim();
   const ownerNumber=document.getElementById('edit-ownerNumber-'+id)?.value.trim();
-  const prefix=document.getElementById('edit-prefix-'+id)?.value.trim();
+  const prefix=document.getElementById('edit-prefix-'+id)?.value.trim()||'.';
   try{
-    const data=await apiFetch('/api/session/'+id+'/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,ownerName,ownerNumber,prefix})});
+    const data=await apiFetch('/api/session/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id,botName:name,ownerName,ownerNumber,prefix})});
     if(data.success){toast('Session updated','success');toggleEdit(id);renderSessions()}
     else toast(data.message||'Update failed','error');
   }catch(e){toast('Update failed','error')}

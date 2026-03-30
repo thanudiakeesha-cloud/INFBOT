@@ -1017,6 +1017,20 @@ const handleMessage = async (sock, msg) => {
               isAdmin(sock, sender, from, groupMetadata),
               isBotAdmin(sock, from, groupMetadata)
             ]);
+
+            // ── Admin-only command enforcement ──────────────────────────────────
+            // Block commands flagged adminOnly or category 'admin' from non-admins.
+            // Bot owner bypasses this check.
+            const cmdIsAdminOnly = command.adminOnly === true || command.category === 'admin';
+            if (cmdIsAdminOnly && !isOwner(sender, sock) && !adminResult) {
+              await sock.sendMessage(from, {
+                text: `╭━━〔 👮 *ADMIN ONLY* 〕━━⬣\n┃\n┃  ❌ This command is for admins only.\n┃  You need group admin privileges\n┃  to use this command.\n┃\n╰━━━━━━━━━━━━━━━━━━━━━⬣`
+              }, { quoted: msg }).catch(() => {});
+              await sock.sendMessage(from, { react: { text: '🔒', key: msg.key } }).catch(() => {});
+              stopPresence();
+              return;
+            }
+
             await executeFn(sock, msg, args, {
               from, sender, isGroup, groupMetadata,
               isOwner: isOwner(sender, sock),
@@ -1171,6 +1185,34 @@ const handleMessage = async (sock, msg) => {
               react: (emoji) => sock.sendMessage(from, { react: { text: emoji, key: msg.key } }).catch(() => {})
             }).catch(() => {});
             return;
+          }
+        }
+      }
+
+      // ── AntiBadAI ─────────────────────────────────────────────────────────
+      if (groupSettings.antibadai && !msg.key.fromMe && body && body.trim().length > 1) {
+        const senderIsAdmin = await isAdmin(sock, sender, from, groupMetadata);
+        if (!senderIsAdmin && !isOwner(sender)) {
+          try {
+            const axios = require('axios');
+            const checkPrompt = `You are a content moderation AI. Analyze the following message and reply with ONLY "BAD" if it contains profanity, hate speech, sexual content, offensive language, slurs, or explicit bad words. Reply with ONLY "OK" if the message is clean. Do not explain. Message: "${body.replace(/"/g, "'")}"`;
+            const aiRes = await axios.get(
+              `https://api.shizo.top/ai/gpt?apikey=shizo&query=${encodeURIComponent(checkPrompt)}`,
+              { timeout: 8000 }
+            );
+            const verdict = (aiRes.data?.msg || aiRes.data?.result || '').toString().trim().toUpperCase();
+            if (verdict.startsWith('BAD')) {
+              if (await isBotAdmin(sock, from, groupMetadata)) {
+                await sock.sendMessage(from, { delete: msg.key }).catch(() => {});
+                const senderNum = sender.split('@')[0];
+                await sock.sendMessage(from, {
+                  text: `🤖 *AntiBadAI* | ⚠️ Inappropriate message from @${senderNum} was removed.`,
+                  mentions: [sender]
+                }).catch(() => {});
+              }
+            }
+          } catch (e) {
+            // AI check failed silently — do not block message
           }
         }
       }
