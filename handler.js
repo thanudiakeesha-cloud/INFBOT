@@ -15,14 +15,8 @@ const pino = require('pino');
 const menuModule = require('./commands/general/menu');
 let ytModule;
 try { ytModule = require('./commands/media/yt'); } catch(e) { ytModule = null; }
-let film2Module;
-try { film2Module = require('./commands/movies/film2'); } catch(e) {
-  try { film2Module = require('./commands/movie/film2'); } catch(e2) { film2Module = null; }
-}
 let storeModule;
 try { storeModule = require('./lib/lightweight_store'); } catch(e) { storeModule = null; }
-let baiscopeMovieModule;
-try { baiscopeMovieModule = require('./commands/movie/baiscopemovie'); } catch(e) { baiscopeMovieModule = null; }
 
 // Group metadata cache to prevent rate limiting
 const groupMetadataCache = new Map();
@@ -810,35 +804,11 @@ const handleMessage = async (sock, msg) => {
       'cmd_alive': `${p}alive`,
       'cmd_help': `${p}help`,
       'cmd_ping': `${p}ping`,
-      // Menu category shortcuts (old-style IDs kept for back-compat)
-      'menu_owner': `${p}ownermenu`,
-      'menu_admin': `${p}adminmenu`,
-      'menu_fun': `${p}funmenu`,
-      'menu_ai': `${p}aimenu`,
-      'menu_tools': `${p}toolmenu`,
-      'menu_dl': `${p}dlmenu`,
-      'menu_media': `${p}dlmenu`,
-      'menu_general': `${p}generalmenu`,
-      'menu_converter': `${p}convertermenu`,
-      'menu_game': `${p}gamemenu`,
-      'menu_entertainment': `${p}entertainmentmenu`,
-      'menu_text': `${p}textmenu`,
-      'menu_movie': `${p}moviemenu`,
       // Display-text fallbacks (if WhatsApp returns button label text instead of ID)
-      '👑 owner':         `${p}ownermenu`,
-      '🛡️ admin':         `${p}adminmenu`,
-      '📥 downloads':     `${p}dlmenu`,
-      '🎮 fun':           `${p}funmenu`,
-      '🤖 ai':            `${p}aimenu`,
-      '🛠️ tools':         `${p}toolmenu`,
-      '👾 entertainment': `${p}entertainmentmenu`,
-      '✍️ textmaker':     `${p}textmenu`,
-      '🎬 movies':        `${p}moviemenu`,
-      '🧭 general':       `${p}generalmenu`,
-      '🔄 converter':     `${p}convertermenu`,
-      '🎮 games':         `${p}gamemenu`,
-      '🔙 main menu':     `${p}menu`,
-      '🌐 website':       `${p}alive`,
+      '✅ status':     `${p}alive`,
+      '🏓 ping':       `${p}ping`,
+      '🔙 main menu':  `${p}menu`,
+      '🌐 website':    `${p}alive`,
       // Settings toggles
       'settings_antidelete_on': `${p}settings antidelete on`,
       'settings_antidelete_off': `${p}settings antidelete off`,
@@ -928,30 +898,11 @@ const handleMessage = async (sock, msg) => {
       
       if (resolvedMenuCmd) {
         body = resolvedMenuCmd;
-      } else if (/^\d+$/.test(body)) {
-        if (film2Module) {
-           const command = commands.get('film2') || cmdRegistry.get('film2');
-           if (command) {
-              await (command.handler || command.execute)(sock, msg, [body], {
-                from, sender, isGroup, groupMetadata, 
-                isOwner: isOwner(sender, sock),
-                reply: (text) => sock.sendMessage(from, { text }, { quoted: msg }).catch(() => {})
-              });
-              return; 
-           }
-        }
       }
 
       if (ytModule && ytModule._ytReply) {
         const resolvedYt = ytModule._ytReply.resolveNumberReply(from, sender, body);
         if (resolvedYt) body = resolvedYt;
-      }
-
-      if (baiscopeMovieModule?.handleReply && content.extendedTextMessage?.contextInfo?.stanzaId) {
-        try {
-          const handled = await baiscopeMovieModule.handleReply(sock, msg, body, from, sender);
-          if (handled) return;
-        } catch (e) {}
       }
     } catch (e) {}
 
