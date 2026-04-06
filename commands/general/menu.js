@@ -35,6 +35,7 @@ const MANUALS = {
   play:    { usage: '.play <song name>',           desc: 'Instantly play/download the best match for a song.',               ex: '.play Bohemian Rhapsody' },
   lyrics:  { usage: '.lyrics <song name>',         desc: 'Get the full lyrics for any song.',                               ex: '.lyrics Shape of You' },
   film:    { usage: '.film <movie name>',          desc: 'Search and download movies with Sinhala subtitles.',               ex: '.film Avengers' },
+  film1:   { usage: '.film1 <movie name>',         desc: 'Search SriHub for movies with Sinhala subtitles.',                 ex: '.film1 Avengers' },
 
   // ── ADMIN ──
   antilink:{ usage: '.antilink on/off [action]',   desc: 'Auto-delete/kick users who post group invite links.',             ex: '.antilink on kick' },
@@ -96,7 +97,7 @@ const MANUALS = {
 const CATEGORIES = {
   media: {
     icon: '📥', title: 'MEDIA & DOWNLOADS',
-    cmds: ['song','yt','tiktok','ytmp3','ytmp4','play','lyrics','film'],
+    cmds: ['song','yt','tiktok','ytmp3','ytmp4','play','lyrics','film','film1'],
   },
   admin: {
     icon: '🛡️', title: 'ADMIN COMMANDS',

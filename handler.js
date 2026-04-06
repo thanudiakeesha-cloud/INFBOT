@@ -857,18 +857,25 @@ const handleMessage = async (sock, msg) => {
       // AntiCall
       'anticall_on': `${p}anticall on`,
       'anticall_off': `${p}anticall off`,
-      // Film search selections
+      // Film (SinhalaSub) — search, pick, download
+      'film':        `${p}film`,
       'film_pick_0': `${p}filmsel 0`,
       'film_pick_1': `${p}filmsel 1`,
       'film_pick_2': `${p}filmsel 2`,
       'film_pick_3': `${p}filmsel 3`,
       'film_pick_4': `${p}filmsel 4`,
-      // Film download to chat
-      'filmdown_0': `${p}filmdown 0`,
-      'filmdown_1': `${p}filmdown 1`,
-      'filmdown_2': `${p}filmdown 2`,
-      'filmdown_3': `${p}filmdown 3`,
-      'filmdown_4': `${p}filmdown 4`,
+      'filmdown_0':  `${p}filmdown 0`,
+      'filmdown_1':  `${p}filmdown 1`,
+      'filmdown_2':  `${p}filmdown 2`,
+      'filmdown_3':  `${p}filmdown 3`,
+      'filmdown_4':  `${p}filmdown 4`,
+      // Film1 (SriHub) — search, pick, detail
+      'film1':        `${p}film1`,
+      'film1_pick_0': `${p}film1sel 0`,
+      'film1_pick_1': `${p}film1sel 1`,
+      'film1_pick_2': `${p}film1sel 2`,
+      'film1_pick_3': `${p}film1sel 3`,
+      'film1_pick_4': `${p}film1sel 4`,
       // TikTok search selections
       'tiktok_pick_0': `${p}tiktok pick 0`,
       'tiktok_pick_1': `${p}tiktok pick 1`,
