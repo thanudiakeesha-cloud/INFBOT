@@ -253,10 +253,16 @@ function guessMime(url, ct) {
   return 'video/mp4';
 }
 
+async function react(sock, msg, emoji) {
+  try {
+    await sock.sendMessage(msg.key.remoteJid, { react: { text: emoji, key: msg.key } });
+  } catch (_) {}
+}
+
 async function sendFilmToChat(sock, chatId, msg, entry) {
   const { url: startUrl, title, quality } = entry;
 
-  await sock.sendMessage(chatId, { text: '🔗 _Finding the best download link..._' }, { quoted: msg });
+  await react(sock, msg, '🔗');
 
   let resolved;
   try {
@@ -267,28 +273,27 @@ async function sendFilmToChat(sock, chatId, msg, entry) {
 
   const { url: dlUrl, method } = resolved;
 
-  // ── Link-only mode (host doesn't support direct download) ──
+  // ── Link-only mode (host doesn't support direct streaming) ──
   if (method === 'link') {
+    await react(sock, msg, '✅');
     return sock.sendMessage(chatId, {
       text: `✅ *Your download is ready!*\n\n🎬 *${title}*${quality ? ` — ${quality}` : ''}\n\n📲 *Tap the link below to watch or save the film:*\n${dlUrl}\n\n> 🎬 _Infinity MD Mini_`,
     }, { quoted: msg });
   }
 
   // ── Stream to chat ──
+  await react(sock, msg, '📥');
   const headRes = await tryHead(dlUrl);
   const contentLength = headRes.headers?.['content-length'] ? parseInt(headRes.headers['content-length']) : null;
   const contentType   = headRes.headers?.['content-type'] || '';
-  const sizeStr = formatBytes(contentLength) || 'Checking…';
+  const sizeStr = formatBytes(contentLength) || null;
 
   if (contentLength && contentLength > 1.9 * 1024 * 1024 * 1024) {
+    await react(sock, msg, '⚠️');
     return sock.sendMessage(chatId, {
-      text: `⚠️ *This film is too large to send directly (${sizeStr})*\n\n📲 Open this link to download it:\n${dlUrl}\n\n> 🎬 _Infinity MD Mini_`,
+      text: `⚠️ *This film is too large to send directly${sizeStr ? ` (${sizeStr})` : ''}*\n\n📲 Open this link to download it:\n${dlUrl}\n\n> 🎬 _Infinity MD Mini_`,
     }, { quoted: msg });
   }
-
-  await sock.sendMessage(chatId, {
-    text: `📥 *Sending film to chat…*\n🎬 ${title}${quality ? ` — ${quality}` : ''}\n📦 Size: ${sizeStr}\n\n⏳ _This may take a moment depending on file size_`,
-  }, { quoted: msg });
 
   try {
     const t0 = Date.now();
@@ -308,14 +313,14 @@ async function sendFilmToChat(sock, chatId, msg, entry) {
       document: stream.data,
       mimetype,
       fileName,
-      caption: `🎬 *${title}*${quality ? ` — ${quality}` : ''}\n📦 ${sizeStr}\n\n> _Infinity MD Mini_`,
+      caption: `🎬 *${title}*${quality ? ` — ${quality}` : ''}${sizeStr ? `\n📦 ${sizeStr}` : ''}\n\n> _Infinity MD Mini_`,
     }, { quoted: msg });
 
-    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-    await sock.sendMessage(chatId, { text: `✅ *Done!* Delivered in ${elapsed}s 🎉` }, { quoted: msg });
+    await react(sock, msg, '✅');
 
   } catch (err) {
     console.error('[film] stream error:', err?.response?.status || err.message);
+    await react(sock, msg, '⚠️');
     return sock.sendMessage(chatId, {
       text: `⚠️ *Couldn't send the film directly*\n\n📲 Use this link to download it instead:\n${dlUrl}\n\n> 🎬 _Infinity MD Mini_`,
     }, { quoted: msg });
@@ -359,12 +364,13 @@ module.exports = {
       }
       const movie = session[idx];
 
-      await sock.sendMessage(chatId, { text: `🔍 _Loading details for_ *${movie.title}*…` }, { quoted: msg });
+      await react(sock, msg, '🔍');
 
       let details;
       try {
         details = await getMovieDetails(movie.url);
       } catch (err) {
+        await react(sock, msg, '❌');
         return sock.sendMessage(chatId, {
           text: `❌ Couldn't load the movie page. Please try again.`,
         }, { quoted: msg });
@@ -419,13 +425,14 @@ module.exports = {
     }
 
     const query = args.join(' ');
-    await sock.sendMessage(chatId, { text: `🔍 _Searching for_ *"${query}"*…` }, { quoted: msg });
+    await react(sock, msg, '🔍');
 
     let results;
     try {
       results = await searchMovies(query);
     } catch (err) {
       console.error('[film] search error:', err.message);
+      await react(sock, msg, '❌');
       return sock.sendMessage(chatId, {
         text: `❌ Search failed. Please try again in a moment.`,
       }, { quoted: msg });
