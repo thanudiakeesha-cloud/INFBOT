@@ -323,12 +323,26 @@ function toast(msg, type = 'info', dur = 3500) {
 }
 
 /* ──────── SESSIONS ──────── */
-async function loadSessions() {
+async function loadSessions(showError = true) {
   try {
     const res = await fetch('/api/sessions');
+    if (res.redirected || res.status === 401 || res.status === 403) {
+      window.location.href = '/login';
+      return;
+    }
+    if (!res.ok) {
+      if (showError) toast('Failed to load bots', 'error');
+      return;
+    }
     const data = await res.json();
+    if (!Array.isArray(data)) {
+      if (showError) toast('Failed to load bots', 'error');
+      return;
+    }
     renderSessions(data);
-  } catch (e) { toast('Failed to load bots', 'error'); }
+  } catch (e) {
+    if (showError) toast('Failed to load bots', 'error');
+  }
 }
 
 function renderSessions(sessions) {
@@ -397,7 +411,7 @@ async function getPairCode() {
       document.getElementById('pairCodeDisplay').textContent = d.code;
       document.getElementById('pairResult').style.display = 'block';
       toast('Pair code generated!', 'success');
-      setTimeout(loadSessions, 15000);
+      setTimeout(() => loadSessions(false), 15000);
     } else {
       toast(d.message || 'Failed to get pair code', 'error');
     }
@@ -423,7 +437,7 @@ async function startQR() {
       document.getElementById('qrWrap').innerHTML = `<img src="${d.qr}" alt="QR Code" style="max-width:200px;border-radius:10px"><p style="font-size:.75rem;color:var(--muted);margin-top:8px">Scan with WhatsApp</p>`;
       qrSessionId = d.sessionId;
       toast('QR ready — scan now!', 'success');
-      setTimeout(loadSessions, 20000);
+      setTimeout(() => loadSessions(false), 20000);
     } else {
       document.getElementById('qrWrap').innerHTML = '<p style="color:var(--red);font-size:.85rem">' + (d.message || 'Failed to generate QR') + '</p>';
       toast(d.message || 'Failed to generate QR', 'error');
@@ -451,7 +465,7 @@ async function logout() {
 }
 
 /* ──────── INIT ──────── */
-async function refresh() { if (currentPage === 'sessions') loadSessions(); }
+async function refresh() { if (currentPage === 'sessions') loadSessions(false); }
 
 async function init() {
   try {
@@ -467,7 +481,7 @@ async function init() {
   } catch (_) {}
 
   // Poll for session updates every 15s
-  setInterval(() => { if (currentPage === 'sessions') loadSessions(); }, 15000);
+  setInterval(() => { if (currentPage === 'sessions') loadSessions(false); }, 15000);
 }
 
 init();
