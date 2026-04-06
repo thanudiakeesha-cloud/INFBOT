@@ -34,6 +34,7 @@ const MANUALS = {
   ytmp4:   { usage: '.ytmp4 <YouTube URL>',        desc: 'Download a YouTube video as MP4.',                                 ex: '.ytmp4 https://youtu.be/abc123' },
   play:    { usage: '.play <song name>',           desc: 'Search by name and instantly play/download the best match.',        ex: '.play Bohemian Rhapsody' },
   lyrics:  { usage: '.lyrics <song name>',         desc: 'Fetch the full lyrics for any song.',                              ex: '.lyrics Shape of You' },
+  film:    { usage: '.film <movie name>',          desc: 'Search sinhalasub.lk for movies with Sinhala subtitles. Tap a result button to get download links.', ex: '.film Avengers' },
 
   // ── ADMIN ──
   antilink:{ usage: '.antilink on/off [action]',   desc: 'Auto-delete or kick users who post group invite links. Actions: delete / kick / warn.', ex: '.antilink on kick' },
@@ -101,7 +102,7 @@ const MANUALS = {
 const CATEGORIES = {
   media: {
     icon: '📥', title: 'MEDIA & DOWNLOADS',
-    cmds: ['song','yt','tiktok','ytmp3','ytmp4','play','lyrics'],
+    cmds: ['song','yt','tiktok','ytmp3','ytmp4','play','lyrics','film'],
   },
   admin: {
     icon: '🛡️', title: 'ADMIN COMMANDS',

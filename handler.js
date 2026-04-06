@@ -857,6 +857,12 @@ const handleMessage = async (sock, msg) => {
       // AntiCall
       'anticall_on': `${p}anticall on`,
       'anticall_off': `${p}anticall off`,
+      // Film search selections
+      'film_pick_0': `${p}filmsel 0`,
+      'film_pick_1': `${p}filmsel 1`,
+      'film_pick_2': `${p}filmsel 2`,
+      'film_pick_3': `${p}filmsel 3`,
+      'film_pick_4': `${p}filmsel 4`,
       // TikTok search selections
       'tiktok_pick_0': `${p}tiktok pick 0`,
       'tiktok_pick_1': `${p}tiktok pick 1`,
