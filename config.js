@@ -8,7 +8,7 @@ module.exports = {
   ownerName: ['Infinity Team'],
 
   // Bot Configuration
-  botName: 'Infinity MD',
+  botName: 'Infinity MD Mini',
   prefix: '.',
   sessionName: 'session',
   sessionID: process.env.SESSION_ID || '',
@@ -18,7 +18,7 @@ module.exports = {
   updateZipUrl: '',
 
   // Sticker Configuration
-  packname: 'Infinity MD',
+  packname: 'Infinity MD Mini',
 
   // Bot Behavior
   selfMode: false,
@@ -74,10 +74,10 @@ module.exports = {
 
   // Message Configuration
   messages: {
-    wait: '⏳ Infinity MD is processing...',
-    success: '✅ Done by Infinity MD!',
+    wait: '⏳ Infinity MD Mini is processing...',
+    success: '✅ Done by Infinity MD Mini!',
     error: '❌ Something went wrong!',
-    ownerOnly: '👑 Only Infinity Team can use this!',
+    ownerOnly: '👑 Only the owner can use this!',
     adminOnly: '🛡️ Admin only command!',
     groupOnly: '👥 Use this in groups only!',
     privateOnly: '💬 Use this in private chat only!',

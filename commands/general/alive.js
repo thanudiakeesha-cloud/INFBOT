@@ -39,7 +39,7 @@ module.exports = {
       text += `┃ ⏱ *Uptime* : ${hours}h ${minutes}m ${seconds}s\n`;
       text += `┃ 👑 *Owner* : ${ownerName}\n`;
       text += `┃ ⌨️ *Prefix* : ${prefix}\n`;
-      text += `┃ 🏷 *Version* : v2.0.0\n`;
+      text += `┃ 🏷 *Version* : Mini v1.0\n`;
       text += `╰━━━━━━━━━━━━━━━━━━━━╯\n\n`;
       text += `> Type *${prefix}menu* to see all commands`;
 

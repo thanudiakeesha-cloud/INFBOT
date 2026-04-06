@@ -3,1177 +3,474 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Infinity MD v4 | Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Infinity MD Mini | Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#080b14;
-  --bg2:#0d1120;
-  --surface:#111827;
-  --surface2:#1a2235;
-  --surface3:#1f2a3d;
-  --border:#1e2d47;
-  --border2:rgba(99,179,237,0.18);
-  --blue:#3b82f6;
-  --blue2:#60a5fa;
-  --indigo:#6366f1;
-  --violet:#7c3aed;
-  --cyan:#06b6d4;
-  --teal:#14b8a6;
-  --green:#22c55e;
-  --amber:#f59e0b;
-  --orange:#f97316;
-  --red:#ef4444;
-  --pink:#ec4899;
-  --text:#f0f4ff;
-  --muted:#94a3b8;
-  --dim:#4b5768;
-  --radius:14px;
-  --radius-sm:9px;
-  --sidebar-w:260px;
-  --header-h:64px;
+  --bg:#080b14;--bg2:#0d1120;--surface:#111827;--surface2:#1a2235;
+  --border:#1e2d47;--border2:rgba(99,179,237,0.18);
+  --violet:#7c3aed;--blue:#3b82f6;--blue2:#60a5fa;--cyan:#06b6d4;
+  --green:#22c55e;--red:#ef4444;--amber:#f59e0b;
+  --text:#f0f4ff;--muted:#94a3b8;--dim:#4b5768;
+  --radius:14px;--sidebar-w:220px;
 }
-html{scroll-behavior:smooth}
-html,body{height:100%;overflow-x:hidden}
-body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:10px}
-::-webkit-scrollbar-thumb:hover{background:var(--border2)}
+html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text)}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:4px}
 
 .layout{display:flex;min-height:100vh}
 
-/* Sidebar */
-.sidebar{
-  width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;z-index:200;
-  background:var(--bg2);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;
-  transition:transform 0.3s cubic-bezier(.4,0,.2,1);overflow:hidden;
-}
-.sidebar-logo{display:flex;align-items:center;gap:12px;padding:20px 20px 16px;border-bottom:1px solid var(--border)}
-.logo-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--violet),var(--blue));display:flex;align-items:center;justify-content:center;font-size:1.15rem;flex-shrink:0;box-shadow:0 4px 14px rgba(124,58,237,0.35)}
-.logo-text{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1rem;letter-spacing:0.3px}
-.logo-ver{font-size:0.62rem;color:var(--violet);background:rgba(124,58,237,0.15);padding:2px 6px;border-radius:4px;font-weight:700;letter-spacing:0.5px;margin-left:2px}
-.sidebar-user{display:flex;align-items:center;gap:10px;padding:14px 18px;margin:12px 12px 4px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
-.user-av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--indigo),var(--cyan));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0}
-.user-name{font-weight:600;font-size:0.84rem;line-height:1.2}
-.user-role{font-size:0.7rem;color:var(--muted);margin-top:1px}
-.sidebar-nav{flex:1;overflow-y:auto;padding:8px 10px 16px}
-.nav-section{margin-top:16px}
-.nav-label{font-size:0.62rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:1.5px;padding:0 8px;margin-bottom:6px}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;cursor:pointer;transition:all 0.15s;font-size:0.84rem;font-weight:500;color:var(--muted);position:relative}
+.sidebar{width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;z-index:200;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:transform .3s}
+.sb-logo{display:flex;align-items:center;gap:10px;padding:20px 16px 18px;border-bottom:1px solid var(--border)}
+.sb-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--violet),var(--blue));display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0}
+.sb-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.92rem}
+.sb-ver{font-size:0.6rem;color:var(--violet);background:rgba(124,58,237,.15);padding:2px 5px;border-radius:4px;font-weight:700;margin-left:2px}
+.sb-user{display:flex;align-items:center;gap:9px;padding:12px 14px;margin:10px 10px 4px;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+.sb-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#6366f1,var(--cyan));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.8rem;flex-shrink:0}
+.sb-nav{flex:1;padding:6px 8px 12px;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;cursor:pointer;font-size:0.84rem;font-weight:500;color:var(--muted);transition:all .15s;margin-bottom:2px}
 .nav-item:hover{background:var(--surface);color:var(--text)}
-.nav-item.active{background:linear-gradient(135deg,rgba(99,102,241,0.18),rgba(59,130,246,0.12));color:var(--blue2);border:1px solid rgba(99,102,241,0.2)}
-.nav-item .ni{font-size:1rem;width:22px;text-align:center;flex-shrink:0}
-.nav-item .nb{margin-left:auto;background:var(--surface3);color:var(--muted);font-size:0.62rem;font-weight:700;padding:2px 6px;border-radius:5px}
-.nav-item.active .nb{background:rgba(99,102,241,0.25);color:var(--blue2)}
-.sidebar-footer{padding:12px;border-top:1px solid var(--border)}
+.nav-item.active{background:linear-gradient(135deg,rgba(99,102,241,.18),rgba(59,130,246,.1));color:var(--blue2);border:1px solid rgba(99,102,241,.2)}
+.sb-footer{padding:10px;border-top:1px solid var(--border)}
 
-.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:190;backdrop-filter:blur(2px)}
-.sb-overlay.active{display:block}
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:190}
+.sb-overlay.show{display:block}
 
-.main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-width:0}
-
-/* Topbar */
-.topbar{height:var(--header-h);position:sticky;top:0;z-index:100;background:rgba(8,11,20,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:12px}
-.topbar-menu{display:none;background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:4px}
-.topbar-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1rem;color:var(--text);margin-right:auto}
-.topbar-pill{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:0.75rem;color:var(--muted)}
-.pulse{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);flex-shrink:0;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
-.topbar-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);padding:7px 14px;font-size:0.78rem;font-family:inherit;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:5px;font-weight:500}
+.main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column}
+.topbar{height:60px;position:sticky;top:0;z-index:100;background:rgba(8,11,20,.88);backdrop-filter:blur(18px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:10px}
+.topbar-menu{display:none;background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer}
+.topbar-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.95rem;margin-right:auto}
+.pulse-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.pill{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:0.73rem;color:var(--muted)}
+.topbar-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);padding:6px 12px;font-size:0.76rem;font-family:inherit;cursor:pointer;transition:all .15s}
 .topbar-btn:hover{border-color:var(--border2);color:var(--text);background:var(--surface)}
 
-.content{padding:24px;max-width:1280px;margin:0 auto;width:100%}
-
-.page{display:none;animation:fadeIn 0.2s ease}
+.content{padding:22px;max-width:1100px;margin:0 auto;width:100%}
+.page{display:none;animation:fadeIn .18s ease}
 .page.active{display:block}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
-.page-header{margin-bottom:24px}
-.page-title{font-family:'Space Grotesk',sans-serif;font-size:1.4rem;font-weight:700;margin-bottom:4px}
-.page-sub{font-size:0.83rem;color:var(--muted)}
+.page-hdr{margin-bottom:20px}
+.page-title{font-family:'Space Grotesk',sans-serif;font-size:1.3rem;font-weight:700;margin-bottom:3px}
+.page-sub{font-size:0.82rem;color:var(--muted)}
 
-/* Stats */
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:24px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;position:relative;overflow:hidden;cursor:default;transition:border-color 0.2s,transform 0.2s}
-.stat-card:hover{transform:translateY(-2px);border-color:var(--border2)}
-.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent,var(--blue));opacity:0.7}
-.stat-card.blue{--accent:var(--blue)}.stat-card.green{--accent:var(--green)}.stat-card.violet{--accent:var(--violet)}.stat-card.amber{--accent:var(--amber)}.stat-card.cyan{--accent:var(--cyan)}.stat-card.pink{--accent:var(--pink)}
-.stat-icon{font-size:1.4rem;margin-bottom:12px}
-.stat-val{font-size:1.6rem;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
-.stat-lbl{font-size:0.67rem;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;font-weight:600;margin-top:3px}
-
-/* Cards */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;transition:border-color 0.2s}
-.card:hover{border-color:rgba(99,102,241,0.2)}
-.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px}
-.card-title{font-weight:700;font-size:0.9rem;display:flex;align-items:center;gap:8px;font-family:'Space Grotesk',sans-serif}
-.card-badge{font-size:0.65rem;background:var(--surface2);color:var(--muted);padding:3px 8px;border-radius:5px;font-weight:600;border:1px solid var(--border)}
-
-.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
-.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
-
-/* Buttons */
-.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;transition:all 0.18s;font-weight:600;font-size:0.82rem;font-family:inherit;text-decoration:none;white-space:nowrap;vertical-align:middle}
-.btn:hover{border-color:var(--border2);background:var(--surface3);transform:translateY(-1px)}
-.btn:active{transform:scale(0.97)}
-.btn-sm{padding:6px 12px;font-size:0.76rem;border-radius:7px}
-.btn-xs{padding:4px 8px;font-size:0.7rem;border-radius:6px}
-.btn-primary{background:linear-gradient(135deg,var(--violet),var(--blue));border:none;color:#fff;box-shadow:0 4px 14px rgba(99,102,241,0.3)}
-.btn-primary:hover{box-shadow:0 6px 22px rgba(99,102,241,0.45);transform:translateY(-1px)}
-.btn-danger{background:linear-gradient(135deg,#dc2626,#b91c1c);border:none;color:#fff}
-.btn-danger:hover{box-shadow:0 6px 18px rgba(239,68,68,0.3);transform:translateY(-1px)}
-.btn-success{background:linear-gradient(135deg,#16a34a,#15803d);border:none;color:#fff}
-.btn-success:hover{box-shadow:0 6px 18px rgba(34,197,94,0.3);transform:translateY(-1px)}
-.btn-ghost{background:transparent;border:none;color:var(--muted);padding:6px 10px}
-.btn-ghost:hover{color:var(--text);background:var(--surface2)}
-.btn-amber{background:linear-gradient(135deg,#d97706,#b45309);border:none;color:#fff}
-.btn-amber:hover{box-shadow:0 6px 18px rgba(245,158,11,0.28);transform:translateY(-1px)}
-.btn-outline{background:transparent;border:1px solid var(--border2);color:var(--blue2)}
-.btn-outline:hover{background:rgba(59,130,246,0.08)}
-.btn-full{width:100%;justify-content:center;padding:13px}
-
-/* Inputs */
-.input-group{margin-bottom:14px}
-.input-label{display:block;font-size:0.72rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px}
-input[type="text"],input[type="password"],input[type="number"],textarea,select{width:100%;padding:10px 14px;border-radius:9px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:inherit;font-size:0.85rem;transition:border-color 0.2s,box-shadow 0.2s;outline:none}
-input:focus,textarea:focus,select:focus{border-color:rgba(99,102,241,0.5);box-shadow:0 0 0 3px rgba(99,102,241,0.12)}
-input::placeholder,textarea::placeholder{color:var(--dim)}
-textarea{resize:vertical;min-height:80px}
-select option{background:var(--bg2)}
-
-/* Toggles */
-.toggle-grid{display:flex;flex-wrap:wrap;gap:8px}
-.tog{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;transition:all 0.18s;font-size:0.82rem;font-weight:500;user-select:none}
-.tog:hover{border-color:var(--border2);background:var(--surface3)}
-.tog.on{border-color:rgba(34,197,94,0.3);background:rgba(34,197,94,0.08);color:var(--green)}
-.tog input[type="checkbox"]{width:14px;height:14px;accent-color:var(--green);cursor:pointer;flex-shrink:0}
+/* Stats bar */
+.stats-row{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.stat-chip{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;flex:1;min-width:100px}
+.stat-chip .sv{font-size:1.5rem;font-weight:800}
+.stat-chip .sl{font-size:0.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
 
 /* Session cards */
-.session-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px;position:relative;overflow:hidden;transition:all 0.2s}
-.session-card:hover{border-color:rgba(99,102,241,0.3);box-shadow:0 8px 30px rgba(0,0,0,0.3)}
-.session-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:linear-gradient(180deg,var(--violet),var(--cyan));opacity:0;transition:opacity 0.2s}
-.session-card:hover::before{opacity:1}
-.session-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:10px}
-.session-name{font-weight:700;font-size:0.95rem;margin-bottom:3px}
-.session-actions{display:flex;gap:6px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--border)}
-.edit-panel{display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
-
-/* Badges */
-.badge{display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;font-weight:700;padding:3px 9px;border-radius:5px;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap}
+.sessions-grid{display:grid;gap:12px}
+.sess-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;align-items:center;gap:14px;transition:border-color .2s}
+.sess-card:hover{border-color:rgba(99,102,241,.28)}
+.sess-avatar{width:44px;height:44px;border-radius:11px;background:linear-gradient(135deg,var(--violet),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0}
+.sess-info{flex:1;min-width:0}
+.sess-name{font-weight:700;font-size:0.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.sess-meta{font-size:0.72rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:0.67rem;font-weight:700;padding:3px 8px;border-radius:5px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;flex-shrink:0}
 .badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
-.badge-online{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.22)}
-.badge-offline{background:rgba(75,87,104,0.25);color:var(--muted);border:1px solid var(--border)}
-.badge-connecting{background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.22)}
+.badge-on{background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.22)}
+.badge-off{background:rgba(75,87,104,.2);color:var(--muted);border:1px solid var(--border)}
+.sess-actions{display:flex;gap:7px;flex-shrink:0}
 
-/* Info boxes */
-.info-box{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:0.83rem;color:var(--muted);line-height:1.7}
-.info-box.tip{border-left:3px solid var(--blue)}
-.info-box.warn{border-left:3px solid var(--amber)}
-.info-box.ok{border-left:3px solid var(--green)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-weight:600;font-size:0.78rem;font-family:inherit;transition:all .18s;white-space:nowrap}
+.btn:hover{border-color:var(--border2);background:var(--bg2);transform:translateY(-1px)}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:linear-gradient(135deg,var(--violet),var(--blue));border:none;color:#fff;box-shadow:0 4px 12px rgba(99,102,241,.3)}
+.btn-primary:hover{box-shadow:0 6px 20px rgba(99,102,241,.45)}
+.btn-danger{background:linear-gradient(135deg,#dc2626,#b91c1c);border:none;color:#fff}
+.btn-danger:hover{box-shadow:0 4px 14px rgba(239,68,68,.3)}
+.btn-sm{padding:5px 10px;font-size:0.72rem;border-radius:6px}
+.btn-full{width:100%;justify-content:center;padding:12px}
 
-/* Activity feed */
-.activity-feed{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto}
-.activity-item{display:flex;align-items:center;gap:10px;padding:8px;border-radius:9px;transition:background 0.15s}
-.activity-item:hover{background:var(--surface2)}
-.activity-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;flex-shrink:0}
-.activity-body{flex:1;min-width:0}
-.activity-body strong{font-size:0.8rem;font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.activity-body span{font-size:0.72rem;color:var(--muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.activity-time{font-size:0.68rem;color:var(--dim);flex-shrink:0}
+/* Connect tabs */
+.tabs{display:flex;gap:6px;margin-bottom:18px}
+.tab{padding:8px 18px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-weight:600;font-size:0.8rem;transition:all .18s}
+.tab.active{background:linear-gradient(135deg,var(--violet),var(--blue));border-color:transparent;color:#fff;box-shadow:0 4px 12px rgba(99,102,241,.3)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
 
-/* Quick cards */
-.quick-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;transition:all 0.15s;margin-bottom:6px}
-.quick-card:hover{border-color:var(--border2);background:var(--surface2)}
-.quick-card:last-child{margin-bottom:0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.card-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.9rem;margin-bottom:14px;display:flex;align-items:center;gap:8px}
 
-/* Deploy tabs */
-.deploy-tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
-.deploy-tab{padding:8px 16px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-weight:600;font-size:0.82rem;transition:all 0.18s}
-.deploy-tab.active{background:linear-gradient(135deg,var(--violet),var(--blue));border-color:transparent;color:#fff;box-shadow:0 4px 14px rgba(99,102,241,0.3)}
-.deploy-tab:hover:not(.active){border-color:var(--border2);color:var(--text)}
-.deploy-panel{display:none}
-.deploy-panel.active{display:block}
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:0.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+input[type=text],input[type=password],input[type=number]{width:100%;padding:10px 13px;border-radius:9px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:inherit;font-size:0.85rem;outline:none;transition:border-color .2s,box-shadow .2s}
+input:focus{border-color:rgba(99,102,241,.5);box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+input::placeholder{color:var(--dim)}
 
-/* QR code */
-.qr-wrap{text-align:center;padding:28px;border-radius:12px;background:var(--bg2);border:2px dashed var(--border);position:relative}
-.qr-wrap canvas,.qr-wrap img{border-radius:10px;max-width:220px}
+.qr-wrap{text-align:center;padding:24px;border-radius:12px;background:var(--bg2);border:2px dashed var(--border);min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.qr-wrap img,.qr-wrap canvas{border-radius:8px;max-width:200px}
+.pair-code{font-family:'Space Grotesk',monospace;font-size:2rem;font-weight:800;color:var(--blue2);letter-spacing:8px;text-align:center;padding:18px;background:var(--bg2);border:1px solid rgba(59,130,246,.25);border-radius:12px;text-shadow:0 0 18px rgba(59,130,246,.35)}
 
-/* Pair code display */
-.pair-code-display{font-family:'Space Grotesk',monospace;font-size:2.2rem;font-weight:800;color:var(--blue2);letter-spacing:8px;text-align:center;padding:20px;background:var(--bg2);border:1px solid rgba(59,130,246,0.25);border-radius:12px;text-shadow:0 0 20px rgba(59,130,246,0.4)}
+.info-box{background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--blue);border-radius:9px;padding:12px 14px;font-size:0.8rem;color:var(--muted);line-height:1.65;margin-bottom:14px}
+.info-box.warn{border-left-color:var(--amber)}
+.info-box.ok{border-left-color:var(--green)}
+
+.empty{text-align:center;padding:40px 20px;color:var(--muted)}
+.empty .ei{font-size:2.2rem;margin-bottom:10px;display:block}
 
 /* Toasts */
-.toasts{position:fixed;top:80px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
-.toast{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;font-size:0.82rem;font-weight:500;min-width:240px;max-width:340px;animation:slideIn 0.25s ease;pointer-events:auto;backdrop-filter:blur(20px);box-shadow:0 8px 30px rgba(0,0,0,0.4)}
-.toast.success{background:rgba(22,163,74,0.92);color:#fff;border:1px solid rgba(34,197,94,0.3)}
-.toast.error{background:rgba(185,28,28,0.92);color:#fff;border:1px solid rgba(239,68,68,0.3)}
-.toast.info{background:rgba(30,41,70,0.95);color:var(--text);border:1px solid var(--border2)}
-@keyframes slideIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}
+#toasts{position:fixed;top:72px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:7px;pointer-events:none}
+.toast{display:flex;align-items:center;gap:9px;padding:11px 15px;border-radius:9px;font-size:0.8rem;font-weight:500;min-width:220px;animation:slideIn .22s ease;pointer-events:auto;backdrop-filter:blur(16px)}
+.toast.success{background:rgba(22,163,74,.92);color:#fff;border:1px solid rgba(34,197,94,.3)}
+.toast.error{background:rgba(185,28,28,.92);color:#fff;border:1px solid rgba(239,68,68,.3)}
+.toast.info{background:rgba(30,41,70,.95);color:var(--text);border:1px solid var(--border2)}
+@keyframes slideIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
 
-/* Misc */
-.list-scroll{max-height:320px;overflow-y:auto}
-.admin-tag{font-size:0.6rem;background:rgba(124,58,237,0.15);color:var(--violet);padding:2px 7px;border-radius:4px;font-weight:700;border:1px solid rgba(124,58,237,0.25);text-transform:uppercase;letter-spacing:0.5px}
-.cmd-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
-.cmd-item{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px 14px;transition:all 0.15s}
-.cmd-item:hover{border-color:rgba(99,102,241,0.25);background:var(--surface2)}
-.cmd-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:0.85rem;color:var(--blue2);margin-bottom:3px}
-.cmd-desc{font-size:0.73rem;color:var(--muted)}
-.cmd-cat{font-size:0.62rem;background:var(--surface3);color:var(--dim);padding:2px 6px;border-radius:4px;margin-top:6px;display:inline-block;font-weight:600}
-.cat-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
-.cat-tab{padding:6px 12px;border-radius:7px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-size:0.75rem;font-weight:600;transition:all 0.15s}
-.cat-tab.active{background:linear-gradient(135deg,var(--violet),var(--blue));border-color:transparent;color:#fff}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.settings-section{margin-bottom:20px}
-.settings-title{font-weight:700;font-size:0.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
-.channel-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:8px 14px;font-size:0.8rem;font-weight:600;color:var(--green);text-decoration:none;transition:all 0.2s}
-.channel-pill:hover{background:rgba(34,197,94,0.18);transform:translateY(-1px)}
-.list-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg2);margin-bottom:6px}
-.list-row:hover{border-color:var(--border2)}
-.sep{height:1px;background:var(--border);margin:16px 0}
-.empty-state{text-align:center;padding:40px 20px;color:var(--muted)}
-.empty-state .e-icon{font-size:2.5rem;margin-bottom:12px;display:block}
-.empty-state p{font-size:0.85rem;line-height:1.7}
-@keyframes spin{to{transform:rotate(360deg)}}
-.spinner{display:inline-block;width:22px;height:22px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.75s linear infinite}
-
-/* Hero card */
-.hero-card{background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(59,130,246,0.08),rgba(6,182,212,0.06));border:1px solid rgba(99,102,241,0.22);border-radius:var(--radius);padding:24px;margin-bottom:24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;position:relative;overflow:hidden}
-.hero-card::before{content:'';position:absolute;top:-40px;right:-40px;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(99,102,241,0.15),transparent 70%);pointer-events:none}
-.hero-icon{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--violet),var(--blue));display:flex;align-items:center;justify-content:center;font-size:1.6rem;flex-shrink:0;box-shadow:0 6px 20px rgba(99,102,241,0.4)}
-.hero-text h2{font-family:'Space Grotesk',sans-serif;font-size:1.3rem;font-weight:800}
-.hero-text p{font-size:0.82rem;color:var(--muted);margin-top:4px}
-.hero-actions{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
-
-@media(max-width:900px){
+@media(max-width:860px){
   .sidebar{transform:translateX(-100%)}
   .sidebar.open{transform:translateX(0)}
   .main{margin-left:0}
   .topbar-menu{display:block}
-  .hero-actions{margin-left:0}
 }
-@media(max-width:600px){
-  .content{padding:16px}
-  .stats-grid{grid-template-columns:repeat(2,1fr)}
-  .form-row{grid-template-columns:1fr}
+@media(max-width:540px){
+  .content{padding:14px}
+  .stats-row{gap:8px}
+  .sess-card{flex-wrap:wrap}
+  .sess-actions{width:100%;justify-content:flex-end}
 }
 </style>
 </head>
 <body>
 
 <div class="sb-overlay" id="sbOverlay" onclick="closeSidebar()"></div>
-<div id="toasts" class="toasts"></div>
+<div id="toasts"></div>
 
 <div class="layout">
   <nav class="sidebar" id="sidebar">
-    <div class="sidebar-logo">
-      <div class="logo-icon">∞</div>
+    <div class="sb-logo">
+      <div class="sb-icon">∞</div>
       <div>
-        <div class="logo-text">Infinity MD <span class="logo-ver">v4</span></div>
-        <div style="font-size:0.65rem;color:var(--muted)">WhatsApp Bot Platform</div>
+        <div class="sb-title">Infinity MD <span class="sb-ver">MINI</span></div>
+        <div style="font-size:.6rem;color:var(--muted)">WhatsApp Bot Platform</div>
       </div>
     </div>
 
-    <div class="sidebar-user">
-      <div class="user-av" id="userAvatar">?</div>
+    <div class="sb-user">
+      <div class="sb-av" id="userAv">?</div>
       <div style="min-width:0">
-        <div class="user-name" id="userName">Loading…</div>
-        <div class="user-role" id="userRole">User</div>
+        <div style="font-weight:600;font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="userName">…</div>
+        <div style="font-size:.68rem;color:var(--muted)" id="userRole">User</div>
       </div>
     </div>
 
-    <div class="sidebar-nav">
-      <div class="nav-section">
-        <div class="nav-label">Main</div>
-        <div class="nav-item active" data-page="home" onclick="navTo('home')"><span class="ni">🏠</span> Overview</div>
-        <div class="nav-item" data-page="sessions" onclick="navTo('sessions')"><span class="ni">🤖</span> Bot Sessions <span class="nb" id="nb-online">0</span></div>
-        <div class="nav-item" data-page="deploy" onclick="navTo('deploy')"><span class="ni">🚀</span> Deploy Bot</div>
-      </div>
-      <div class="nav-section">
-        <div class="nav-label">Configure</div>
-        <div class="nav-item" data-page="settings" onclick="navTo('settings')"><span class="ni">⚙️</span> Settings</div>
-        <div class="nav-item" data-page="commands" onclick="navTo('commands')"><span class="ni">⌨️</span> Commands <span class="nb" id="nb-cmds">—</span></div>
-      </div>
-      <div class="nav-section" id="nav-admin" style="display:none">
-        <div class="nav-label">Admin</div>
-        <div class="nav-item" data-page="admin" onclick="navTo('admin')"><span class="ni">👑</span> Admin Panel</div>
-      </div>
+    <div class="sb-nav">
+      <div class="nav-item active" onclick="navTo('sessions')"><span>🤖</span> My Bots <span id="nb-online" style="margin-left:auto;background:var(--surface2);color:var(--muted);font-size:.6rem;font-weight:700;padding:2px 6px;border-radius:4px">0</span></div>
+      <div class="nav-item" onclick="navTo('connect')"><span>🔗</span> Connect Bot</div>
     </div>
 
-    <div class="sidebar-footer">
-      <div class="nav-item" onclick="logout()"><span class="ni">🚪</span> Sign Out</div>
+    <div class="sb-footer">
+      <div class="nav-item" onclick="logout()"><span>🚪</span> Sign Out</div>
     </div>
   </nav>
 
   <div class="main">
     <div class="topbar">
       <button class="topbar-menu" onclick="toggleSidebar()">☰</button>
-      <div class="topbar-title" id="topbarTitle">Overview</div>
-      <div class="topbar-pill"><span class="pulse"></span><span id="tb-status">Connected</span></div>
-      <button class="topbar-btn" onclick="loadDashboard()">↻ Refresh</button>
+      <div class="topbar-title" id="topbarTitle">My Bots</div>
+      <div class="pill"><span class="pulse-dot"></span><span>Live</span></div>
+      <button class="topbar-btn" onclick="refresh()">↻ Refresh</button>
     </div>
 
     <div class="content">
 
-      <!-- HOME -->
-      <div class="page active" id="page-home">
-        <div class="hero-card">
-          <div class="hero-icon">∞</div>
-          <div class="hero-text">
-            <h2>Welcome back, <span id="heroName">there</span>!</h2>
-            <p>Your bot platform is live and running on Infinity MD v4.</p>
-          </div>
-          <div class="hero-actions">
-            <button class="btn btn-primary" onclick="navTo('deploy')">🚀 Deploy Bot</button>
-            <button class="btn" onclick="navTo('sessions')">🤖 Sessions</button>
-          </div>
+      <!-- SESSIONS PAGE -->
+      <div class="page active" id="page-sessions">
+        <div class="page-hdr">
+          <div class="page-title">🤖 My Bots</div>
+          <div class="page-sub">All connected WhatsApp bots</div>
         </div>
 
-        <div class="stats-grid">
-          <div class="stat-card cyan"><div class="stat-icon">⏱️</div><div class="stat-val" id="s-uptime">--</div><div class="stat-lbl">Uptime</div></div>
-          <div class="stat-card green"><div class="stat-icon">⚡</div><div class="stat-val" id="s-online">0</div><div class="stat-lbl">Active Bots</div></div>
-          <div class="stat-card violet"><div class="stat-icon">💾</div><div class="stat-val" id="s-ram">0</div><div class="stat-lbl">RAM (MB)</div></div>
-          <div class="stat-card amber"><div class="stat-icon">🤖</div><div class="stat-val" id="s-total">0</div><div class="stat-lbl">Total Bots</div></div>
-          <div class="stat-card blue"><div class="stat-icon">⌨️</div><div class="stat-val" id="s-cmds">—</div><div class="stat-lbl">Commands</div></div>
+        <div class="stats-row">
+          <div class="stat-chip"><div class="sv" id="s-total">0</div><div class="sl">Total Bots</div></div>
+          <div class="stat-chip"><div class="sv" id="s-online" style="color:var(--green)">0</div><div class="sl">Online</div></div>
+          <div class="stat-chip"><div class="sv" id="s-offline" style="color:var(--muted)">0</div><div class="sl">Offline</div></div>
+          <div class="stat-chip"><div class="sv" id="s-uptime">--</div><div class="sl">Uptime</div></div>
         </div>
 
-        <div class="grid-2" style="align-items:start">
-          <div class="card" style="margin-bottom:0">
-            <div class="card-header">
-              <div class="card-title">🤖 Bot Status</div>
-              <button class="btn btn-ghost btn-sm" onclick="loadQuickSessions()">↻</button>
-            </div>
-            <div id="quickSessions">
-              <div class="empty-state"><span class="e-icon">🤖</span><p>No bots deployed yet.<br>Click <strong>Deploy Bot</strong> to get started.</p></div>
-            </div>
-          </div>
-          <div class="card" style="margin-bottom:0">
-            <div class="card-header">
-              <div class="card-title">📡 Live Activity</div>
-              <span class="card-badge">Auto-updates</span>
-            </div>
-            <div id="activityFeed" class="activity-feed">
-              <div style="color:var(--muted);font-size:0.8rem;padding:6px 0">Loading activity…</div>
-            </div>
-          </div>
+        <div id="sessionsGrid" class="sessions-grid">
+          <div class="empty"><span class="ei">🤖</span>No bots connected.<br>Go to <strong>Connect Bot</strong> to add one.</div>
         </div>
 
-        <div id="channelLinkWrap" style="display:none;margin-top:16px">
-          <div class="card" style="margin-bottom:0">
-            <div class="card-header"><div class="card-title">📢 WhatsApp Channel</div></div>
-            <a id="channelLink" href="#" target="_blank" class="channel-pill">🔗 Open WhatsApp Channel</a>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:16px">
-          <div class="card-header">
-            <div class="card-title">📖 Quick Guide</div>
-            <div style="display:flex;gap:6px">
-              <button class="btn btn-sm btn-primary" id="manualEnBtn" onclick="switchManual('en')">English</button>
-              <button class="btn btn-sm" id="manualSiBtn" onclick="switchManual('si')">සිංහල</button>
-            </div>
-          </div>
-          <div id="manual-en">
-            <div class="grid-2" style="gap:12px">
-              <div class="info-box tip">
-                <strong style="color:var(--text);display:block;margin-bottom:8px">🚀 Getting Started</strong>
-                <ol style="padding-left:16px;line-height:2.1">
-                  <li>Go to <strong>Deploy Bot</strong> in the sidebar</li>
-                  <li>Choose Session ID, Pair Code, or QR Code</li>
-                  <li>Your bot appears in <strong>Bot Sessions</strong> once connected</li>
-                  <li>Customize behavior in <strong>Settings</strong></li>
-                  <li>Browse all commands in <strong>Commands</strong></li>
-                </ol>
-              </div>
-              <div class="info-box tip">
-                <strong style="color:var(--text);display:block;margin-bottom:8px">⌨️ Key Commands</strong>
-                <div style="display:grid;gap:5px">
-                  <div><code style="color:var(--blue2)">.menu</code> — Main menu</div>
-                  <div><code style="color:var(--blue2)">.settings</code> — Bot settings</div>
-                  <div><code style="color:var(--blue2)">.mode</code> — Private/Public mode</div>
-                  <div><code style="color:var(--blue2)">.alive</code> — Check bot status</div>
-                  <div><code style="color:var(--blue2)">.sticker</code> — Create stickers</div>
-                  <div><code style="color:var(--blue2)">.ai</code> — AI chat</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div id="manual-si" style="display:none">
-            <div class="info-box tip">
-              <strong style="color:var(--text);display:block;margin-bottom:8px">🚀 ආරම්භ කිරීම</strong>
-              <ol style="padding-left:16px;line-height:2.1">
-                <li><strong>Deploy Bot</strong> වෙත යන්න</li>
-                <li>Session ID, Pair Code, හෝ QR Code තෝරන්න</li>
-                <li>Bot <strong>Bot Sessions</strong> හි දිස්වේ</li>
-                <li><strong>Settings</strong> හි හැසිරීම සකස් කරන්න</li>
-                <li><strong>Commands</strong> හි සියලු විධාන බලන්න</li>
-              </ol>
-            </div>
-          </div>
+        <div style="margin-top:18px">
+          <button class="btn btn-primary" onclick="navTo('connect')">+ Connect New Bot</button>
         </div>
       </div>
 
-      <!-- SESSIONS -->
-      <div class="page" id="page-sessions">
-        <div class="page-header">
-          <div class="page-title">🤖 Bot Sessions</div>
-          <div class="page-sub">Manage all your connected WhatsApp bots</div>
+      <!-- CONNECT PAGE -->
+      <div class="page" id="page-connect">
+        <div class="page-hdr">
+          <div class="page-title">🔗 Connect Bot</div>
+          <div class="page-sub">Link your WhatsApp number to start a bot session</div>
         </div>
-        <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="navTo('deploy')">+ Deploy New Bot</button>
-          <button class="btn" onclick="renderSessions()">↻ Refresh</button>
+
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab('pair')">📱 Pair Code</div>
+          <div class="tab" onclick="switchTab('qr')">📷 QR Code</div>
         </div>
-        <div id="sessionsList" style="display:grid;gap:14px">
-          <div class="empty-state"><span class="spinner"></span></div>
+
+        <!-- PAIR TAB -->
+        <div class="tab-panel active" id="tab-pair">
+          <div class="card">
+            <div class="card-title">📱 Connect via Pair Code</div>
+            <div class="info-box">Enter your WhatsApp number with country code (no + or spaces). Example: <strong>94770612011</strong> for Sri Lanka, <strong>447911123456</strong> for UK.</div>
+            <div class="form-group">
+              <label class="form-label">Bot Name</label>
+              <input type="text" id="p-botname" placeholder="Infinity MD Mini" value="Infinity MD Mini">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Owner Name</label>
+              <input type="text" id="p-ownername" placeholder="Your Name">
+            </div>
+            <div class="form-group">
+              <label class="form-label">WhatsApp Number (with country code)</label>
+              <input type="text" id="p-number" placeholder="94770612011" inputmode="numeric">
+            </div>
+            <button class="btn btn-primary btn-full" onclick="getPairCode()" id="pairBtn">Get Pair Code</button>
+          </div>
+
+          <div id="pairResult" style="display:none">
+            <div class="card">
+              <div class="card-title">🔑 Your Pair Code</div>
+              <div class="pair-code" id="pairCodeDisplay">----</div>
+              <p style="text-align:center;font-size:.8rem;color:var(--muted);margin-top:12px">Open WhatsApp → Linked Devices → Link a Device → Link with phone number → enter this code</p>
+              <div class="info-box ok" style="margin-top:14px;margin-bottom:0">The bot will auto-connect once you enter the code. This may take up to 30 seconds.</div>
+            </div>
+          </div>
         </div>
+
+        <!-- QR TAB -->
+        <div class="tab-panel" id="tab-qr">
+          <div class="card">
+            <div class="card-title">📷 Connect via QR Code</div>
+            <div class="info-box">Scan the QR code with WhatsApp → Linked Devices → Link a Device. The QR refreshes every 30 seconds.</div>
+            <div class="form-group">
+              <label class="form-label">Bot Name</label>
+              <input type="text" id="q-botname" placeholder="Infinity MD Mini" value="Infinity MD Mini">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Owner Name</label>
+              <input type="text" id="q-ownername" placeholder="Your Name">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Owner Number (with country code)</label>
+              <input type="text" id="q-owner-number" placeholder="94770612011" inputmode="numeric">
+            </div>
+            <button class="btn btn-primary btn-full" onclick="startQR()" id="qrBtn">Generate QR Code</button>
+          </div>
+
+          <div id="qrResult" style="display:none">
+            <div class="card">
+              <div class="card-title">📷 Scan this QR</div>
+              <div class="qr-wrap" id="qrWrap">
+                <div class="spinner-ring"></div>
+                <p style="font-size:.8rem;color:var(--muted)">Generating QR code…</p>
+              </div>
+              <div class="info-box ok" style="margin-top:14px;margin-bottom:0">The bot will auto-connect after you scan. Check My Bots in ~10 seconds.</div>
+            </div>
+          </div>
+        </div>
+
       </div>
-
-      <!-- DEPLOY -->
-      <div class="page" id="page-deploy">
-        <div class="page-header">
-          <div class="page-title">🚀 Deploy Bot</div>
-          <div class="page-sub">Connect a new WhatsApp account to the platform</div>
-        </div>
-        <div class="card">
-          <div class="deploy-tabs">
-            <button class="deploy-tab active" onclick="switchDeploy('session',this)">📋 Session ID</button>
-            <button class="deploy-tab" onclick="switchDeploy('pair',this)">🔐 Pair Code</button>
-            <button class="deploy-tab" onclick="switchDeploy('qr',this)">📷 QR Code</button>
-          </div>
-
-          <div id="deploy-session" class="deploy-panel active">
-            <div class="info-box tip" style="margin-bottom:16px">Paste your bot's session string to instantly connect without scanning a QR code.</div>
-            <div class="input-group"><label class="input-label">Session ID</label><input type="text" id="inp-sessionId" placeholder="KnightBot!..."></div>
-            <div class="form-row">
-              <div class="input-group"><label class="input-label">Bot Name</label><input type="text" id="inp-botName" placeholder="My Bot"></div>
-              <div class="input-group"><label class="input-label">Owner Name</label><input type="text" id="inp-ownerName" placeholder="Your Name"></div>
-            </div>
-            <div class="input-group"><label class="input-label">Owner Number</label><input type="text" id="inp-ownerNumber" placeholder="94xxxxxxxxx (no + or spaces)"></div>
-            <button class="btn btn-primary btn-full" onclick="addSession()">🚀 Deploy Bot Instance</button>
-          </div>
-
-          <div id="deploy-pair" class="deploy-panel">
-            <div class="info-box tip" style="margin-bottom:16px">Enter your number → get a code → enter it in <strong>WhatsApp → Linked Devices → Link with phone number</strong>.</div>
-            <div class="input-group"><label class="input-label">WhatsApp Number</label><input type="text" id="inp-pairNumber" placeholder="94770612011 (country code, no +)"></div>
-            <div class="form-row">
-              <div class="input-group"><label class="input-label">Bot Name</label><input type="text" id="inp-pairBotName" placeholder="My Bot"></div>
-              <div class="input-group"><label class="input-label">Owner Name</label><input type="text" id="inp-pairOwnerName" placeholder="Your Name"></div>
-            </div>
-            <div class="input-group"><label class="input-label">Owner Number (optional)</label><input type="text" id="inp-pairOwnerNumber" placeholder="94xxxxxxxxx"></div>
-            <button class="btn btn-primary btn-full" id="pairBtn" onclick="generatePairCode()">🔐 Generate Pair Code</button>
-            <div id="pair-loading" style="display:none;text-align:center;padding:24px"><div class="spinner" style="width:32px;height:32px"></div><p style="color:var(--muted);font-size:0.83rem;margin-top:12px">Generating pair code…</p></div>
-            <div id="pair-result" style="display:none;margin-top:14px">
-              <div class="pair-code-display" id="pair-code"></div>
-              <div style="text-align:center;margin-top:12px;display:flex;gap:8px;justify-content:center">
-                <button class="btn btn-outline" onclick="copyPairCode()" id="copyPairBtn">📋 Copy Code</button>
-              </div>
-              <p style="font-size:0.77rem;color:var(--muted);text-align:center;margin-top:10px">Enter in WhatsApp within 60 seconds.</p>
-            </div>
-            <div id="pair-error" style="display:none;margin-top:14px"><div class="info-box warn" style="color:var(--red)" id="pair-error-msg"></div></div>
-          </div>
-
-          <div id="deploy-qr" class="deploy-panel">
-            <div class="info-box tip" style="margin-bottom:16px">Scan the code in <strong>WhatsApp → Settings → Linked Devices → Link a Device</strong>. Bot auto-deploys once connected.</div>
-            <div class="form-row">
-              <div class="input-group"><label class="input-label">Bot Name</label><input type="text" id="inp-qrBotName" placeholder="My Bot"></div>
-              <div class="input-group"><label class="input-label">Owner Name</label><input type="text" id="inp-qrOwnerName" placeholder="Your Name"></div>
-            </div>
-            <div class="input-group"><label class="input-label">Owner Number</label><input type="text" id="inp-qrOwnerNumber" placeholder="94xxxxxxxxx"></div>
-            <button class="btn btn-primary btn-full" id="qrBtn" onclick="generateQR()">📷 Generate QR Code</button>
-            <div id="qr-loading" style="display:none;text-align:center;padding:24px"><div class="spinner" style="width:32px;height:32px"></div><p style="color:var(--muted);font-size:0.83rem;margin-top:12px">Starting session…</p></div>
-            <div id="qr-area" style="display:none;margin-top:16px">
-              <div class="qr-wrap">
-                <p style="font-size:0.72rem;color:var(--muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:1px">Scan with WhatsApp</p>
-                <canvas id="qr-canvas"></canvas>
-                <p style="font-size:0.75rem;color:var(--muted);margin-top:12px">QR refreshes every 30 seconds</p>
-              </div>
-            </div>
-            <div id="qr-success" style="display:none;margin-top:14px"><div class="info-box ok">✅ Bot connected successfully! Check <strong>Bot Sessions</strong>.</div></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- SETTINGS -->
-      <div class="page" id="page-settings">
-        <div class="page-header">
-          <div class="page-title">⚙️ Settings</div>
-          <div class="page-sub">Configure bot behavior and features</div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">👤 My Bot Settings</div>
-            <button class="btn btn-primary btn-sm" onclick="saveUserSettings()">💾 Save</button>
-          </div>
-          <div class="settings-section">
-            <div class="settings-title">Features</div>
-            <div class="toggle-grid">
-              <label class="tog"><input type="checkbox" id="u-antidelete" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Anti-Delete</label>
-              <label class="tog"><input type="checkbox" id="u-autoReact" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Auto React</label>
-              <label class="tog"><input type="checkbox" id="u-autoStatus" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Auto Status</label>
-              <label class="tog"><input type="checkbox" id="u-antiviewonce" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Anti-ViewOnce</label>
-              <label class="tog"><input type="checkbox" id="u-autoTyping" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Auto Typing</label>
-              <label class="tog"><input type="checkbox" id="u-autoVoice" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Auto Voice</label>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="input-group"><label class="input-label">React Mode</label>
-              <select id="u-autoReactMode"><option value="all">All Messages</option><option value="bot">Bot Messages Only</option></select>
-            </div>
-            <div class="input-group"><label class="input-label">ViewOnce Emoji</label>
-              <input type="text" id="u-voEmoji" placeholder="👁️" style="max-width:120px">
-            </div>
-          </div>
-        </div>
-
-        <div class="card" id="globalSettingsCard" style="display:none">
-          <div class="card-header">
-            <div class="card-title">🌐 Global Settings <span class="admin-tag">Owner Only</span></div>
-            <button class="btn btn-primary btn-sm" onclick="saveGlobalSettings()">💾 Save Global</button>
-          </div>
-          <div class="settings-section">
-            <div class="settings-title">Global Features</div>
-            <div class="toggle-grid">
-              <label class="tog"><input type="checkbox" id="g-maintenance" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Maintenance Mode</label>
-              <label class="tog"><input type="checkbox" id="g-forceBot" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Force Bot Mode</label>
-              <label class="tog"><input type="checkbox" id="g-anticall" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Anti-Call</label>
-              <label class="tog"><input type="checkbox" id="g-antidelete" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Anti-Delete</label>
-              <label class="tog"><input type="checkbox" id="g-autoReact" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Auto React</label>
-              <label class="tog"><input type="checkbox" id="g-autoStatus" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Auto Status</label>
-              <label class="tog"><input type="checkbox" id="g-antiviewonce" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Anti-ViewOnce</label>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="input-group"><label class="input-label">React Mode</label>
-              <select id="g-autoReactMode"><option value="all">All Messages</option><option value="bot">Bot Messages Only</option></select>
-            </div>
-            <div class="input-group">
-              <label class="input-label">ViewOnce Emoji</label>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-                <span class="btn btn-xs emoji-opt" data-emoji="👁️" onclick="selectEmoji('👁️',this)">👁️</span>
-                <span class="btn btn-xs emoji-opt" data-emoji="😂" onclick="selectEmoji('😂',this)">😂</span>
-                <span class="btn btn-xs emoji-opt" data-emoji="🔥" onclick="selectEmoji('🔥',this)">🔥</span>
-                <span class="btn btn-xs emoji-opt" data-emoji="💯" onclick="selectEmoji('💯',this)">💯</span>
-                <span class="btn btn-xs emoji-opt" data-emoji="🎉" onclick="selectEmoji('🎉',this)">🎉</span>
-                <span class="btn btn-xs emoji-opt" data-emoji="❤️" onclick="selectEmoji('❤️',this)">❤️</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px">
-                <input type="text" id="g-voEmoji" placeholder="👁️" maxlength="8" oninput="syncCustomEmoji(this.value)" style="max-width:80px">
-                <span id="selectedEmojiDisplay" style="font-size:1.4rem">👁️</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="sep"></div>
-          <div class="settings-section">
-            <div class="settings-title">🤖 Auto-Reply</div>
-            <div id="ar-sessions-list" style="margin-bottom:14px"></div>
-            <div class="card" style="background:var(--bg2);margin-bottom:0">
-              <div class="card-header"><div class="card-title" style="font-size:0.82rem">Auto-Reply Config</div></div>
-              <div class="toggle-grid" style="margin-bottom:12px">
-                <label class="tog"><input type="checkbox" id="ar-enabled" onchange="this.closest('.tog').classList.toggle('on',this.checked)"> Enable Auto-Reply</label>
-              </div>
-              <div class="input-group"><label class="input-label">Mode</label>
-                <select id="ar-mode" onchange="arModeChange()">
-                  <option value="smart">Smart (AI-style random)</option>
-                  <option value="custom">Custom message</option>
-                  <option value="ai-always">AI Always</option>
-                  <option value="ai-time">AI Time-based</option>
-                  <option value="ai-offline">AI Offline</option>
-                </select>
-              </div>
-              <div id="ar-custom-wrap" style="display:none">
-                <div class="input-group"><label class="input-label">Custom Message</label><textarea id="ar-message" rows="3" placeholder="Enter your auto-reply message"></textarea></div>
-              </div>
-              <div id="ar-time-wrap" style="display:none">
-                <div class="form-row">
-                  <div class="input-group"><label class="input-label">Start Time</label><input type="text" id="ar-timeStart" placeholder="09:00"></div>
-                  <div class="input-group"><label class="input-label">End Time</label><input type="text" id="ar-timeEnd" placeholder="18:00"></div>
-                </div>
-              </div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button class="btn btn-primary btn-sm" onclick="saveARSettings()">💾 Save Auto-Reply</button>
-                <button class="btn btn-sm" onclick="loadARSettings()">↻ Reload</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- COMMANDS -->
-      <div class="page" id="page-commands">
-        <div class="page-header">
-          <div class="page-title">⌨️ Commands</div>
-          <div class="page-sub">Browse all available bot commands</div>
-        </div>
-        <div class="card">
-          <div style="display:flex;gap:10px;margin-bottom:14px">
-            <input type="text" id="cmd-search" placeholder="🔍 Search commands…" oninput="filterCommands()" style="max-width:300px">
-          </div>
-          <div style="overflow-x:auto;padding-bottom:4px"><div class="cat-tabs" id="catTabs"></div></div>
-          <div id="cmdList" class="cmd-list"><div class="empty-state"><span class="spinner"></span></div></div>
-        </div>
-      </div>
-
-      <!-- ADMIN -->
-      <div class="page" id="page-admin">
-        <div class="page-header">
-          <div class="page-title">👑 Admin Panel <span class="admin-tag">Restricted</span></div>
-          <div class="page-sub">Platform-wide management tools</div>
-        </div>
-
-        <div class="stats-grid">
-          <div class="stat-card violet"><div class="stat-icon">👥</div><div class="stat-val" id="a-users">0</div><div class="stat-lbl">Total Users</div></div>
-          <div class="stat-card cyan"><div class="stat-icon">🤖</div><div class="stat-val" id="a-bots">0</div><div class="stat-lbl">Total Bots</div></div>
-          <div class="stat-card green"><div class="stat-icon">⚡</div><div class="stat-val" id="a-active">0</div><div class="stat-lbl">Active Bots</div></div>
-          <div class="stat-card amber"><div class="stat-icon">💾</div><div class="stat-val" id="a-mem">0</div><div class="stat-lbl">Memory</div></div>
-        </div>
-
-        <div class="grid-2">
-          <div class="card" style="margin-bottom:0">
-            <div class="card-header"><div class="card-title">👥 User Management</div><button class="btn btn-ghost btn-sm" onclick="loadAdminData()">↻</button></div>
-            <div class="list-scroll" id="adm-usersList"><div style="padding:16px;color:var(--muted);font-size:0.8rem">Loading users…</div></div>
-          </div>
-          <div class="card" style="margin-bottom:0">
-            <div class="card-header"><div class="card-title">🤖 All Bot Sessions</div></div>
-            <div class="list-scroll" id="adm-sessionsList"><div style="padding:16px;color:var(--muted);font-size:0.8rem">Loading sessions…</div></div>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:16px">
-          <div class="card-header"><div class="card-title">📢 Global Broadcast</div></div>
-          <div style="display:grid;gap:12px">
-            <textarea id="adm-broadcast" placeholder="Message to send to all bot owners…" rows="3"></textarea>
-            <button class="btn btn-amber" onclick="sendBroadcast()">📢 Send Broadcast</button>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header"><div class="card-title">🔗 WhatsApp Channel</div></div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <input type="text" id="adm-channel" placeholder="WhatsApp Channel link…" style="flex:1;min-width:200px">
-            <button class="btn btn-success" onclick="saveAdminChannel()">💾 Save</button>
-          </div>
-        </div>
-      </div>
-
     </div>
   </div>
 </div>
 
+<style>
+.spinner-ring{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+
 <script>
-let currentUser=null,allCommands=[],currentCat='all',activityLog=[],selectedEmoji='👁️';
+let currentPage = 'sessions';
+let qrPollInterval = null;
+let qrSessionId = null;
 
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-
-async function apiFetch(url,opts={}){
-  const r=await fetch(url,opts);
-  if(r.status===401){window.location.href='/login';throw new Error('Unauthorized')}
-  if(!r.ok)throw new Error('HTTP '+r.status);
-  return r.json();
-}
-
-function toast(msg,type='info'){
-  const c=document.getElementById('toasts');
-  const t=document.createElement('div');
-  t.className='toast '+type;
-  const icons={success:'✅',error:'❌',info:'ℹ️'};
-  t.innerHTML=`<span>${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
-  c.appendChild(t);
-  setTimeout(()=>{t.style.transition='all 0.25s';t.style.opacity='0';t.style.transform='translateX(40px)';setTimeout(()=>t.remove(),280)},3500);
-}
-
-function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sbOverlay').classList.toggle('active')}
-function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sbOverlay').classList.remove('active')}
-
-const pageNames={home:'Overview',sessions:'Bot Sessions',deploy:'Deploy Bot',settings:'Settings',commands:'Commands',admin:'Admin Panel'};
-function navTo(page){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  const p=document.getElementById('page-'+page);if(p)p.classList.add('active');
-  document.querySelectorAll(`[data-page="${page}"]`).forEach(n=>n.classList.add('active'));
-  document.getElementById('topbarTitle').textContent=pageNames[page]||page;
+/* ──────── NAV ──────── */
+function navTo(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.textContent.toLowerCase().includes(page === 'sessions' ? 'bots' : 'connect')) n.classList.add('active');
+  });
+  const titles = { sessions: 'My Bots', connect: 'Connect Bot' };
+  document.getElementById('topbarTitle').textContent = titles[page] || page;
+  currentPage = page;
   closeSidebar();
-  if(page==='sessions')renderSessions();
-  if(page==='commands')loadCommands();
-  if(page==='admin')loadAdminData();
-  window.scrollTo(0,0);
+  if (page === 'sessions') loadSessions();
 }
 
-function switchManual(lang){
-  document.getElementById('manual-en').style.display=lang==='en'?'':'none';
-  document.getElementById('manual-si').style.display=lang==='si'?'':'none';
-  document.getElementById('manualEnBtn').className='btn btn-sm '+(lang==='en'?'btn-primary':'');
-  document.getElementById('manualSiBtn').className='btn btn-sm '+(lang==='si'?'btn-primary':'');
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sbOverlay').classList.toggle('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sbOverlay').classList.remove('show');
 }
 
-function switchDeploy(tab,el){
-  document.querySelectorAll('.deploy-panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.deploy-tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('deploy-'+tab).classList.add('active');
-  el.classList.add('active');
+/* ──────── TOAST ──────── */
+function toast(msg, type = 'info', dur = 3500) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), dur);
 }
 
-function setFeat(id,val){const el=document.getElementById(id);if(!el)return;el.checked=!!val;el.closest('.tog')?.classList.toggle('on',!!val)}
-
-function addActivity(icon,color,title,sub){
-  const time=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  activityLog.unshift({icon,color,title,sub,time});
-  if(activityLog.length>14)activityLog.pop();
-  renderActivity();
-}
-function renderActivity(){
-  const el=document.getElementById('activityFeed');
-  if(!activityLog.length){el.innerHTML='<div style="color:var(--muted);font-size:0.8rem;padding:6px 0">No recent activity.</div>';return}
-  el.innerHTML=activityLog.map(a=>`
-    <div class="activity-item">
-      <div class="activity-icon" style="background:${a.color}20;border:1px solid ${a.color}22;color:${a.color}">${a.icon}</div>
-      <div class="activity-body"><strong>${a.title}</strong><span>${a.sub}</span></div>
-      <div class="activity-time">${a.time}</div>
-    </div>`).join('');
+/* ──────── SESSIONS ──────── */
+async function loadSessions() {
+  try {
+    const res = await fetch('/api/sessions');
+    const data = await res.json();
+    renderSessions(data);
+  } catch (e) { toast('Failed to load bots', 'error'); }
 }
 
-function animateCounter(id,target){
-  const el=document.getElementById(id);if(!el)return;
-  const start=parseInt(el.textContent)||0;if(start===target)return;
-  const steps=24,dur=600;let step=0;
-  const iv=setInterval(()=>{step++;el.textContent=Math.round(start+(target-start)*(step/steps));if(step>=steps){el.textContent=target;clearInterval(iv)}},dur/steps);
-}
+function renderSessions(sessions) {
+  const grid = document.getElementById('sessionsGrid');
+  const online = sessions.filter(s => s.status === 'Online').length;
+  document.getElementById('s-total').textContent = sessions.length;
+  document.getElementById('s-online').textContent = online;
+  document.getElementById('s-offline').textContent = sessions.length - online;
+  document.getElementById('nb-online').textContent = online;
 
-async function loadDashboard(){
-  try{
-    const stats=await apiFetch('/api/stats');
-    document.getElementById('s-uptime').textContent=stats.uptime;
-    document.getElementById('s-ram').textContent=stats.ram;
-    if(stats.commands){animateCounter('s-cmds',stats.commands);document.getElementById('nb-cmds').textContent=stats.commands}
-    addActivity('📊','#6366f1','Stats updated',`RAM: ${stats.ram}MB · Uptime: ${stats.uptime}`);
-  }catch(e){}
+  // uptime
+  const up = Math.floor(performance.now() / 1000);
+  const h = Math.floor(up / 3600), m = Math.floor((up % 3600) / 60);
+  document.getElementById('s-uptime').textContent = h + 'h ' + m + 'm';
 
-  try{
-    const user=await apiFetch('/api/user-info');
-    currentUser=user;
-    document.getElementById('userName').textContent=user.username;
-    document.getElementById('heroName').textContent=user.username;
-    document.getElementById('userAvatar').textContent=user.username[0].toUpperCase();
-    if(user.isOwner){
-      document.getElementById('userRole').textContent='👑 Owner';
-      document.getElementById('nav-admin').style.display='';
-      document.getElementById('globalSettingsCard').style.display='';
-    }else{
-      document.getElementById('userRole').textContent='User';
-      document.getElementById('globalSettingsCard').style.display='none';
-    }
-    addActivity('👤','#3b82f6','Logged in',`Welcome back, ${user.username}`);
-  }catch(e){}
-
-  try{
-    const uSettings=await apiFetch('/api/user-settings');
-    setFeat('u-antidelete',uSettings.antidelete);setFeat('u-autoReact',uSettings.autoReact);
-    setFeat('u-autoStatus',uSettings.autoStatus);setFeat('u-antiviewonce',uSettings.antiviewonce);
-    setFeat('u-autoTyping',uSettings.autoTyping);setFeat('u-autoVoice',uSettings.autoVoice);
-    const uArMode=document.getElementById('u-autoReactMode');if(uArMode)uArMode.value=uSettings.autoReactMode||'all';
-    const uVoEmoji=document.getElementById('u-voEmoji');if(uVoEmoji)uVoEmoji.value=uSettings.antiviewonceEmoji||'👁️';
-  }catch(e){}
-
-  try{
-    const settings=await apiFetch('/api/global-settings');
-    setFeat('g-maintenance',settings.maintenance);setFeat('g-forceBot',settings.forceBot);
-    setFeat('g-anticall',settings.anticall);setFeat('g-antidelete',settings.antidelete);
-    setFeat('g-autoReact',settings.autoReact);setFeat('g-autoStatus',settings.autoStatus);
-    setFeat('g-antiviewonce',settings.antiviewonce);
-    const arMode=document.getElementById('g-autoReactMode');if(arMode)arMode.value=settings.autoReactMode||'all';
-    setEmojiPickerValue(settings.antiviewonceEmoji||'👁️');
-    if(settings.autoReply)loadARSettings(settings.autoReply);
-    await loadARSessions();
-  }catch(e){}
-
-  try{
-    const ch=await apiFetch('/api/user/channel');
-    if(ch.channel){document.getElementById('channelLinkWrap').style.display='';document.getElementById('channelLink').href=ch.channel}
-  }catch(e){}
-
-  loadQuickSessions();
-}
-
-async function loadQuickSessions(){
-  try{
-    const sessions=await apiFetch('/api/sessions');
-    const el=document.getElementById('quickSessions');
-    let onlineCount=0;sessions.forEach(s=>{if(s.status==='Online')onlineCount++});
-    animateCounter('s-online',onlineCount);animateCounter('s-total',sessions.length);
-    document.getElementById('nb-online').textContent=onlineCount;
-    if(!sessions.length){el.innerHTML='<div class="empty-state"><span class="e-icon">🤖</span><p>No bots deployed yet.<br>Click <strong>Deploy Bot</strong> to get started.</p></div>';return}
-    el.innerHTML=sessions.map(s=>`
-      <div class="quick-card" onclick="navTo('sessions')">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:0.85rem;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.name)}</div>
-          <div style="font-size:0.73rem;color:var(--muted)">${esc(s.ownerName||'Unknown')}</div>
-        </div>
-        <span class="badge badge-${s.status.toLowerCase()}">${s.status}</span>
-      </div>`).join('');
-  }catch(e){}
-}
-
-async function renderSessions(){
-  try{
-    const data=await apiFetch('/api/sessions');
-    const el=document.getElementById('sessionsList');
-    if(!data.length){el.innerHTML='<div class="empty-state" style="grid-column:1/-1"><span class="e-icon">🤖</span><p>No bot sessions found.<br>Deploy a bot to get started.</p></div>';return}
-    el.innerHTML=data.map(s=>`
-      <div class="session-card">
-        <div class="session-top">
-          <div style="flex:1;min-width:0">
-            <div class="session-name">${esc(s.name)}</div>
-            ${currentUser&&currentUser.isOwner?`<span class="admin-tag">UID: ${esc(s.userId)}</span> `:''}
-            <div style="font-size:0.74rem;color:var(--muted);margin-top:4px">📱 ${esc(s.ownerNumber||'—')} · 👤 ${esc(s.ownerName||'Unknown')}</div>
-          </div>
-          <span class="badge badge-${s.status.toLowerCase()}">${s.status}</span>
-        </div>
-        <div class="session-actions">
-          <button class="btn btn-sm btn-primary" onclick="restartSession('${esc(s.id)}')">↻ Restart</button>
-          <button class="btn btn-sm" onclick="toggleEdit('${esc(s.id)}')">✏️ Edit</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteSession('${esc(s.id)}','${esc(s.name)}')">🗑️ Delete</button>
-        </div>
-        <div class="edit-panel" id="edit-${esc(s.id)}">
-          <div class="form-row">
-            <div class="input-group"><label class="input-label">Bot Name</label><input type="text" id="edit-name-${esc(s.id)}" value="${esc(s.name)}"></div>
-            <div class="input-group"><label class="input-label">Owner Name</label><input type="text" id="edit-ownerName-${esc(s.id)}" value="${esc(s.ownerName||'')}"></div>
-          </div>
-          <div class="form-row">
-            <div class="input-group"><label class="input-label">Owner Number</label><input type="text" id="edit-ownerNumber-${esc(s.id)}" value="${esc(s.ownerNumber||'')}"></div>
-            <div class="input-group"><label class="input-label">Prefix</label><input type="text" id="edit-prefix-${esc(s.id)}" value="${esc(s.prefix||'.')}"></div>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <button class="btn btn-primary btn-sm" onclick="saveSessionEdit('${esc(s.id)}')">💾 Save</button>
-            <button class="btn btn-ghost btn-sm" onclick="toggleEdit('${esc(s.id)}')">Cancel</button>
-          </div>
-        </div>
-      </div>`).join('');
-  }catch(e){toast('Failed to load sessions','error')}
-}
-
-function toggleEdit(id){const p=document.getElementById('edit-'+id);if(p)p.style.display=p.style.display==='block'?'none':'block'}
-
-async function restartSession(id){
-  try{
-    const data=await apiFetch('/api/session/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id})});
-    if(data.success){toast('Bot restarting…','success');addActivity('↻','#22c55e','Bot restarted',id);setTimeout(renderSessions,2000)}
-    else toast(data.message||'Restart failed','error');
-  }catch(e){toast('Restart failed','error')}
-}
-
-async function deleteSession(id,name){
-  if(!confirm(`Delete bot "${name}"? This cannot be undone.`))return;
-  try{
-    const data=await apiFetch('/api/session/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id})});
-    if(data.success){toast('Bot deleted','success');addActivity('🗑️','#ef4444','Bot deleted',name);renderSessions();loadQuickSessions()}
-    else toast(data.message||'Delete failed','error');
-  }catch(e){toast('Delete failed','error')}
-}
-
-async function saveSessionEdit(id){
-  const name=document.getElementById('edit-name-'+id)?.value.trim();
-  const ownerName=document.getElementById('edit-ownerName-'+id)?.value.trim();
-  const ownerNumber=document.getElementById('edit-ownerNumber-'+id)?.value.trim();
-  const prefix=document.getElementById('edit-prefix-'+id)?.value.trim()||'.';
-  try{
-    const data=await apiFetch('/api/session/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id,botName:name,ownerName,ownerNumber,prefix})});
-    if(data.success){toast('Session updated','success');toggleEdit(id);renderSessions()}
-    else toast(data.message||'Update failed','error');
-  }catch(e){toast('Update failed','error')}
-}
-
-async function addSession(){
-  const sessionId=document.getElementById('inp-sessionId').value.trim();
-  const name=document.getElementById('inp-botName').value.trim();
-  const ownerName=document.getElementById('inp-ownerName').value.trim();
-  const ownerNumber=document.getElementById('inp-ownerNumber').value.trim();
-  if(!sessionId){toast('Session ID is required','error');return}
-  try{
-    const data=await apiFetch('/api/session/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId,name,ownerName,ownerNumber})});
-    if(data.success){
-      toast('Bot deploying…','success');addActivity('🚀','#3b82f6','Bot deployed',name||sessionId);
-      document.getElementById('inp-sessionId').value='';document.getElementById('inp-botName').value='';
-      document.getElementById('inp-ownerName').value='';document.getElementById('inp-ownerNumber').value='';
-      setTimeout(()=>navTo('sessions'),1500);
-    }else toast(data.message||'Deploy failed','error');
-  }catch(e){toast('Deploy failed','error')}
-}
-
-async function generatePairCode(){
-  const number=document.getElementById('inp-pairNumber').value.trim();
-  const botName=document.getElementById('inp-pairBotName').value.trim();
-  const ownerName=document.getElementById('inp-pairOwnerName').value.trim();
-  const ownerNumber=document.getElementById('inp-pairOwnerNumber').value.trim();
-  if(!number){toast('Phone number is required','error');return}
-  document.getElementById('pair-loading').style.display='';
-  document.getElementById('pair-result').style.display='none';
-  document.getElementById('pair-error').style.display='none';
-  document.getElementById('pairBtn').disabled=true;
-  try{
-    const data=await apiFetch('/api/pair-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({number,botName,ownerName,ownerNumber})});
-    document.getElementById('pair-loading').style.display='none';
-    document.getElementById('pairBtn').disabled=false;
-    if(data.success&&data.code){
-      document.getElementById('pair-code').textContent=data.code;
-      document.getElementById('pair-result').style.display='';
-      addActivity('🔐','#6366f1','Pair code generated',number);
-    }else{
-      document.getElementById('pair-error-msg').textContent=data.message||'Failed to generate pair code.';
-      document.getElementById('pair-error').style.display='';
-    }
-  }catch(e){
-    document.getElementById('pair-loading').style.display='none';
-    document.getElementById('pairBtn').disabled=false;
-    document.getElementById('pair-error-msg').textContent='Connection error. Please try again.';
-    document.getElementById('pair-error').style.display='';
+  if (!sessions.length) {
+    grid.innerHTML = '<div class="empty"><span class="ei">🤖</span>No bots connected yet.<br>Click <strong>Connect Bot</strong> to get started.</div>';
+    return;
   }
+  grid.innerHTML = sessions.map(s => `
+    <div class="sess-card">
+      <div class="sess-avatar">🤖</div>
+      <div class="sess-info">
+        <div class="sess-name">${esc(s.name || 'Unnamed Bot')}</div>
+        <div class="sess-meta">+${esc(s.ownerNumber || '—')} &nbsp;·&nbsp; ${esc(s.id.substring(0,24))}…</div>
+      </div>
+      <span class="badge ${s.status === 'Online' ? 'badge-on' : 'badge-off'}">${s.status}</span>
+      <div class="sess-actions">
+        <button class="btn btn-danger btn-sm" onclick="removeSession('${esc(s.id)}')">🗑 Remove</button>
+      </div>
+    </div>
+  `).join('');
 }
 
-function copyPairCode(){
-  const code=document.getElementById('pair-code').textContent;
-  navigator.clipboard.writeText(code).then(()=>toast('Code copied!','success')).catch(()=>toast('Copy failed','error'));
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function removeSession(id) {
+  if (!confirm('Remove this bot session? It will disconnect immediately.')) return;
+  try {
+    const res = await fetch('/api/session/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: id }) });
+    const d = await res.json();
+    if (d.success) { toast('Bot removed', 'success'); loadSessions(); }
+    else toast(d.message || 'Failed to remove', 'error');
+  } catch (e) { toast('Error removing bot', 'error'); }
 }
 
-let qrPollInterval=null;
-async function generateQR(){
-  const botName=document.getElementById('inp-qrBotName').value.trim();
-  const ownerName=document.getElementById('inp-qrOwnerName').value.trim();
-  const ownerNumber=document.getElementById('inp-qrOwnerNumber').value.trim();
-  document.getElementById('qr-loading').style.display='';
-  document.getElementById('qr-area').style.display='none';
-  document.getElementById('qr-success').style.display='none';
-  document.getElementById('qrBtn').disabled=true;
-  try{
-    const data=await apiFetch('/api/qr-session/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({botName,ownerName,ownerNumber})});
-    document.getElementById('qr-loading').style.display='none';
-    document.getElementById('qrBtn').disabled=false;
-    if(data.success&&data.sessionId){document.getElementById('qr-area').style.display='';startQRPolling(data.sessionId)}
-    else toast(data.message||'Failed to start QR session','error');
-  }catch(e){document.getElementById('qr-loading').style.display='none';document.getElementById('qrBtn').disabled=false;toast('Failed to start QR session','error')}
+/* ──────── PAIR CODE ──────── */
+async function getPairCode() {
+  const num = document.getElementById('p-number').value.trim().replace(/[^0-9]/g, '');
+  const botName = document.getElementById('p-botname').value.trim() || 'Infinity MD Mini';
+  const ownerName = document.getElementById('p-ownername').value.trim() || 'Owner';
+  if (!num) { toast('Enter a phone number', 'error'); return; }
+
+  const btn = document.getElementById('pairBtn');
+  btn.disabled = true; btn.textContent = 'Generating…';
+  document.getElementById('pairResult').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/pair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number: num, botName, ownerName, ownerNumber: num })
+    });
+    const d = await res.json();
+    if (d.success && d.code) {
+      document.getElementById('pairCodeDisplay').textContent = d.code;
+      document.getElementById('pairResult').style.display = 'block';
+      toast('Pair code generated!', 'success');
+      setTimeout(loadSessions, 15000);
+    } else {
+      toast(d.message || 'Failed to get pair code', 'error');
+    }
+  } catch (e) { toast('Network error. Try again.', 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Get Pair Code'; }
 }
 
-function startQRPolling(sessionId){
-  if(qrPollInterval)clearInterval(qrPollInterval);
-  const poll=async()=>{
-    try{
-      const data=await apiFetch('/api/qr-session/'+sessionId+'/status');
-      if(data.qr)renderQR(data.qr);
-      if(data.status==='connected'){clearInterval(qrPollInterval);document.getElementById('qr-area').style.display='none';document.getElementById('qr-success').style.display='';addActivity('✅','#22c55e','QR Bot connected','Session '+sessionId);setTimeout(()=>navTo('sessions'),2000)}
-    }catch(e){}
-  };
-  poll();qrPollInterval=setInterval(poll,5000);
+/* ──────── QR CODE ──────── */
+async function startQR() {
+  const botName = document.getElementById('q-botname').value.trim() || 'Infinity MD Mini';
+  const ownerName = document.getElementById('q-ownername').value.trim() || 'Owner';
+  const ownerNumber = document.getElementById('q-owner-number').value.trim().replace(/[^0-9]/g, '');
+
+  const btn = document.getElementById('qrBtn');
+  btn.disabled = true; btn.textContent = 'Starting…';
+  document.getElementById('qrResult').style.display = 'block';
+  document.getElementById('qrWrap').innerHTML = '<div class="spinner-ring"></div><p style="font-size:.8rem;color:var(--muted);margin-top:8px">Connecting to WhatsApp…</p>';
+
+  try {
+    const res = await fetch(`/api/qr?botName=${encodeURIComponent(botName)}&ownerName=${encodeURIComponent(ownerName)}&ownerNumber=${encodeURIComponent(ownerNumber)}`);
+    const d = await res.json();
+    if (d.success && d.qr) {
+      document.getElementById('qrWrap').innerHTML = `<img src="${d.qr}" alt="QR Code" style="max-width:200px;border-radius:10px"><p style="font-size:.75rem;color:var(--muted);margin-top:8px">Scan with WhatsApp</p>`;
+      qrSessionId = d.sessionId;
+      toast('QR ready — scan now!', 'success');
+      setTimeout(loadSessions, 20000);
+    } else {
+      document.getElementById('qrWrap').innerHTML = '<p style="color:var(--red);font-size:.85rem">' + (d.message || 'Failed to generate QR') + '</p>';
+      toast(d.message || 'Failed to generate QR', 'error');
+    }
+  } catch (e) {
+    document.getElementById('qrWrap').innerHTML = '<p style="color:var(--red);font-size:.85rem">Network error. Try again.</p>';
+    toast('Network error', 'error');
+  }
+  finally { btn.disabled = false; btn.textContent = 'Generate QR Code'; }
 }
 
-function renderQR(qrData){
-  const canvas=document.getElementById('qr-canvas');
-  if(typeof QRCode!=='undefined'){QRCode.toCanvas(canvas,qrData,{width:220,margin:2,color:{dark:'#0d1120',light:'#f0f4ff'}},()=>{})}
-  else{const img=document.createElement('img');img.src=qrData;img.style.maxWidth='220px';canvas.parentNode.replaceChild(img,canvas)}
+/* ──────── TABS ──────── */
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  const tabs = document.querySelectorAll('.tab');
+  tabs[tab === 'pair' ? 0 : 1].classList.add('active');
 }
 
-async function saveUserSettings(){
-  try{
-    const data=await apiFetch('/api/user-settings/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      antidelete:document.getElementById('u-antidelete').checked,
-      autoReact:document.getElementById('u-autoReact').checked,
-      autoStatus:document.getElementById('u-autoStatus').checked,
-      antiviewonce:document.getElementById('u-antiviewonce').checked,
-      autoTyping:document.getElementById('u-autoTyping').checked,
-      autoVoice:document.getElementById('u-autoVoice').checked,
-      autoReactMode:document.getElementById('u-autoReactMode').value,
-      antiviewonceEmoji:document.getElementById('u-voEmoji').value,
-    })});
-    if(data.success)toast('Settings saved!','success');
-    else toast(data.message||'Save failed','error');
-  }catch(e){toast('Save failed','error')}
+/* ──────── AUTH ──────── */
+async function logout() {
+  await fetch('/api/auth/logout');
+  window.location.href = '/login';
 }
 
-async function saveGlobalSettings(){
-  try{
-    const data=await apiFetch('/api/global-settings/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      maintenance:document.getElementById('g-maintenance').checked,
-      forceBot:document.getElementById('g-forceBot').checked,
-      anticall:document.getElementById('g-anticall').checked,
-      antidelete:document.getElementById('g-antidelete').checked,
-      autoReact:document.getElementById('g-autoReact').checked,
-      autoStatus:document.getElementById('g-autoStatus').checked,
-      antiviewonce:document.getElementById('g-antiviewonce').checked,
-      autoReactMode:document.getElementById('g-autoReactMode').value,
-      antiviewonceEmoji:selectedEmoji,
-    })});
-    if(data.success)toast('Global settings saved!','success');
-    else toast(data.message||'Save failed','error');
-  }catch(e){toast('Save failed','error')}
+/* ──────── INIT ──────── */
+async function refresh() { if (currentPage === 'sessions') loadSessions(); }
+
+async function init() {
+  try {
+    const r = await fetch('/api/sessions');
+    const sessions = await r.json();
+    renderSessions(sessions);
+    const first = sessions[0];
+    if (first) {
+      document.getElementById('userName').textContent = first.userId || 'User';
+      document.getElementById('userAv').textContent = (first.userId || 'U')[0].toUpperCase();
+      document.getElementById('userRole').textContent = first.userId ? 'Session Owner' : 'User';
+    }
+  } catch (_) {}
+
+  // Poll for session updates every 15s
+  setInterval(() => { if (currentPage === 'sessions') loadSessions(); }, 15000);
 }
 
-function selectEmoji(emoji,el){
-  selectedEmoji=emoji;
-  document.querySelectorAll('.emoji-opt').forEach(e=>e.classList.remove('btn-primary'));
-  el.classList.add('btn-primary');
-  document.getElementById('g-voEmoji').value=emoji;
-  document.getElementById('selectedEmojiDisplay').textContent=emoji;
-}
-function syncCustomEmoji(val){
-  if(!val)return;selectedEmoji=val;
-  document.querySelectorAll('.emoji-opt').forEach(e=>e.classList.remove('btn-primary'));
-  document.getElementById('selectedEmojiDisplay').textContent=val;
-}
-function setEmojiPickerValue(emoji){
-  selectedEmoji=emoji||'👁️';
-  document.getElementById('g-voEmoji').value=selectedEmoji;
-  document.getElementById('selectedEmojiDisplay').textContent=selectedEmoji;
-  document.querySelectorAll('.emoji-opt').forEach(e=>e.classList.toggle('btn-primary',e.dataset.emoji===selectedEmoji));
-}
-
-function arModeChange(){
-  const mode=document.getElementById('ar-mode').value;
-  document.getElementById('ar-custom-wrap').style.display=['custom','smart'].includes(mode)?'':'none';
-  document.getElementById('ar-time-wrap').style.display=mode==='ai-time'?'':'none';
-}
-function loadARSettings(cfg){
-  if(!cfg)return;
-  setFeat('ar-enabled',cfg.enabled);
-  const m=document.getElementById('ar-mode');if(m)m.value=cfg.mode||'smart';
-  const msg=document.getElementById('ar-message');if(msg)msg.value=cfg.message||'';
-  const ts=document.getElementById('ar-timeStart');if(ts)ts.value=cfg.timeStart||'09:00';
-  const te=document.getElementById('ar-timeEnd');if(te)te.value=cfg.timeEnd||'18:00';
-  arModeChange();
-}
-async function loadARSessions(){
-  try{
-    const sessions=await apiFetch('/api/sessions');
-    const el=document.getElementById('ar-sessions-list');if(!el)return;
-    if(!sessions.length){el.innerHTML='';return}
-    el.innerHTML=`<div class="input-group"><label class="input-label">Apply to Session</label><select id="ar-session-select">
-      <option value="">Global (all sessions)</option>
-      ${sessions.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}
-    </select></div>`;
-  }catch(e){}
-}
-async function saveARSettings(){
-  try{
-    const enabled=document.getElementById('ar-enabled').checked;
-    const mode=document.getElementById('ar-mode').value;
-    const message=document.getElementById('ar-message').value;
-    const timeStart=document.getElementById('ar-timeStart').value;
-    const timeEnd=document.getElementById('ar-timeEnd').value;
-    const sid=document.getElementById('ar-session-select')?.value;
-    const url=sid?`/api/session/${sid}/update`:'/api/global-settings/update';
-    const payload=sid?{settings:{autoReply:{enabled,mode,message,timeStart,timeEnd}}}:{autoReply:{enabled,mode,message,timeStart,timeEnd}};
-    const data=await apiFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if(data.success)toast('Auto-reply saved!','success');
-    else toast(data.message||'Save failed','error');
-  }catch(e){toast('Save failed','error')}
-}
-
-async function loadCommands(){
-  try{
-    const data=await apiFetch('/api/commands');
-    allCommands=data.commands||data||[];
-    const cats=['all',...new Set(allCommands.map(c=>c.category).filter(Boolean))];
-    const tabsEl=document.getElementById('catTabs');
-    tabsEl.innerHTML=cats.map(c=>`<button class="cat-tab${c==='all'?' active':''}" onclick="filterByCat('${c}',this)">${c==='all'?'All':c.charAt(0).toUpperCase()+c.slice(1)}</button>`).join('');
-    currentCat='all';renderCommands(allCommands);
-  }catch(e){toast('Failed to load commands','error')}
-}
-function filterByCat(cat,el){
-  currentCat=cat;
-  document.querySelectorAll('.cat-tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  const q=document.getElementById('cmd-search').value.toLowerCase();
-  const filtered=allCommands.filter(c=>(cat==='all'||c.category===cat)&&(!q||(c.name||'').toLowerCase().includes(q)||(c.description||'').toLowerCase().includes(q)));
-  renderCommands(filtered);
-}
-function filterCommands(){
-  const q=document.getElementById('cmd-search').value.toLowerCase();
-  const filtered=allCommands.filter(c=>(currentCat==='all'||c.category===currentCat)&&(!q||(c.name||'').toLowerCase().includes(q)||(c.description||'').toLowerCase().includes(q)));
-  renderCommands(filtered);
-}
-function renderCommands(list){
-  const el=document.getElementById('cmdList');
-  if(!list.length){el.innerHTML='<div class="empty-state"><span class="e-icon">🔍</span><p>No commands found.</p></div>';return}
-  el.innerHTML=list.map(c=>`
-    <div class="cmd-item">
-      <div class="cmd-name">.${esc(c.name||'?')}</div>
-      <div class="cmd-desc">${esc(c.description||'No description')}</div>
-      ${c.category?`<span class="cmd-cat">${esc(c.category)}</span>`:''}
-    </div>`).join('');
-}
-
-async function loadAdminData(){
-  try{
-    const stats=await apiFetch('/api/admin/stats');
-    animateCounter('a-users',stats.users||0);animateCounter('a-bots',stats.bots||0);
-    animateCounter('a-active',stats.active||0);document.getElementById('a-mem').textContent=stats.memory||0;
-  }catch(e){}
-
-  try{
-    const users=await apiFetch('/api/admin/users');
-    const el=document.getElementById('adm-usersList');
-    if(!users.length){el.innerHTML='<div style="padding:14px;color:var(--muted);font-size:0.8rem">No users found</div>';return}
-    el.innerHTML=users.map(u=>`
-      <div class="list-row">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:0.83rem">${esc(u.username)}</div>
-          <div style="font-size:0.7rem;color:var(--muted)">${u.isOwner?'👑 Owner':'User'} · ${u.sessionCount||0} bots</div>
-        </div>
-        <button class="btn btn-xs btn-danger" onclick="userAction('${esc(u.username)}','delete')">Delete</button>
-      </div>`).join('');
-  }catch(e){}
-
-  try{
-    const sessions=await apiFetch('/api/admin/sessions');
-    const el=document.getElementById('adm-sessionsList');
-    if(!sessions||!sessions.length){el.innerHTML='<div style="padding:14px;color:var(--muted);font-size:0.8rem">No sessions</div>';return}
-    el.innerHTML=sessions.map(s=>`
-      <div class="list-row">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:0.83rem">${esc(s.name)}</div>
-          <div style="font-size:0.7rem;color:var(--muted)">${esc(s.ownerName||'—')}</div>
-        </div>
-        <span class="badge badge-${s.status.toLowerCase()}">${s.status}</span>
-      </div>`).join('');
-  }catch(e){}
-}
-
-async function sendBroadcast(){
-  const msg=document.getElementById('adm-broadcast').value.trim();
-  if(!msg){toast('Message is required','error');return}
-  try{
-    const data=await apiFetch('/api/admin/broadcast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});
-    if(data.success){toast('Broadcast sent!','success');document.getElementById('adm-broadcast').value='';addActivity('📢','#f59e0b','Broadcast sent','Global message delivered')}
-    else toast(data.message||'Broadcast failed','error');
-  }catch(e){toast('Broadcast failed','error')}
-}
-
-async function saveAdminChannel(){
-  const ch=document.getElementById('adm-channel').value.trim();
-  try{
-    await apiFetch('/api/admin/global-settings/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({whatsappChannel:ch})});
-    toast('Channel saved','success');
-  }catch(e){toast('Save failed','error')}
-}
-
-async function userAction(username,action){
-  if(!confirm(`${action} user "${username}"?`))return;
-  try{
-    const data=await apiFetch('/api/admin/user/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,action})});
-    if(data.success){toast(`User ${action} done`,'success');loadAdminData()}
-    else toast(data.message||'Action failed','error');
-  }catch(e){toast('Action failed','error')}
-}
-
-async function logout(){
-  try{await apiFetch('/api/auth/logout',{method:'POST'})}catch(e){}
-  window.location.href='/login';
-}
-
-setInterval(async()=>{
-  try{const stats=await apiFetch('/api/stats');document.getElementById('s-uptime').textContent=stats.uptime;document.getElementById('s-ram').textContent=stats.ram}catch(e){}
-},30000);
-
-loadDashboard();
+init();
 </script>
 </body>
 </html>
