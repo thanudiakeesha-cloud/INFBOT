@@ -1,28 +1,19 @@
 #!/bin/bash
-# Push to GitHub — run this from the Shell tab
-# Usage: bash push_to_github.sh <your_github_pat>
 
-TOKEN="$1"
-if [ -z "$TOKEN" ]; then
-  echo "Usage: bash push_to_github.sh <your_github_pat>"
-  exit 1
-fi
+TOKEN=$1
+USERNAME="thanudiakeesha-cloud"
+REPO="thanudiakeesha-cloud/INFBOT"
 
-REPO="https://thanudiakeesha-cloud:${TOKEN}@github.com/thanudiakeesha-cloud/INFBOT.git"
+# Reset remote
+git remote remove origin 2>/dev/null
+git remote add origin https://$USERNAME:$TOKEN@github.com/$REPO.git
 
-rm -f .git/index.lock .git/config.lock
+# Add & commit
+git add .
+git commit -m "auto push" || echo "Nothing to commit"
 
-git config user.email "bot@infinitymd.online"
-git config user.name "Infinity MD"
+# Ensure main branch
+git branch -M main
 
-git remote remove github 2>/dev/null || true
-git remote add github "$REPO"
-
-git add -A
-git commit -m "feat: language support, film3, menu redesign, connect manual" --allow-empty
-
-git push github HEAD:main --force
-
-git remote remove github
-
-echo "Done! Check https://github.com/thanudiakeesha-cloud/INFBOT"
+# Push
+git push -u origin main
