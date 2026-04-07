@@ -1,6 +1,7 @@
 /**
- * .song — YouTube audio downloader (FAST parallel API race)
- * Fires all download APIs simultaneously and uses whichever responds first.
+ * .song — YouTube audio downloader (instant cache + parallel race)
+ * Cache hit  → audio sent in < 1 second
+ * Cache miss → all APIs race in parallel, result cached for next time
  */
 
 const axios = require('axios');
@@ -13,104 +14,111 @@ const HEADERS = {
   'Accept': 'application/json, */*',
 };
 
-// ── Individual API callers ────────────────────────────────────────────────────
+// ── In-memory result cache ────────────────────────────────────────────────────
+const cache    = new Map();
+const CACHE_TTL = 90 * 60 * 1000; // 90 minutes (YT CDN links stay alive ~2h)
+const MAX_CACHE = 200;
+
+function cacheKey(q) { return q.toLowerCase().trim(); }
+
+function getCached(q) {
+  const entry = cache.get(cacheKey(q));
+  if (!entry) return null;
+  if (Date.now() - entry.ts > CACHE_TTL) { cache.delete(cacheKey(q)); return null; }
+  return entry;
+}
+
+function setCache(q, value) {
+  if (cache.size >= MAX_CACHE) {
+    cache.delete(cache.keys().next().value); // evict oldest
+  }
+  cache.set(cacheKey(q), { ...value, ts: Date.now() });
+}
+
+// ── API callers (each has its own short timeout — no retries) ─────────────────
 
 async function tryIzumiUrl(url) {
   const res = await axios.get(
     `https://izumiiiiiiii.dpdns.org/downloader/youtube?url=${encodeURIComponent(url)}&format=mp3`,
-    { headers: HEADERS, timeout: 25000 }
+    { headers: HEADERS, timeout: 20000 }
   );
   const d = res?.data?.result;
   if (d?.download) return { download: d.download, title: d.title, thumbnail: d.thumbnail };
-  throw new Error('Izumi: no download');
+  throw new Error('no dl');
 }
 
 async function tryIzumiQuery(query) {
   const res = await axios.get(
     `https://izumiiiiiiii.dpdns.org/downloader/youtube-play?query=${encodeURIComponent(query)}`,
-    { headers: HEADERS, timeout: 25000 }
+    { headers: HEADERS, timeout: 20000 }
   );
   const d = res?.data?.result;
   if (d?.download) return { download: d.download, title: d.title, thumbnail: d.thumbnail };
-  throw new Error('IzumiQuery: no download');
+  throw new Error('no dl');
 }
 
 async function tryYupra(url) {
   const res = await axios.get(
     `https://api.yupra.my.id/api/downloader/ytmp3?url=${encodeURIComponent(url)}`,
-    { headers: HEADERS, timeout: 25000 }
+    { headers: HEADERS, timeout: 20000 }
   );
   const d = res?.data?.data;
   if (res?.data?.success && d?.download_url) {
     return { download: d.download_url, title: d.title, thumbnail: d.thumbnail };
   }
-  throw new Error('Yupra: no download');
+  throw new Error('no dl');
 }
 
 async function tryOkatsu(url) {
   const res = await axios.get(
     `https://okatsu-rolezapiiz.vercel.app/downloader/ytmp3?url=${encodeURIComponent(url)}`,
-    { headers: HEADERS, timeout: 25000 }
+    { headers: HEADERS, timeout: 20000 }
   );
-  if (res?.data?.dl) {
-    return { download: res.data.dl, title: res.data.title, thumbnail: res.data.thumb };
-  }
-  throw new Error('Okatsu: no download');
+  if (res?.data?.dl) return { download: res.data.dl, title: res.data.title, thumbnail: res.data.thumb };
+  throw new Error('no dl');
 }
 
 async function tryElitePro(url) {
   const res = await axios.get(
     `https://eliteprotech-apis.zone.id/ytdown?url=${encodeURIComponent(url)}&format=mp3`,
-    { headers: HEADERS, timeout: 25000 }
+    { headers: HEADERS, timeout: 20000 }
   );
   if (res?.data?.success && res?.data?.downloadURL) {
     return { download: res.data.downloadURL, title: res.data.title, thumbnail: null };
   }
-  throw new Error('ElitePro: no download');
+  throw new Error('no dl');
 }
 
-// ── Race helpers ──────────────────────────────────────────────────────────────
-
-/** Run all promises in parallel; return first one that resolves with a valid result. */
-function raceValid(promises) {
-  return Promise.any(promises);
-}
-
-/** Get audio result by YouTube URL — all APIs race simultaneously. */
-async function getAudioByUrl(youtubeUrl) {
-  return raceValid([
-    tryIzumiUrl(youtubeUrl),
-    tryYupra(youtubeUrl),
-    tryOkatsu(youtubeUrl),
-    tryElitePro(youtubeUrl),
+// ── Race: for a known YouTube URL ─────────────────────────────────────────────
+async function fetchByUrl(url) {
+  return Promise.any([
+    tryIzumiUrl(url),
+    tryYupra(url),
+    tryOkatsu(url),
+    tryElitePro(url),
   ]);
 }
 
-/** Get audio result by search query — yt-search + Izumi query race, then URL race. */
-async function getAudioByQuery(query) {
-  // Start yt-search and Izumi query simultaneously
-  const [ytsResult, izumiResult] = await Promise.allSettled([
-    yts(query).then(r => r.videos?.[0] || null),
+// ── Race: for a plain text query ──────────────────────────────────────────────
+async function fetchByQuery(query) {
+  // Izumi query and yt-search run simultaneously
+  const [izumi, ytsRes] = await Promise.allSettled([
     tryIzumiQuery(query),
+    yts(query).then(r => r.videos?.[0] || null),
   ]);
 
-  // If Izumi query succeeded, use it immediately
-  if (izumiResult.status === 'fulfilled') {
-    return izumiResult.value;
-  }
+  if (izumi.status === 'fulfilled') return izumi.value;
 
-  // Use yt-search result to build URL, then race all URL APIs
-  if (ytsResult.status === 'fulfilled' && ytsResult.value) {
-    const video = ytsResult.value;
-    const result = await getAudioByUrl(video.url);
-    // Merge yt-search metadata as fallback
-    result.title     = result.title     || video.title;
-    result.thumbnail = result.thumbnail || (video.videoId ? `https://i.ytimg.com/vi/${video.videoId}/sddefault.jpg` : null);
-    result.duration  = video.duration?.timestamp || '';
+  if (ytsRes.status === 'fulfilled' && ytsRes.value) {
+    const v = ytsRes.value;
+    const result = await fetchByUrl(v.url);
+    result.title     = result.title     || v.title;
+    result.thumbnail = result.thumbnail || (v.videoId ? `https://i.ytimg.com/vi/${v.videoId}/sddefault.jpg` : null);
+    result.duration  = v.duration?.timestamp || '';
     return result;
   }
 
-  throw new Error('All song APIs failed');
+  throw new Error('all song APIs failed');
 }
 
 // ── Command export ────────────────────────────────────────────────────────────
@@ -126,95 +134,91 @@ module.exports = {
     const { reply, react } = extra;
     const chatId = msg.key.remoteJid;
 
-    try {
-      const query = args.join(' ').trim();
-      if (!query) {
-        return reply('❌ Please provide a song name or YouTube link.\n\nUsage: `.song <song name>`');
-      }
+    const query = args.join(' ').trim();
+    if (!query) {
+      return reply('❌ Please provide a song name or YouTube link.\n\nUsage: `.song <song name>`');
+    }
 
-      await react('⏳');
+    await react('⏳');
 
-      const statusMsg = await sock.sendMessage(chatId, {
-        text: `🎵 _Searching:_ *${query}*\n_Fetching from fastest source..._`,
-      }, { quoted: msg });
-
-      const editStatus = async (text) => {
-        try { await sock.sendMessage(chatId, { text, edit: statusMsg.key }); } catch (_) {}
-      };
-
-      let result = null;
-      const isUrl = YT_REGEX.test(query);
-
-      try {
-        result = isUrl ? await getAudioByUrl(query) : await getAudioByQuery(query);
-      } catch (e) {
-        // If URL failed, try query search as final fallback
-        if (isUrl) {
-          try { result = await getAudioByQuery(query); } catch (_) {}
-        }
-      }
-
-      if (!result?.download) {
-        await react('❌');
-        await editStatus(`❌ Could not find or download *"${query}"*. Please try another name or link.`);
-        return;
-      }
-
-      const title    = result.title    || query;
-      const thumb    = result.thumbnail || null;
-      const duration = result.duration  || '';
-      const safeTitle = title.replace(/[^\w\s-]/g, '').trim() || 'audio';
-
-      await editStatus(`🎵 *${title}*${duration ? `\n⏱️ ${duration}` : ''}\n⬇️ _Sending audio..._`);
-
-      // Send thumbnail + caption if available
-      if (thumb) {
-        try {
-          await sock.sendMessage(chatId, {
-            image: { url: thumb },
-            caption: `🎵 *${title}*${duration ? `\n⏱️ ${duration}` : ''}\n\n> 💫 *INFINITY MD*`,
-          }, { quoted: msg });
-        } catch (_) {}
-      }
-
-      // Send audio — try direct URL first (fastest), then buffer fallback
+    // ── Cache hit: send immediately ──────────────────────────────────────────
+    const cached = getCached(query);
+    if (cached) {
       try {
         await sock.sendMessage(chatId, {
-          audio: { url: result.download },
+          audio: { url: cached.download },
+          mimetype: 'audio/mpeg',
+          fileName: `${(cached.title || 'audio').replace(/[^\w\s-]/g, '').trim()}.mp3`,
+          ptt: false,
+        }, { quoted: msg });
+        await react('✅');
+        return;
+      } catch (_) {
+        cache.delete(cacheKey(query)); // stale URL — remove and fall through
+      }
+    }
+
+    // ── Cache miss: fetch from APIs ──────────────────────────────────────────
+    let result = null;
+    const isUrl = YT_REGEX.test(query);
+
+    try {
+      result = isUrl ? await fetchByUrl(query) : await fetchByQuery(query);
+    } catch (_) {
+      if (isUrl) {
+        try { result = await fetchByQuery(query); } catch (_2) {}
+      }
+    }
+
+    if (!result?.download) {
+      await react('❌');
+      return reply(`❌ Could not find *"${query}"*. Try another name or link.`);
+    }
+
+    const title     = result.title    || query;
+    const thumb     = result.thumbnail || null;
+    const duration  = result.duration  || '';
+    const safeTitle = title.replace(/[^\w\s-]/g, '').trim() || 'audio';
+
+    // Cache for next time
+    setCache(query, result);
+
+    // Send thumbnail info card
+    if (thumb) {
+      try {
+        await sock.sendMessage(chatId, {
+          image: { url: thumb },
+          caption: `🎵 *${title}*${duration ? `\n⏱️ ${duration}` : ''}\n\n> 💫 *INFINITY MD*`,
+        }, { quoted: msg });
+      } catch (_) {}
+    }
+
+    // Send audio
+    try {
+      await sock.sendMessage(chatId, {
+        audio: { url: result.download },
+        mimetype: 'audio/mpeg',
+        fileName: `${safeTitle}.mp3`,
+        ptt: false,
+      }, { quoted: msg });
+      await react('✅');
+    } catch (_) {
+      // Buffer fallback
+      try {
+        const buf = Buffer.from(
+          (await axios.get(result.download, { responseType: 'arraybuffer', timeout: 120000, headers: HEADERS })).data
+        );
+        await sock.sendMessage(chatId, {
+          audio: buf,
           mimetype: 'audio/mpeg',
           fileName: `${safeTitle}.mp3`,
           ptt: false,
         }, { quoted: msg });
         await react('✅');
-        // Delete the status message cleanly
-        try { await sock.sendMessage(chatId, { delete: statusMsg.key }); } catch (_) {}
-      } catch (_) {
-        // Buffer fallback
-        try {
-          const buf = await axios.get(result.download, {
-            responseType: 'arraybuffer',
-            timeout: 120000,
-            headers: HEADERS,
-          }).then(r => Buffer.from(r.data));
-
-          await sock.sendMessage(chatId, {
-            audio: buf,
-            mimetype: 'audio/mpeg',
-            fileName: `${safeTitle}.mp3`,
-            ptt: false,
-          }, { quoted: msg });
-          await react('✅');
-          try { await sock.sendMessage(chatId, { delete: statusMsg.key }); } catch (_) {}
-        } catch (bufErr) {
-          await react('❌');
-          await editStatus(`❌ Failed to send audio. Please try again.`);
-        }
+      } catch (e) {
+        await react('❌');
+        reply('❌ Failed to send audio. Please try again.');
       }
-
-    } catch (err) {
-      console.error('[SONG] Error:', err?.message);
-      await react('❌');
-      reply('❌ Failed to download song. Please try again later.');
     }
   },
 };
