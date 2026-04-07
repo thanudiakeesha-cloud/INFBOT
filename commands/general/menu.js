@@ -2,6 +2,7 @@ const config  = require('../../config');
 const fs      = require('fs');
 const path    = require('path');
 const { sendBtn, btn, urlBtn } = require('../../utils/sendBtn');
+const { getLang, t, LANGUAGES } = require('../../utils/lang');
 
 // ─────────────────────────────────────────────
 //  HELPERS
@@ -19,103 +20,35 @@ function pickMenuImage() {
   try {
     if (fs.existsSync(bannersDir)) {
       const files = fs.readdirSync(bannersDir).filter(f => /\.(jpg|jpeg|png)$/i.test(f));
-      if (files.length) {
-        const chosen = files[Math.floor(Math.random() * files.length)];
-        return path.join(bannersDir, chosen);
-      }
+      if (files.length) return path.join(bannersDir, files[Math.floor(Math.random() * files.length)]);
     }
   } catch (_) {}
   return fs.existsSync(fallback) ? fallback : null;
 }
 
 // ─────────────────────────────────────────────
-//  COMMAND LABELS  (2–3 words max)
-// ─────────────────────────────────────────────
-const LABELS = {
-  // Media
-  song:         'Song download',
-  yt:           'YouTube search',
-  tiktok:       'TikTok download',
-  ytmp3:        'YouTube → MP3',
-  ytmp4:        'YouTube → MP4',
-  play:         'Quick play',
-  lyrics:       'Song lyrics',
-  film:         'Movie finder',
-  film1:        'SriHub movies',
-  // Admin
-  antilink:     'Block links',
-  demote:       'Remove admin',
-  goodbye:      'Leave message',
-  hidetag:      'Silent mention',
-  kick:         'Kick member',
-  lock:         'Lock group',
-  members:      'List members',
-  mute:         'Mute group',
-  promote:      'Make admin',
-  setname:      'Rename group',
-  tagall:       'Tag everyone',
-  unlock:       'Unlock group',
-  unmute:       'Unmute group',
-  warn:         'Warn member',
-  welcome:      'Join message',
-  // Owner
-  anticall:     'Block calls',
-  antidelete:   'Catch deletes',
-  antiviewonce: 'Save viewonce',
-  autoreact:    'Auto react',
-  autoreply:    'Auto reply',
-  autostatus:   'Auto status',
-  block:        'Block user',
-  broadcast:    'Mass message',
-  join:         'Join group',
-  leave:        'Leave group',
-  mode:         'Bot mode',
-  settings:     'Bot settings',
-  unblock:      'Unblock user',
-  // Tools & AI
-  ai:           'AI chat',
-  gpt:          'GPT chat',
-  calc:         'Calculator',
-  sticker:      'Make sticker',
-  translate:    'Translate text',
-  weather:      'Weather info',
-  wiki:         'Wikipedia',
-  togif:        'Video → GIF',
-  toimg:        'Sticker → image',
-  tomp3:        'Video → MP3',
-  // General
-  fact:         'Random fact',
-  joke:         'Random joke',
-  meme:         'Random meme',
-  alive:        'Bot status',
-  ping:         'Ping bot',
-  owner:        'Owner info',
-  runtime:      'System stats',
-};
-
-// ─────────────────────────────────────────────
-//  CATEGORIES
+//  CATEGORIES  (title keys map to t('cat_*'))
 // ─────────────────────────────────────────────
 const CATEGORIES = {
   media: {
-    icon: '📥', title: 'Media & Downloads', color: '🔵',
+    icon: '📥', titleKey: 'cat_media', color: '🔵',
     cmds: ['song','yt','tiktok','ytmp3','ytmp4','play','lyrics','film','film1'],
   },
   admin: {
-    icon: '🛡️', title: 'Admin Commands', color: '🟠',
+    icon: '🛡️', titleKey: 'cat_admin', color: '🟠',
     cmds: ['antilink','demote','goodbye','hidetag','kick','lock','members','mute','promote','setname','tagall','unlock','unmute','warn','welcome'],
   },
   owner: {
-    icon: '👑', title: 'Owner Commands', color: '🟡',
+    icon: '👑', titleKey: 'cat_owner', color: '🟡',
     cmds: ['anticall','antidelete','antiviewonce','autoreact','autoreply','autostatus','block','broadcast','join','leave','mode','settings','unblock'],
   },
   tools: {
-    icon: '🛠️', title: 'Tools & AI', color: '🟢',
+    icon: '🛠️', titleKey: 'cat_tools', color: '🟢',
     cmds: ['ai','gpt','calc','sticker','translate','weather','wiki','togif','toimg','tomp3'],
   },
   general: {
-    icon: '🧭', title: 'General & Fun', color: '🟣',
-    cmds: ['fact','joke','meme','alive','ping','owner','runtime'],
+    icon: '🧭', titleKey: 'cat_general', color: '🟣',
+    cmds: ['fact','joke','meme','alive','ping','owner','runtime','lang'],
   },
 };
 
@@ -136,63 +69,65 @@ const MAIN_BUTTONS = [
 ];
 
 // ─────────────────────────────────────────────
-//  MAIN MENU TEXT BUILDER
+//  MAIN MENU BUILDER
 // ─────────────────────────────────────────────
-function buildMainMenu({ botName, owner, senderNum, uptimeStr, ramMB, prefix }) {
+function buildMainMenu({ botName, owner, senderNum, uptimeStr, ramMB, prefix, lang }) {
   const total = Object.values(CATEGORIES).reduce((n, c) => n + c.cmds.length, 0);
+  const langInfo = LANGUAGES[lang];
 
-  let t = '';
-  t += `╭━━━━━━━━━━━━━━━━━━━━━╮\n`;
-  t += `┃  🤖 *${botName}*\n`;
-  t += `╰━━━━━━━━━━━━━━━━━━━━━╯\n`;
-  t += `\n`;
-  t += `👤 *User* : @${senderNum}\n`;
-  t += `👑 *Owner* : ${owner}\n`;
-  t += `⌨️  *Prefix* : \`${prefix}\`\n`;
-  t += `📦 *Commands* : ${total}\n`;
-  t += `⏱️  *Uptime* : ${uptimeStr}\n`;
-  t += `💾 *RAM* : ${ramMB} MB\n`;
-  t += `\n`;
-  t += `━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  t += `📂 *CATEGORIES*\n`;
-  t += `━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  let tx = '';
+  tx += `╭━━━━━━━━━━━━━━━━━━━━━╮\n`;
+  tx += `┃  🤖 *${botName}*\n`;
+  tx += `╰━━━━━━━━━━━━━━━━━━━━━╯\n`;
+  tx += `\n`;
+  tx += `👤 *${t('user', lang)}* : @${senderNum}\n`;
+  tx += `👑 *${t('owner', lang)}* : ${owner}\n`;
+  tx += `⌨️  *${t('prefix', lang)}* : \`${prefix}\`\n`;
+  tx += `📦 *${t('commands', lang)}* : ${total}\n`;
+  tx += `⏱️  *${t('uptime', lang)}* : ${uptimeStr}\n`;
+  tx += `💾 *${t('ram', lang)}* : ${ramMB} MB\n`;
+  tx += `🌐 *Lang* : ${langInfo.flag} ${langInfo.name}\n`;
+  tx += `\n`;
+  tx += `━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  tx += `📂 *${t('categories', lang)}*\n`;
+  tx += `━━━━━━━━━━━━━━━━━━━━━━━\n`;
 
   for (const cat of Object.values(CATEGORIES)) {
-    t += `${cat.color} ${cat.icon} *${cat.title}*  ·  ${cat.cmds.length} cmds\n`;
+    tx += `${cat.color} ${cat.icon} *${t(cat.titleKey, lang)}*  ·  ${cat.cmds.length}\n`;
   }
 
-  t += `\n`;
-  t += `💡 _Tap a button below to explore commands_\n`;
-  t += `\n`;
-  t += `> ♾️ *${botName}* • infinitymd.online`;
-  return t;
+  tx += `\n`;
+  tx += `💡 _${t('tapBtn', lang)}_\n`;
+  tx += `\n`;
+  tx += `> ♾️ *${botName}* • infinitymd.online`;
+  return tx;
 }
 
 // ─────────────────────────────────────────────
-//  SUBMENU TEXT BUILDER
+//  SUBMENU BUILDER
 // ─────────────────────────────────────────────
-function buildSubmenu(catKey, prefix) {
+function buildSubmenu(catKey, prefix, lang) {
   const cat = CATEGORIES[catKey];
   if (!cat) return null;
 
-  // Find the longest command name for alignment
+  const title  = t(cat.titleKey, lang);
   const maxLen = Math.max(...cat.cmds.map(n => (prefix + n).length));
 
-  let t = '';
-  t += `${cat.icon} *${cat.title.toUpperCase()}*\n`;
-  t += `▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n`;
+  let tx = '';
+  tx += `${cat.icon} *${title.toUpperCase()}*\n`;
+  tx += `▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n`;
 
   cat.cmds.forEach((name, i) => {
-    const cmd    = `${prefix}${name}`;
-    const pad    = ' '.repeat(maxLen - cmd.length + 2);
-    const label  = LABELS[name] || name;
-    const num    = String(i + 1).padStart(2, ' ');
-    t += `\`${num}.\` *${cmd}*${pad}· ${label}\n`;
+    const cmd   = `${prefix}${name}`;
+    const pad   = ' '.repeat(maxLen - cmd.length + 2);
+    const label = t(name, lang);
+    const num   = String(i + 1).padStart(2, ' ');
+    tx += `\`${num}.\` *${cmd}*${pad}· ${label}\n`;
   });
 
-  t += `▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n`;
-  t += `> ${cat.icon} *${cat.title}* • ${cat.cmds.length} commands`;
-  return t;
+  tx += `▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n`;
+  tx += `> ${cat.icon} *${title}* • ${cat.cmds.length} ${t('commands', lang)}`;
+  return tx;
 }
 
 // ─────────────────────────────────────────────
@@ -224,6 +159,7 @@ module.exports = {
                       || (Array.isArray(config.ownerName) ? config.ownerName[0] : config.ownerName)
                       || 'Owner';
 
+    const lang      = getLang(chatId);
     const senderNum = String(sender).split('@')[0] || '';
     const uptimeStr = formatUptime(process.uptime());
     const ramMB     = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
@@ -234,40 +170,37 @@ module.exports = {
     const usedCmd = String(extra?.commandName || '').toLowerCase().replace(prefix, '');
     const subArg  = args[0] ? String(args[0]).toLowerCase() : null;
 
-    // ── Resolve submenu key ──
+    // ── Resolve submenu key ──────────────────────────────────────────────────
     const submenuKey =
       ALIAS_MAP[usedCmd]  ||
       ALIAS_MAP[subArg]   ||
       (CATEGORIES[usedCmd] ? usedCmd : null) ||
       (CATEGORIES[subArg]  ? subArg  : null);
 
-    // ────────────────────────
-    //  SUBMENU
-    // ────────────────────────
+    // ── SUBMENU ──────────────────────────────────────────────────────────────
     if (submenuKey) {
       const cat  = CATEGORIES[submenuKey];
-      const text = buildSubmenu(submenuKey, prefix);
+      const text = buildSubmenu(submenuKey, prefix, lang);
       if (!text) return sock.sendMessage(chatId, { text: '❌ Unknown menu section.' }, { quoted: msg });
 
       return sendBtn(sock, chatId, {
         text,
-        footer: `${cat.icon} ${cat.title} • ${cat.cmds.length} commands`,
+        footer: `${cat.icon} ${t(cat.titleKey, lang)} • ${cat.cmds.length} ${t('commands', lang)}`,
         ...(image ? { image } : {}),
         buttons: [
-          btn('menu',        '🔙 Back to Menu'),
+          btn('menu',        t('backMenu', lang)),
           urlBtn('🌐 Website', 'https://infinitymd.online'),
         ],
       }, { quoted: msg });
     }
 
-    // ────────────────────────
-    //  MAIN MENU
-    // ────────────────────────
-    const text = buildMainMenu({ botName, owner, senderNum, uptimeStr, ramMB, prefix });
+    // ── MAIN MENU ────────────────────────────────────────────────────────────
+    const total = Object.values(CATEGORIES).reduce((n, c) => n + c.cmds.length, 0);
+    const text  = buildMainMenu({ botName, owner, senderNum, uptimeStr, ramMB, prefix, lang });
 
     return sendBtn(sock, chatId, {
       text,
-      footer: `♾️ ${botName} • ${Object.values(CATEGORIES).reduce((n, c) => n + c.cmds.length, 0)} commands ready`,
+      footer: `♾️ ${botName} • ${total} ${t('cmdReady', lang)}`,
       ...(image ? { image } : {}),
       buttons: MAIN_BUTTONS,
       mentions: [sender],
