@@ -357,7 +357,7 @@ async function sendFilmToChat(sock, chatId, msg, entry) {
     }, { quoted: msg });
   }
 
-  // ── Stream directly to chat ──
+  // ── Stream directly to chat (20-second hard limit) ──
   await react(sock, msg, '📥');
   const headRes = await tryHead(dlUrl);
   const contentLength = headRes.headers?.['content-length'] ? parseInt(headRes.headers['content-length']) : null;
@@ -371,10 +371,15 @@ async function sendFilmToChat(sock, chatId, msg, entry) {
     }, { quoted: msg });
   }
 
+  const SEND_TIMEOUT_MS = 20_000; // 20-second hard limit
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+
   try {
     const stream = await axios({
       method: 'GET', url: dlUrl, responseType: 'stream',
-      timeout: 10 * 60 * 1000,
+      timeout: SEND_TIMEOUT_MS,
+      signal: controller.signal,
       headers: { ...HEADERS, Accept: '*/*', Referer: BASE_URL },
       maxRedirects: 10,
     });
@@ -384,12 +389,15 @@ async function sendFilmToChat(sock, chatId, msg, entry) {
       document: stream.data, mimetype, fileName,
       caption: `🎬 *${title}*${label ? ` — ${label}` : ''}${sizeStr ? `\n📦 ${sizeStr}` : ''}\n\n> _Infinity MD Mini_`,
     }, { quoted: msg });
+    clearTimeout(timer);
     await react(sock, msg, '✅');
   } catch (err) {
-    console.error('[film] stream error:', err?.response?.status || err.message);
+    clearTimeout(timer);
+    const isTimeout = err.code === 'ERR_CANCELED' || err.code === 'ECONNABORTED' || err.name === 'AbortError';
+    console.error('[film] stream error:', isTimeout ? 'timeout (20s)' : (err?.response?.status || err.message));
     await react(sock, msg, '⚠️');
     return sock.sendMessage(chatId, {
-      text: `⚠️ *Couldn't send directly*\n\n📲 Use this link instead:\n${dlUrl}\n\n> 🎬 _Infinity MD Mini_`,
+      text: `⚠️ *${isTimeout ? 'Send timed out (>20s)' : "Couldn't send directly"}*\n\n📲 Use this link instead:\n${dlUrl}\n\n> 🎬 _Infinity MD Mini_`,
     }, { quoted: msg });
   }
 }

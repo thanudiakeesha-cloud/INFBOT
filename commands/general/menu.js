@@ -32,7 +32,7 @@ function pickMenuImage() {
 const CATEGORIES = {
   media: {
     icon: '📥', titleKey: 'cat_media', color: '🔵',
-    cmds: ['song','yt','tiktok','ytmp3','ytmp4','play','lyrics','film','film1'],
+    cmds: ['song','yt','tiktok','ytmp3','ytmp4','play','lyrics','film','film1','film3'],
   },
   admin: {
     icon: '🛡️', titleKey: 'cat_admin', color: '🟠',
