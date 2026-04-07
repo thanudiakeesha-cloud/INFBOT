@@ -1,6 +1,13 @@
 #!/bin/bash
-# Push to GitHub — run this script once from the Shell tab
-TOKEN="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"
+# Push to GitHub — run this from the Shell tab
+# Usage: bash push_to_github.sh <your_github_pat>
+
+TOKEN="$1"
+if [ -z "$TOKEN" ]; then
+  echo "Usage: bash push_to_github.sh <your_github_pat>"
+  exit 1
+fi
+
 REPO="https://thanudiakeesha-cloud:${TOKEN}@github.com/thanudiakeesha-cloud/INFBOT.git"
 
 rm -f .git/index.lock .git/config.lock
@@ -16,4 +23,6 @@ git commit -m "feat: language support, film3, menu redesign, connect manual" --a
 
 git push github HEAD:main --force
 
-echo "✅ Done! Check https://github.com/thanudiakeesha-cloud/INFBOT"
+git remote remove github
+
+echo "Done! Check https://github.com/thanudiakeesha-cloud/INFBOT"
