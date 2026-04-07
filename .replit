@@ -42,3 +42,6 @@ run = ["npm", "start"]
 
 [userenv.development]
 DEV_MODE = "false"
+
+[userenv.shared]
+GITHUB_PAT = "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"
