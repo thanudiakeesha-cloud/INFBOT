@@ -1,0 +1,83 @@
+npm ci
+
+npm warn config production Use `--omit=dev` instead.
+
+npm error code EUSAGE
+
+npm error
+npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.
+npm error
+npm error Missing: jsdom@29.0.2 from lock file
+npm error Missing: @asamuzakjp/css-color@5.1.6 from lock file
+npm error Missing: @asamuzakjp/dom-selector@7.0.8 from lock file
+npm error Missing: @bramus/specificity@2.4.2 from lock file
+npm error Missing: @csstools/css-syntax-patches-for-csstree@1.1.2 from lock file
+npm error Missing: @exodus/bytes@1.15.0 from lock file
+npm error Missing: css-tree@3.2.1 from lock file
+npm error Missing: data-urls@7.0.0 from lock file
+npm error Missing: decimal.js@10.6.0 from lock file
+npm error Missing: html-encoding-sniffer@6.0.0 from lock file
+npm error Missing: is-potential-custom-element-name@1.0.1 from lock file
+npm error Invalid: lock file's lru-cache@11.2.6 does not satisfy lru-cache@11.3.2
+npm error Missing: parse5@8.0.0 from lock file
+npm error Missing: saxes@6.0.0 from lock file
+npm error Missing: symbol-tree@3.2.4 from lock file
+npm error Missing: tough-cookie@6.0.1 from lock file
+npm error Invalid: lock file's undici@7.22.0 does not satisfy undici@7.24.7
+npm error Missing: w3c-xmlserializer@5.0.0 from lock file
+npm error Missing: webidl-conversions@8.0.1 from lock file
+npm error Missing: whatwg-mimetype@5.0.0 from lock file
+npm error Missing: whatwg-url@16.0.1 from lock file
+npm error Missing: xml-name-validator@5.0.0 from lock file
+npm error Missing: @csstools/css-calc@3.1.1 from lock file
+npm error Missing: @csstools/css-parser-algorithms@4.0.0 from lock file
+npm error Missing: @csstools/css-tokenizer@4.0.0 from lock file
+npm error Missing: @csstools/css-color-parser@4.0.2 from lock file
+npm error Missing: @asamuzakjp/nwsapi@2.3.9 from lock file
+npm error Missing: bidi-js@1.0.3 from lock file
+npm error Missing: @csstools/color-helpers@6.0.2 from lock file
+npm error Missing: require-from-string@2.0.2 from lock file
+npm error Missing: mdn-data@2.27.1 from lock file
+npm error Missing: source-map-js@1.2.1 from lock file
+npm error Missing: whatwg-mimetype@5.0.0 from lock file
+npm error Missing: request@2.88.2 from lock file
+npm error Missing: form-data@2.3.3 from lock file
+npm error Missing: har-validator@5.1.5 from lock file
+npm error Missing: http-signature@1.2.0 from lock file
+npm error Missing: mime-types@2.1.35 from lock file
+npm error Missing: oauth-sign@0.9.0 from lock file
+npm error Missing: qs@6.5.5 from lock file
+npm error Missing: tough-cookie@2.5.0 from lock file
+npm error Missing: uuid@3.4.0 from lock file
+npm error Missing: ajv@6.14.0 from lock file
+npm error Missing: har-schema@2.0.0 from lock file
+npm error Missing: fast-json-stable-stringify@2.1.0 from lock file
+npm error Missing: json-schema-traverse@0.4.1 from lock file
+npm error Missing: uri-js@4.4.1 from lock file
+npm error Missing: xmlchars@2.2.0 from lock file
+npm error Missing: tldts@7.0.28 from lock file
+npm error Missing: tldts-core@7.0.28 from lock file
+npm error Missing: tr46@6.0.0 from lock file
+npm error Missing: entities@6.0.1 from lock file
+npm error Missing: jsprim@1.4.2 from lock file
+npm error Missing: mime-db@1.52.0 from lock file
+npm error
+npm error Clean install a project
+npm error
+npm error Usage:
+npm error npm ci
+npm error
+npm error Options:
+npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+npm error [--no-bin-links] [--no-fund] [--dry-run]
+npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+npm error [-ws|--workspaces] [--include-workspace-root] [--install-links]
+npm error
+npm error aliases: clean-install, ic, install-clean, isntall-clean
+npm error
+npm error Run "npm help ci" for more info
+
+npm error A complete log of this run can be found in: /root/.npm/_logs/2026-04-07T17_36_34_978Z-debug-0.log
