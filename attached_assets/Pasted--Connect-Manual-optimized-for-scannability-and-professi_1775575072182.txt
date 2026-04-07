@@ -55,7 +55,7 @@ ${SEP}
 async function sendConnectManual(sock, ownerJid, { botName, botNum, prefix } = {}) {
   try {
     const text = buildManual({ botName, botNum, prefix });
-
+    
     await sock.sendMessage(ownerJid, { 
       text,
       contextInfo: {
