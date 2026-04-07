@@ -29,68 +29,68 @@ function pickMenuImage() {
 }
 
 // ─────────────────────────────────────────────
-//  COMMAND MANUALS
+//  COMMAND LABELS  (2–3 words max)
 // ─────────────────────────────────────────────
-const MANUALS = {
+const LABELS = {
   // Media
-  song:    { usage: '<song name>',         desc: 'Download a song as MP3 audio' },
-  yt:      { usage: '<query or URL>',      desc: 'Search YouTube and pick video / audio' },
-  tiktok:  { usage: '<TikTok URL>',        desc: 'Download TikTok video without watermark' },
-  ytmp3:   { usage: '<YouTube URL>',       desc: 'Download a YouTube video as MP3' },
-  ytmp4:   { usage: '<YouTube URL>',       desc: 'Download a YouTube video as MP4' },
-  play:    { usage: '<song name>',         desc: 'Instantly download the best song match' },
-  lyrics:  { usage: '<song name>',         desc: 'Get full song lyrics' },
-  film:    { usage: '<movie name>',        desc: 'Find movies with Sinhala subtitles' },
-  film1:   { usage: '<movie name>',        desc: 'Search SriHub for Sinhala subtitle films' },
+  song:         'Song download',
+  yt:           'YouTube search',
+  tiktok:       'TikTok download',
+  ytmp3:        'YouTube → MP3',
+  ytmp4:        'YouTube → MP4',
+  play:         'Quick play',
+  lyrics:       'Song lyrics',
+  film:         'Movie finder',
+  film1:        'SriHub movies',
   // Admin
-  antilink:{ usage: 'on/off [action]',     desc: 'Auto-remove users who post invite links' },
-  demote:  { usage: '@user',               desc: 'Remove admin from a member' },
-  goodbye: { usage: 'on/off',              desc: 'Farewell message when a member leaves' },
-  hidetag: { usage: '<message>',           desc: 'Silently mention all members' },
-  kick:    { usage: '@user',               desc: 'Remove a member from the group' },
-  lock:    { usage: '',                    desc: 'Lock group — only admins can send' },
-  members: { usage: '',                    desc: 'List all group members' },
-  mute:    { usage: '',                    desc: 'Mute group for non-admins' },
-  promote: { usage: '@user',               desc: 'Make a member a group admin' },
-  setname: { usage: '<new name>',          desc: 'Change the group name' },
-  tagall:  { usage: '<message>',           desc: 'Tag every member with a message' },
-  unlock:  { usage: '',                    desc: 'Unlock group so everyone can edit info' },
-  unmute:  { usage: '',                    desc: 'Open the group for all members' },
-  warn:    { usage: '@user [reason]',      desc: 'Warn a member — auto-kick at 3 warns' },
-  welcome: { usage: 'on/off',              desc: 'Welcome message when a member joins' },
+  antilink:     'Block links',
+  demote:       'Remove admin',
+  goodbye:      'Leave message',
+  hidetag:      'Silent mention',
+  kick:         'Kick member',
+  lock:         'Lock group',
+  members:      'List members',
+  mute:         'Mute group',
+  promote:      'Make admin',
+  setname:      'Rename group',
+  tagall:       'Tag everyone',
+  unlock:       'Unlock group',
+  unmute:       'Unmute group',
+  warn:         'Warn member',
+  welcome:      'Join message',
   // Owner
-  anticall:     { usage: 'on/off',         desc: 'Auto-reject anyone who calls the bot' },
-  antidelete:   { usage: 'on/off',         desc: 'Re-send deleted messages back to chat' },
-  antiviewonce: { usage: 'on/off',         desc: 'Save a copy of view-once media' },
-  autoreact:    { usage: 'on/off [mode]',  desc: 'Auto-react to messages with emojis' },
-  autoreply:    { usage: 'on/off',         desc: 'Enable AI-powered auto-replies' },
-  autostatus:   { usage: 'on/off',         desc: 'Auto-view and like all statuses' },
-  block:        { usage: '@user',          desc: 'Block a user from messaging the bot' },
-  broadcast:    { usage: '<message>',      desc: 'Send a message to all saved contacts' },
-  join:         { usage: '<group link>',   desc: 'Make bot join a group via invite link' },
-  leave:        { usage: '',               desc: 'Make the bot leave current group' },
-  mode:         { usage: 'public/private', desc: 'Set who can use the bot' },
-  settings:     { usage: '',               desc: 'View or change all bot settings' },
-  unblock:      { usage: '@user',          desc: 'Unblock a previously blocked user' },
-  // Tools / AI
-  ai:        { usage: '<question>',        desc: 'Chat with an AI assistant' },
-  gpt:       { usage: '<question>',        desc: 'Ask GPT and get a detailed response' },
-  calc:      { usage: '<expression>',      desc: 'Evaluate a math expression' },
-  sticker:   { usage: '(reply to image)',  desc: 'Convert image to a WhatsApp sticker' },
-  translate: { usage: '<lang> <text>',     desc: 'Translate text to any language' },
-  weather:   { usage: '<city>',            desc: 'Get current weather for any city' },
-  wiki:      { usage: '<topic>',           desc: 'Search Wikipedia for a quick summary' },
-  togif:     { usage: '(reply to video)',  desc: 'Convert video / sticker to GIF' },
-  toimg:     { usage: '(reply to sticker)',desc: 'Convert sticker to an image' },
-  tomp3:     { usage: '(reply to video)',  desc: 'Extract audio from a video as MP3' },
+  anticall:     'Block calls',
+  antidelete:   'Catch deletes',
+  antiviewonce: 'Save viewonce',
+  autoreact:    'Auto react',
+  autoreply:    'Auto reply',
+  autostatus:   'Auto status',
+  block:        'Block user',
+  broadcast:    'Mass message',
+  join:         'Join group',
+  leave:        'Leave group',
+  mode:         'Bot mode',
+  settings:     'Bot settings',
+  unblock:      'Unblock user',
+  // Tools & AI
+  ai:           'AI chat',
+  gpt:          'GPT chat',
+  calc:         'Calculator',
+  sticker:      'Make sticker',
+  translate:    'Translate text',
+  weather:      'Weather info',
+  wiki:         'Wikipedia',
+  togif:        'Video → GIF',
+  toimg:        'Sticker → image',
+  tomp3:        'Video → MP3',
   // General
-  fact:    { usage: '', desc: 'Get a random interesting fact' },
-  joke:    { usage: '', desc: 'Get a random joke' },
-  meme:    { usage: '', desc: 'Get a random meme image' },
-  alive:   { usage: '', desc: 'Check if bot is online and see uptime' },
-  ping:    { usage: '', desc: 'Check bot response speed' },
-  owner:   { usage: '', desc: 'Get the bot owner contact' },
-  runtime: { usage: '', desc: 'Show RAM, CPU, uptime and Node.js info' },
+  fact:         'Random fact',
+  joke:         'Random joke',
+  meme:         'Random meme',
+  alive:        'Bot status',
+  ping:         'Ping bot',
+  owner:        'Owner info',
+  runtime:      'System stats',
 };
 
 // ─────────────────────────────────────────────
@@ -175,23 +175,23 @@ function buildSubmenu(catKey, prefix) {
   const cat = CATEGORIES[catKey];
   if (!cat) return null;
 
-  const line = '━━━━━━━━━━━━━━━━━━━━━━━';
+  // Find the longest command name for alignment
+  const maxLen = Math.max(...cat.cmds.map(n => (prefix + n).length));
+
   let t = '';
-  t += `${line}\n`;
-  t += `${cat.icon}  *${cat.title.toUpperCase()}*\n`;
-  t += `${line}\n`;
-  t += `📦 *${cat.cmds.length} commands* available\n`;
-  t += `\n`;
+  t += `${cat.icon} *${cat.title.toUpperCase()}*\n`;
+  t += `▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n`;
 
-  for (const name of cat.cmds) {
-    const m = MANUALS[name] || { usage: '', desc: name };
-    const usageStr = m.usage ? ` ${m.usage}` : '';
-    t += `◈ *${prefix}${name}*${usageStr}\n`;
-    t += `   └ ${m.desc}\n`;
-    t += `\n`;
-  }
+  cat.cmds.forEach((name, i) => {
+    const cmd    = `${prefix}${name}`;
+    const pad    = ' '.repeat(maxLen - cmd.length + 2);
+    const label  = LABELS[name] || name;
+    const num    = String(i + 1).padStart(2, ' ');
+    t += `\`${num}.\` *${cmd}*${pad}· ${label}\n`;
+  });
 
-  t += `> ${cat.icon} *${cat.title}* • Infinity MD Mini`;
+  t += `▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n`;
+  t += `> ${cat.icon} *${cat.title}* • ${cat.cmds.length} commands`;
   return t;
 }
 
