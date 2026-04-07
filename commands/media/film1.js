@@ -42,37 +42,43 @@ function cleanTitle(raw) {
 }
 
 async function searchMovies(query) {
-  const html = await fetchHtml(`${BASE_URL}/movies`);
-  const $ = cheerio.load(html);
   const movies = [];
   const seen = new Set();
   const q = query.toLowerCase();
+  const MAX_PAGES = 3;
 
-  $('a[href^="/movies/"]').each((_, el) => {
-    if (movies.length >= 5) return false;
-    const $el = $(el);
-    const href = $el.attr('href') || '';
-    const id = (href.split('/movies/')[1] || '').split('?')[0].trim();
-    if (!id || seen.has(id)) return;
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    if (movies.length >= 5) break;
+    const url = page === 1 ? `${BASE_URL}/movies` : `${BASE_URL}/movies?page=${page}`;
+    let html;
+    try { html = await fetchHtml(url); } catch (_) { break; }
+    const $ = cheerio.load(html);
 
-    const alt = $el.find('img').first().attr('alt') || '';
-    if (!alt || alt === 'SriHub Logo') return;
+    let foundOnPage = 0;
+    $('a[href^="/movies/"]').each((_, el) => {
+      if (movies.length >= 5) return false;
+      const $el = $(el);
+      const href = $el.attr('href') || '';
+      const id = (href.split('/movies/')[1] || '').split('?')[0].trim();
+      if (!id || seen.has(id)) return;
 
-    const titleRaw = cleanTitle(alt);
-    if (!titleRaw) return;
+      const alt = $el.find('img').first().attr('alt') || '';
+      if (!alt || alt === 'SriHub Logo') return;
 
-    if (!titleRaw.toLowerCase().includes(q) && !alt.toLowerCase().includes(q)) return;
+      foundOnPage++;
+      const titleRaw = cleanTitle(alt);
+      if (!titleRaw) return;
+      if (!titleRaw.toLowerCase().includes(q) && !alt.toLowerCase().includes(q)) return;
 
-    seen.add(id);
+      seen.add(id);
+      const yearMatch = alt.match(/[\(\[]\s*(\d{4})\s*[\)\]]/);
+      const year = yearMatch ? yearMatch[1] : null;
+      const thumbnail = $el.find('img').first().attr('src') || null;
+      movies.push({ title: titleRaw, year, url: `${BASE_URL}${href}`, thumbnail, id });
+    });
 
-    const yearMatch = alt.match(/[\(\[]\s*(\d{4})\s*[\)\]]/);
-    const year = yearMatch ? yearMatch[1] : null;
-
-    const thumbnail = $el.find('img').first().attr('src') || null;
-    const movieUrl = `${BASE_URL}${href}`;
-
-    movies.push({ title: titleRaw, year, url: movieUrl, thumbnail, id });
-  });
+    if (foundOnPage === 0) break;
+  }
 
   return movies;
 }

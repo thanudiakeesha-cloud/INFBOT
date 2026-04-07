@@ -2,8 +2,8 @@ const cheerio = require('cheerio');
 const axios = require('axios');
 const { sendBtn, btn } = require('../../utils/sendBtn');
 
-// ── sinhalasub.lk scraper ─────────────────────────────────────────────────────
-const BASE_URL = 'https://sinhalasub.lk';
+// ── cinesubz.net scraper (sinhalasub.lk → moved here) ────────────────────────
+const BASE_URL = 'https://cinesubz.net';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const HEADERS = {
   'User-Agent': UA,
@@ -101,7 +101,7 @@ async function resolveLinksPage(url) {
       $('.wait-done a').first().attr('href') ||
       $('a.btn-success[href]').first().attr('href') ||
       $('a[href*="pixeldrain"], a[href*="usersdrive"], a[href*="terabox"], a[href*="drive.google"], a[href*="mega.nz"]').first().attr('href');
-    if (href && href.startsWith('http') && !href.includes('sinhalasub.lk')) return href;
+    if (href && href.startsWith('http') && !href.includes('cinesubz.net') && !href.includes('cinesubz.lk') && !href.includes('sinhalasub.lk')) return href;
   } catch (_) {}
   return url;
 }
@@ -152,10 +152,41 @@ async function toDirectUrl(url) {
   return { url, method: 'link' };
 }
 
-/** Full resolution chain: sinhalasub link page → host page → direct URL */
+/** Follow a cinesubz.net /api-.../ redirector → get the final hosting URL */
+async function followCinesubzApi(url) {
+  try {
+    const res = await axios.get(url, {
+      headers: { ...HEADERS, Referer: BASE_URL },
+      timeout: 12000,
+      maxRedirects: 0,
+      validateStatus: s => s < 400 || s === 301 || s === 302 || s === 307 || s === 308,
+    });
+    const loc = res.headers?.location;
+    if (loc && loc.startsWith('http') && !loc.includes('cinesubz')) return loc;
+    // Also parse the HTML body for a redirect link
+    const $ = cheerio.load(res.data || '');
+    const href =
+      $('a[href*="terabox"], a[href*="pixeldrain"], a[href*="usersdrive"], a[href*="drive.google"], a[href*="mega.nz"]').first().attr('href') ||
+      $('meta[http-equiv="refresh"]').attr('content')?.match(/url=(.+)/i)?.[1] ||
+      $('a.btn[href]').first().attr('href');
+    if (href && href.startsWith('http') && !href.includes('cinesubz')) return href;
+  } catch (e) {
+    // May throw on redirect — check the redirect location
+    const loc = e?.response?.headers?.location;
+    if (loc && loc.startsWith('http') && !loc.includes('cinesubz')) return loc;
+  }
+  return url;
+}
+
+/** Full resolution chain: cinesubz API redirector → host page → direct URL */
 async function resolveDownloadUrl(startUrl) {
   let url = startUrl;
-  if (url.includes('sinhalasub.lk/links/')) url = await resolveLinksPage(url);
+  // Follow cinesubz /api-.../ redirectors
+  if (url.includes('cinesubz.net/api-') || url.includes('cinesubz.lk/api-')) {
+    url = await followCinesubzApi(url);
+  }
+  // Follow old-style /links/ pages
+  if (url.includes('/links/')) url = await resolveLinksPage(url);
   return toDirectUrl(url);
 }
 
@@ -204,7 +235,7 @@ async function getMovieDetails(pageUrl) {
   const $ = cheerio.load(html);
 
   const rawTitle = $('title').first().text()
-    .replace(/\s*[–|]\s*SinhalaSub\.LK.*$/i, '')
+    .replace(/\s*[–|]\s*(?:SinhalaSub\.LK|Cinesubz\.(?:net|lk)).*$/i, '')
     .replace(/\s*Sinhala Subtitles.*$/i, '')
     .replace(/\s*\|.*$/, '').trim();
   const title = rawTitle || 'Unknown Title';
@@ -222,32 +253,51 @@ async function getMovieDetails(pageUrl) {
 
   const qualities = [];
 
-  // Primary: structured links table
-  $('#links .links-table tbody tr').each((_, row) => {
-    const $row = $(row);
-    const $a   = $row.find('a[href]').first();
+  // Primary: new cinesubz.net movie-download-button format
+  $('#links .movie-download-link-item a.movie-download-button[href]').each((_, el) => {
+    const $a  = $(el);
     const href = $a.attr('href') || '';
     if (!href || !href.startsWith('http')) return;
 
-    const qualityText = $row.find('.quality, td:nth-child(2)').first().text().trim();
-    const sizeText    = $row.find('td:nth-child(3) span, td:nth-child(3)').first().text().trim();
-    const serverName  = $a.text().trim();
-    const label = qualityText ? `${serverName} - ${qualityText}` : serverName || 'Download';
+    const meta  = $a.find('.movie-download-meta').text().trim();
+    const type  = $a.find('.movie-download-type').text().trim();
+    // meta format: "WEBRip HD 720p • 500 MB • English"
+    const parts = meta.split('•').map(s => s.trim());
+    const quality = parts[0] || type || 'Download';
+    const size    = parts[1] || null;
+    const label   = quality;
 
     if (!qualities.find(q => q.url === href)) {
-      qualities.push({ label, url: href, size: sizeText || null });
+      qualities.push({ label, url: href, size });
     }
   });
 
-  // Fallback: any /links/ href on the page
+  // Fallback A: old-style links table rows
   if (qualities.length === 0) {
-    $('.links-table a[href], .content-links a[href], a[href*="/links/"]').each((_, el) => {
-      const $a   = $(el);
+    $('#links .links-table tbody tr').each((_, row) => {
+      const $row = $(row);
+      const $a   = $row.find('a[href]').first();
+      const href = $a.attr('href') || '';
+      if (!href || !href.startsWith('http')) return;
+      const qualityText = $row.find('.quality, td:nth-child(2)').first().text().trim();
+      const sizeText    = $row.find('td:nth-child(3) span, td:nth-child(3)').first().text().trim();
+      const serverName  = $a.text().trim();
+      const label = qualityText ? `${serverName} - ${qualityText}` : serverName || 'Download';
+      if (!qualities.find(q => q.url === href)) {
+        qualities.push({ label, url: href, size: sizeText || null });
+      }
+    });
+  }
+
+  // Fallback B: any link under #links section
+  if (qualities.length === 0) {
+    $('#links a[href]').each((_, el) => {
+      const $a  = $(el);
       const href = ($a.attr('href') || '').startsWith('http')
         ? $a.attr('href')
         : BASE_URL + ($a.attr('href') || '');
       const text = $a.text().trim();
-      if (href && text && !qualities.find(q => q.url === href)) {
+      if (href && text && !href.includes('#') && !qualities.find(q => q.url === href)) {
         qualities.push({ label: text, url: href, size: null });
       }
     });
@@ -431,7 +481,7 @@ module.exports = {
     // ── film: search ─────────────────────────────────────────────────────────
     if (!args.length) {
       return sock.sendMessage(chatId, {
-        text: `🎬 *Film Downloader*\n\nUsage: \`${prefix}film <movie name>\`\nExample: \`${prefix}film Avengers\`\n\n_Searches SinhalaSub.lk for movies with Sinhala subtitles._`,
+        text: `🎬 *Film Downloader*\n\nUsage: \`${prefix}film <movie name>\`\nExample: \`${prefix}film Avengers\`\n\n_Searches Cinesubz (formerly SinhalaSub.lk) for movies with Sinhala subtitles._`,
       }, { quoted: msg });
     }
 
@@ -471,7 +521,7 @@ module.exports = {
 
     const pickBtns = results.map((m, i) => btn(`film_pick_${i}`, `${i + 1}. ${m.title.slice(0, 20)}`));
     const thumb    = results.find(m => m.thumbnail)?.thumbnail;
-    const payload  = { text, footer: '♾️ Infinity MD Mini • SinhalaSub', buttons: pickBtns };
+    const payload  = { text, footer: '♾️ Infinity MD Mini • Cinesubz', buttons: pickBtns };
     if (thumb) payload.image = { url: thumb };
     return sendBtn(sock, chatId, payload, { quoted: msg });
   },
