@@ -78,13 +78,15 @@ function buildMainMenu({ botName, owner, senderNum, uptimeStr, ramMB, prefix, la
   let tx = `*🤖 ${botName}*\n`;
   tx += `┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n`;
   tx += `👤 @${senderNum}\n`;
-  tx += `👑 ${owner}   ⌨️ \`${prefix}\`\n`;
-  tx += `📦 ${total} cmds   ⏱️ ${uptimeStr}\n`;
-  tx += `💾 ${ramMB}MB   🌐 ${langFlg}\n`;
+  tx += `👑 Owner: ${owner}\n`;
+  tx += `⌨️ Prefix: \`${prefix}\`\n`;
+  tx += `📦 ${total} commands\n`;
+  tx += `⏱️ Uptime: ${uptimeStr}\n`;
+  tx += `💾 RAM: ${ramMB}MB  🌐 ${langFlg}\n`;
   tx += `┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n`;
 
   for (const cat of Object.values(CATEGORIES)) {
-    tx += `${cat.icon} *${t(cat.titleKey, lang)}* · ${cat.cmds.length}\n`;
+    tx += `${cat.icon} *${t(cat.titleKey, lang)}* — ${cat.cmds.length} cmds\n`;
   }
 
   tx += `\n💡 _${t('tapBtn', lang)}_`;
@@ -98,18 +100,16 @@ function buildSubmenu(catKey, prefix, lang) {
   const cat = CATEGORIES[catKey];
   if (!cat) return null;
 
-  const title  = t(cat.titleKey, lang);
-  const maxLen = Math.max(...cat.cmds.map(n => (prefix + n).length));
+  const title = t(cat.titleKey, lang);
 
   let tx = `${cat.icon} *${title}*\n`;
   tx += `┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n`;
 
   cat.cmds.forEach((name, i) => {
     const cmd   = `${prefix}${name}`;
-    const pad   = ' '.repeat(maxLen - cmd.length + 1);
     const label = t(name, lang);
-    const num   = String(i + 1).padStart(2, ' ');
-    tx += `\`${num}.\` *${cmd}*${pad}· ${label}\n`;
+    const num   = i + 1;
+    tx += `${num}. *${cmd}* — ${label}\n`;
   });
 
   tx += `┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n`;

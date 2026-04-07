@@ -125,8 +125,9 @@ module.exports = {
           `❌ *Could not retrieve the status media.*\n\n` +
           `This can happen if:\n` +
           `• The status was posted before the bot started\n` +
-          `• Auto-status view is disabled\n\n` +
-          `💡 Enable \`${prefix}autostatus on\` so the bot caches statuses automatically.`,
+          `• Auto-Status view is disabled\n\n` +
+          `💡 Make sure \`${prefix}autostatus on\` is enabled so the bot caches statuses as they come in.\n` +
+          `Then view the status again and reply with \`${prefix}save\`.`,
       }, { quoted: msg });
 
     } catch (err) {

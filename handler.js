@@ -416,7 +416,8 @@ const handleMessage = async (sock, msg) => {
       const settings = database.getGlobalSettingsSync();
 
       const statusSaveMode = settings.statusSave; // false | 'on' | true | 'heart'
-      const statusSaveActive = statusSaveMode && statusSaveMode !== false;
+      // Also activate caching when autoStatus is on (so .save command works automatically)
+      const statusSaveActive = (statusSaveMode && statusSaveMode !== false) || settings.autoStatus;
       const HEART_EMOJIS = ['❤', '❤️', '🩷', '🧡', '♥'];
 
       function reactQualifies(emoji) {
