@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { sendConnectManual } = require('./utils/connectManual');
 
 /**
  * Infinity MD - Render Web Service Stable Entry
@@ -277,6 +278,11 @@ async function connectSession(id, sessionData) {
                 `_Your bot is now live and ready to use! 🚀_`;
               await newSock.sendMessage(ownerJid, { text: notifMsg });
               console.log(`📲 Owner notified for new session ${id}`);
+
+              // Send bilingual bot manual
+              const prefix = sessionData.settings?.prefix || config.prefix || '.';
+              await sendConnectManual(newSock, ownerJid, { botName, botNum, prefix });
+              console.log(`📖 Bot manual sent for session ${id}`);
             }
           } catch (e) {
             console.error(`Failed to notify owner for session ${id}:`, e.message);
