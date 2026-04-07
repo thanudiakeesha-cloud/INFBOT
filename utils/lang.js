@@ -95,6 +95,7 @@ const STRINGS = {
     owner:        'Owner info',
     runtime:      'System stats',
     lang:         'Change language',
+    save:         'Save status media',
   },
 
   si: {
@@ -178,6 +179,7 @@ const STRINGS = {
     owner:        'හිමිකරු තොරතුරු',
     runtime:      'පද්ධති සංඛ්‍යා',
     lang:         'භාෂාව වෙනස් කරන්න',
+    save:         'Status සුරකින්න',
   },
 };
 

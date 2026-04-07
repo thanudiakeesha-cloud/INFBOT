@@ -876,6 +876,16 @@ const handleMessage = async (sock, msg) => {
       'film1_pick_2': `${p}film1sel 2`,
       'film1_pick_3': `${p}film1sel 3`,
       'film1_pick_4': `${p}film1sel 4`,
+      // Film3 (SinhalaSub.lk via DDG) — search, pick
+      'film3':        `${p}film3`,
+      'film3sel_0':   `${p}film3sel 0`,
+      'film3sel_1':   `${p}film3sel 1`,
+      'film3sel_2':   `${p}film3sel 2`,
+      'film3sel_3':   `${p}film3sel 3`,
+      'film3sel_4':   `${p}film3sel 4`,
+      // Language switcher buttons
+      'lang en':      `${p}lang en`,
+      'lang si':      `${p}lang si`,
       // TikTok search selections
       'tiktok_pick_0': `${p}tiktok pick 0`,
       'tiktok_pick_1': `${p}tiktok pick 1`,
