@@ -877,13 +877,18 @@ const handleMessage = async (sock, msg) => {
       'film1_pick_2': `${p}film1sel 2`,
       'film1_pick_3': `${p}film1sel 3`,
       'film1_pick_4': `${p}film1sel 4`,
-      // Film3 (SinhalaSub.lk via DDG) — search, pick
+      // Film3 (SinhalaSub.lk direct scraper) — search, pick, download
       'film3':        `${p}film3`,
       'film3sel_0':   `${p}film3sel 0`,
       'film3sel_1':   `${p}film3sel 1`,
       'film3sel_2':   `${p}film3sel 2`,
       'film3sel_3':   `${p}film3sel 3`,
       'film3sel_4':   `${p}film3sel 4`,
+      'film3dl_0':    `${p}film3dl 0`,
+      'film3dl_1':    `${p}film3dl 1`,
+      'film3dl_2':    `${p}film3dl 2`,
+      'film3dl_3':    `${p}film3dl 3`,
+      'film3dl_4':    `${p}film3dl 4`,
       // Language switcher buttons
       'lang en':      `${p}lang en`,
       'lang si':      `${p}lang si`,
