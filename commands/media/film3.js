@@ -1,20 +1,12 @@
 /**
- * .film3 — SinhalaSub.lk scraper (ported from TeraBOX-Movies project)
- *
- * Flow:
- *   1. .film3 <query>   → scrape sinhalasub.lk/?s=QUERY, list movies
- *   2. .film3sel <idx>  → scrape movie detail page, list quality options
- *   3. .film3dl <idx>   → scrape /links/<code>/ to resolve final download URL
- *
- * Selectors (from TeraBOX-Movies scraper.ts):
- *   Search:  .display-item, .module-item, .ml-item
- *   Details: #links .links-table tbody tr  (fallback: a[href*='/links/'])
- *   Resolve: .wait-done a:not(.prev-lnk)
+ * .film3 — SinhalaSub.lk scraper
+ * Sends the actual movie file as a document instead of just a link.
  */
 
 const axios   = require('axios');
 const cheerio = require('cheerio');
 const { sendBtn, btn, urlBtn } = require('../../utils/sendBtn');
+const { downloadAndSend } = require('../../utils/filmDownloader');
 
 const BASE_URL = 'https://sinhalasub.lk';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -161,7 +153,7 @@ async function getMovieDetails(pageUrl) {
   return { title, thumbnail, description, year, language, genre, qualities };
 }
 
-async function resolveDownload(linkUrl) {
+async function resolveDownloadUrl(linkUrl) {
   if (!linkUrl.includes('sinhalasub.lk/links/')) {
     return linkUrl;
   }
@@ -191,7 +183,7 @@ module.exports = {
     const prefix  = extra?.prefix || '.';
     const cmdName = String(extra?.commandName || '').toLowerCase().replace(prefix, '');
 
-    // ── Step 3: Resolve download link ─────────────────────────────────────
+    // ── Step 3: Download & send movie file ──────────────────────────────────
     if (cmdName === 'film3dl') {
       const idx     = parseInt(args[0], 10);
       const session = detailSessions.get(chatId);
@@ -202,26 +194,20 @@ module.exports = {
       }
 
       const entry = session[idx];
-      await react(sock, msg, '🔍');
+      await react(sock, msg, '⬇️');
 
-      let finalUrl = entry.url;
-      try {
-        finalUrl = await resolveDownload(entry.url);
-      } catch (_) {}
+      // Resolve intermediate link page first
+      let resolvedUrl = entry.url;
+      try { resolvedUrl = await resolveDownloadUrl(entry.url); } catch (_) {}
 
-      await react(sock, msg, '✅');
-
-      return sendBtn(sock, chatId, {
-        text: `📥 *${entry.movieTitle}*\n\n🎬 *Quality:* ${entry.label}${entry.size ? ` — ${entry.size}` : ''}\n\n🔗 Tap the button to download:\n\n> 🎬 _Infinity MD Mini • SinhalaSub.lk_`,
-        footer: '♾️ Infinity MD Mini • SinhalaSub.lk',
-        buttons: [
-          urlBtn('⬇️ Download Now', finalUrl),
-          btn('film3', '🔍 New Search'),
-        ],
-      }, { quoted: msg });
+      return downloadAndSend(sock, chatId, msg, {
+        title: entry.movieTitle,
+        quality: `${entry.label}${entry.size ? ` — ${entry.size}` : ''}`,
+        downloadUrl: resolvedUrl,
+      });
     }
 
-    // ── Step 2: Show movie details & quality options ───────────────────────
+    // ── Step 2: Show movie details & quality options ─────────────────────────
     if (cmdName === 'film3sel' || cmdName === 'film3select') {
       const idx     = parseInt(args[0], 10);
       const session = searchSessions.get(chatId);
@@ -267,21 +253,21 @@ module.exports = {
       }));
       setTTL(detailSessions, chatId, dlSession);
 
-      let text = `🎬 *${details.title}*\n`;
-      text += `━━━━━━━━━━━━━━━━━━━━\n`;
-      if (details.year)     text += `📅 *Year:* ${details.year}\n`;
-      if (details.language) text += `🗣️ *Language:* ${details.language}\n`;
-      if (details.genre)    text += `🎭 *Genre:* ${details.genre}\n`;
+      let text = `╔══════════════════════╗\n`;
+      text += `║ 🎬 *${details.title.slice(0, 28)}*\n`;
+      text += `╚══════════════════════╝\n`;
+      if (details.year)     text += `│ 📅 *Year:* ${details.year}\n`;
+      if (details.language) text += `│ 🗣️ *Language:* ${details.language}\n`;
+      if (details.genre)    text += `│ 🎭 *Genre:* ${details.genre}\n`;
       if (details.description) {
-        const d = details.description.length > 250 ? details.description.slice(0, 247) + '…' : details.description;
-        text += `\n📖 *Story:*\n${d}\n`;
+        const d = details.description.length > 200 ? details.description.slice(0, 197) + '…' : details.description;
+        text += `│\n│ 📖 *Story:*\n│ ${d}\n`;
       }
-      text += `\n━━━━━━━━━━━━━━━━━━━━\n`;
-      text += `📥 *Choose a download quality:*\n\n`;
+      text += `\n📥 *Choose download quality:*\n\n`;
       dlSession.forEach((q, i) => {
-        text += `*${i + 1}.* ${q.label}${q.size ? ` — ${q.size}` : ''}\n`;
+        text += `│ *${i + 1}.* ${q.label}${q.size ? ` — ${q.size}` : ''}\n`;
       });
-      text += `\n💡 _Tap a button to get the download link_\n> 🎬 _Infinity MD Mini_`;
+      text += `\n> 💡 _Bot will download & send the full file_\n> 🎬 _Infinity MD Mini_`;
 
       const dlBtns = dlSession.map((q, i) => btn(`film3dl_${i}`, `⬇️ ${q.label.slice(0, 20)}`));
       dlBtns.push(btn('film3', '🔍 New Search'));
@@ -325,15 +311,17 @@ module.exports = {
     await react(sock, msg, '✅');
     setTTL(searchSessions, chatId, results);
 
-    let text = `🎬 *SinhalaSub.lk Results*\n🔍 _"${query}"_ — ${results.length} found\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+    let text = `╔══════════════════════╗\n`;
+    text += `║ 🎬 *SinhalaSub Results*\n`;
+    text += `╚══════════════════════╝\n\n`;
+    text += `🔍 _"${query}"_ — ${results.length} found\n\n`;
     results.forEach((m, i) => {
-      text += `*${i + 1}.* ${m.title}`;
+      text += `│ *${i + 1}.* ${m.title}`;
       if (m.quality) text += ` [${m.quality}]`;
       if (m.year)    text += ` (${m.year})`;
       text += `\n`;
     });
-    text += `\n💡 *Tap a button to see download options*\n> 🎬 _Infinity MD Mini • SinhalaSub.lk_`;
+    text += `\n> 💡 _Tap a button to see download options_\n> 🎬 _Infinity MD Mini • SinhalaSub.lk_`;
 
     const pickBtns = results.map((m, i) =>
       btn(`film3sel_${i}`, `${i + 1}. ${m.title.slice(0, 22)}`)

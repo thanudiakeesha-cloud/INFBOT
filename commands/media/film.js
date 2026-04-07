@@ -1,12 +1,12 @@
 /**
  * .film — Cinesubz.net direct scraper
- * Search: /?s=QUERY → .item-box items with a[href][title] + img.mli-thumb
- * Movie page: a.movie-download-button[href] + .movie-download-meta
+ * Sends the actual movie file as a document instead of just a link.
  */
 
 const axios   = require('axios');
 const cheerio = require('cheerio');
 const { sendBtn, btn, urlBtn } = require('../../utils/sendBtn');
+const { downloadAndSend } = require('../../utils/filmDownloader');
 
 const BASE_URL = 'https://cinesubz.net';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -108,6 +108,7 @@ module.exports = {
     const prefix  = extra?.prefix || '.';
     const cmdName = String(extra?.commandName || '').toLowerCase().replace(prefix, '');
 
+    // ── Step 3: Download & send movie file ──────────────────────────────────
     if (cmdName === 'filmdown') {
       const idx     = parseInt(args[0], 10);
       const session = filmDownSessions.get(chatId);
@@ -117,17 +118,16 @@ module.exports = {
         }, { quoted: msg });
       }
       const dl = session[idx];
-      await react(sock, msg, '✅');
-      return sendBtn(sock, chatId, {
-        text: `📥 *${dl.title}*\n\n🎬 *Quality:* ${dl.label}\n\n🔗 Tap the button below to open the download page:\n\n> 🎬 _Infinity MD Mini • Cinesubz_`,
-        footer: '♾️ Infinity MD Mini • Cinesubz',
-        buttons: [
-          urlBtn('⬇️ Download Now', dl.url),
-          btn('film', '🔍 New Search'),
-        ],
-      }, { quoted: msg });
+      await react(sock, msg, '⬇️');
+
+      return downloadAndSend(sock, chatId, msg, {
+        title: dl.title,
+        quality: dl.label,
+        downloadUrl: dl.url,
+      });
     }
 
+    // ── Step 2: Show quality options ─────────────────────────────────────────
     if (cmdName === 'filmsel' || cmdName === 'filmselect') {
       const idx     = parseInt(args[0], 10);
       const session = filmSessions.get(chatId);
@@ -166,13 +166,14 @@ module.exports = {
       }));
       setTTL(filmDownSessions, chatId, dlSession);
 
-      let text = `🎬 *${details.title}*\n`;
-      text += `━━━━━━━━━━━━━━━━━━━━\n`;
+      let text = `╔══════════════════════╗\n`;
+      text += `║ 🎬 *${details.title.slice(0, 30)}*\n`;
+      text += `╚══════════════════════╝\n\n`;
       text += `📥 *Choose a download quality:*\n\n`;
       dlSession.forEach((q, i) => {
-        text += `*${i + 1}.* ${q.label}\n`;
+        text += `│ *${i + 1}.* ${q.label}\n`;
       });
-      text += `\n💡 _Tap a button to get the download link_\n> 🎬 _Infinity MD Mini_`;
+      text += `\n> 💡 _Bot will download & send the file directly_\n> 🎬 _Infinity MD Mini_`;
 
       const dlBtns = dlSession.map((q, i) => btn(`filmdown_${i}`, `⬇️ ${q.label.slice(0, 20)}`));
       dlBtns.push(btn('film', '🔍 New Search'));
@@ -182,6 +183,7 @@ module.exports = {
       return sendBtn(sock, chatId, payload, { quoted: msg });
     }
 
+    // ── Step 1: Search ────────────────────────────────────────────────────────
     if (!args.length) {
       return sock.sendMessage(chatId, {
         text: `🎬 *Film Downloader — Cinesubz*\n\nUsage: \`${prefix}film <movie name>\`\nExample: \`${prefix}film Avengers\`\n\n_Searches Cinesubz for movies with Sinhala subtitles._`,
@@ -212,12 +214,14 @@ module.exports = {
     await react(sock, msg, '✅');
     setTTL(filmSessions, chatId, results);
 
-    let text = `🎬 *Cinesubz Film Results*\n🔍 _"${query}"_ — ${results.length} found\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+    let text = `╔══════════════════════╗\n`;
+    text += `║ 🎬 *Cinesubz Results*\n`;
+    text += `╚══════════════════════╝\n\n`;
+    text += `🔍 _"${query}"_ — ${results.length} found\n\n`;
     results.forEach((m, i) => {
-      text += `*${i + 1}.* ${m.title}\n`;
+      text += `│ *${i + 1}.* ${m.title}\n`;
     });
-    text += `\n💡 *Tap a button to select a movie*\n> 🎬 _Infinity MD Mini_`;
+    text += `\n> 💡 _Tap a button to select a movie_\n> 🎬 _Infinity MD Mini_`;
 
     const pickBtns = results.map((m, i) => btn(`film_pick_${i}`, `${i + 1}. ${m.title.slice(0, 20)}`));
     const thumb    = results.find(m => m.thumbnail)?.thumbnail;

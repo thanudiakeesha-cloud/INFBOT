@@ -16,6 +16,11 @@ module.exports = {
       const prefix   = sock?._customConfig?.settings?.prefix || config.prefix || '.';
       const settings = database.getGlobalSettings?.() || {};
 
+      // Helper to silently delete the .save command message
+      const deleteSaveMsg = async () => {
+        try { await sock.sendMessage(chatId, { delete: msg.key }); } catch (_) {}
+      };
+
       // ── Find quoted context ──────────────────────────────────────────────────
       const ctx = msg?.message?.extendedTextMessage?.contextInfo
                || msg?.message?.imageMessage?.contextInfo
@@ -65,13 +70,12 @@ module.exports = {
 
         if (statusStore.markSaved) statusStore.markSaved(quotedId);
 
-        return sock.sendMessage(chatId, {
-          text: `✅ *Status saved!*\nSent to your saved messages.`,
-        }, { quoted: msg });
+        // Delete the .save command message to clear evidence
+        await deleteSaveMsg();
+        return;
       }
 
       // ── Try downloading via sock (if bot viewed the status live) ─────────────
-      // Attempt to re-download the status message content
       const from = ctx.remoteJid || 'status@broadcast';
 
       if (ctx.quotedMessage) {
@@ -110,9 +114,9 @@ module.exports = {
               mentions: [statusSender].filter(Boolean),
             });
 
-            return sock.sendMessage(chatId, {
-              text: `✅ *Status saved!*\nSent to your saved messages.`,
-            }, { quoted: msg });
+            // Delete the .save command message to clear evidence
+            await deleteSaveMsg();
+            return;
           } catch (dlErr) {
             console.error('[save] download error:', dlErr.message);
           }

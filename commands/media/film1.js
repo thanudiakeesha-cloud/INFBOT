@@ -1,13 +1,12 @@
 /**
  * .film1 — SriHub.store direct scraper
- * Searches by browsing paginated /movies?page=N (20 per page) and filtering by title.
- * Movie detail page: /movies/ID?slug — shows thumbnail, title
- * Download page: /download/ID — user opens to get actual download
+ * Sends the actual movie file as a document instead of just a link.
  */
 
 const axios   = require('axios');
 const cheerio = require('cheerio');
 const { sendBtn, btn, urlBtn } = require('../../utils/sendBtn');
+const { downloadAndSend } = require('../../utils/filmDownloader');
 
 const BASE_URL = 'https://srihub.store';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -100,7 +99,7 @@ module.exports = {
   name: 'film1',
   aliases: ['film1sel', 'film1select'],
   category: 'media',
-  description: 'Search and get movie download links from SriHub (Sinhala subtitles)',
+  description: 'Search and download movies from SriHub (Sinhala subtitles)',
   usage: 'film1 <movie name>',
 
   async execute(sock, msg, args = [], extra = {}) {
@@ -108,6 +107,7 @@ module.exports = {
     const prefix  = extra?.prefix || '.';
     const cmdName = String(extra?.commandName || '').toLowerCase().replace(prefix, '');
 
+    // ── Step 2: Download & send movie file ──────────────────────────────────
     if (cmdName === 'film1sel' || cmdName === 'film1select') {
       const idx     = parseInt(args[0], 10);
       const session = film1Sessions.get(chatId);
@@ -118,27 +118,16 @@ module.exports = {
       }
 
       const movie = session[idx];
-      await react(sock, msg, '✅');
+      await react(sock, msg, '⬇️');
 
-      let text = `🎬 *${movie.title}*\n`;
-      text += `━━━━━━━━━━━━━━━━━━━━\n`;
-      text += `📥 *Tap the button below to open the download page*\n\n`;
-      text += `🔗 Download Page:\n${movie.downloadUrl}\n\n`;
-      text += `> 🎬 _Infinity MD Mini • SriHub_`;
-
-      const payload = {
-        text,
-        footer: '♾️ Infinity MD Mini • SriHub',
-        buttons: [
-          urlBtn('⬇️ Download Page', movie.downloadUrl),
-          urlBtn('🌐 Movie Page', movie.url),
-          btn('film1', '🔍 New Search'),
-        ],
-      };
-      if (movie.thumbnail) payload.image = { url: movie.thumbnail };
-      return sendBtn(sock, chatId, payload, { quoted: msg });
+      return downloadAndSend(sock, chatId, msg, {
+        title: movie.title,
+        quality: 'Best Available',
+        downloadUrl: movie.downloadUrl,
+      });
     }
 
+    // ── Step 1: Search ────────────────────────────────────────────────────────
     if (!args.length) {
       return sock.sendMessage(chatId, {
         text: `🎬 *Film Search — SriHub*\n\nUsage: \`${prefix}film1 <movie name>\`\nExample: \`${prefix}film1 Avengers\`\n\n_Searches SriHub.store for the latest movies with Sinhala subtitles._`,
@@ -169,12 +158,14 @@ module.exports = {
     await react(sock, msg, '✅');
     setTTL(film1Sessions, chatId, results);
 
-    let text = `🎬 *SriHub Film Results*\n🔍 _"${query}"_ — ${results.length} found\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+    let text = `╔══════════════════════╗\n`;
+    text += `║ 🎬 *SriHub Results*\n`;
+    text += `╚══════════════════════╝\n\n`;
+    text += `🔍 _"${query}"_ — ${results.length} found\n\n`;
     results.forEach((m, i) => {
-      text += `*${i + 1}.* ${m.title}\n`;
+      text += `│ *${i + 1}.* ${m.title}\n`;
     });
-    text += `\n💡 *Tap a button to get the download link*\n> 🎬 _Infinity MD Mini_`;
+    text += `\n> 💡 _Bot will download & send the file directly_\n> 🎬 _Infinity MD Mini_`;
 
     const pickBtns = results.map((m, i) => btn(`film1_pick_${i}`, `${i + 1}. ${m.title.slice(0, 20)}`));
     const thumb    = results.find(m => m.thumbnail)?.thumbnail;

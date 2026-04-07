@@ -4,14 +4,13 @@ const path    = require('path');
 const { sendBtn, btn, urlBtn } = require('../../utils/sendBtn');
 const { getLang, t, LANGUAGES } = require('../../utils/lang');
 
-// ─────────────────────────────────────────────
-//  HELPERS
-// ─────────────────────────────────────────────
 function formatUptime(sec) {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = Math.floor(sec % 60);
-  return `${h}h ${m}m ${s}s`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 function pickMenuImage() {
@@ -26,9 +25,6 @@ function pickMenuImage() {
   return fs.existsSync(fallback) ? fallback : null;
 }
 
-// ─────────────────────────────────────────────
-//  CATEGORIES
-// ─────────────────────────────────────────────
 const CATEGORIES = {
   media: {
     icon: '📥', titleKey: 'cat_media', color: '🔵',
@@ -68,58 +64,66 @@ const MAIN_BUTTONS = [
   btn('generalmenu', '🧭 General'),
 ];
 
-// ─────────────────────────────────────────────
-//  MAIN MENU  (mobile-friendly compact layout)
-// ─────────────────────────────────────────────
+const CAT_EMOJIS = { media: '🎬', admin: '⚔️', owner: '👑', tools: '🔧', general: '🌟' };
+
 function buildMainMenu({ botName, owner, senderNum, uptimeStr, ramMB, prefix, lang }) {
   const total   = Object.values(CATEGORIES).reduce((n, c) => n + c.cmds.length, 0);
-  const langFlg = LANGUAGES[lang].flag;
+  const langFlg = LANGUAGES[lang]?.flag || '🌐';
 
-  let tx = `*🤖 ${botName}*\n`;
-  tx += `┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n`;
-  tx += `👤 @${senderNum}\n`;
-  tx += `👑 Owner: ${owner}\n`;
-  tx += `⌨️ Prefix: \`${prefix}\`\n`;
-  tx += `📦 ${total} commands\n`;
-  tx += `⏱️ Uptime: ${uptimeStr}\n`;
-  tx += `💾 RAM: ${ramMB}MB  🌐 ${langFlg}\n`;
-  tx += `┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n`;
+  let tx = '';
+  tx += `╔══════════════════════╗\n`;
+  tx += `║  ♾️ *${botName}*\n`;
+  tx += `╚══════════════════════╝\n\n`;
 
-  for (const cat of Object.values(CATEGORIES)) {
-    tx += `${cat.icon} *${t(cat.titleKey, lang)}* — ${cat.cmds.length} cmds\n`;
+  tx += `┌─────────────────────\n`;
+  tx += `│ 👤 *User:* @${senderNum}\n`;
+  tx += `│ 👑 *Owner:* ${owner}\n`;
+  tx += `│ ⌨️ *Prefix:* \`${prefix}\`\n`;
+  tx += `│ 🌐 *Lang:* ${langFlg}\n`;
+  tx += `└─────────────────────\n\n`;
+
+  tx += `┌─────────────────────\n`;
+  tx += `│ ⏱️ *Uptime:* ${uptimeStr}\n`;
+  tx += `│ 💾 *RAM:* ${ramMB} MB\n`;
+  tx += `│ 📦 *Commands:* ${total}\n`;
+  tx += `└─────────────────────\n\n`;
+
+  tx += `╔══ 📋 *MENU* ══════════╗\n`;
+  for (const [key, cat] of Object.entries(CATEGORIES)) {
+    const bar = '▓'.repeat(Math.ceil(cat.cmds.length / 3));
+    tx += `║ ${cat.icon} *${t(cat.titleKey, lang)}*  [${cat.cmds.length}] ${bar}\n`;
   }
+  tx += `╚══════════════════════╝\n\n`;
 
-  tx += `\n💡 _${t('tapBtn', lang)}_`;
+  tx += `> 💡 _Tap a button below to explore commands_`;
   return tx;
 }
 
-// ─────────────────────────────────────────────
-//  SUBMENU BUILDER
-// ─────────────────────────────────────────────
 function buildSubmenu(catKey, prefix, lang) {
   const cat = CATEGORIES[catKey];
   if (!cat) return null;
 
   const title = t(cat.titleKey, lang);
+  const emoji = CAT_EMOJIS[catKey] || cat.icon;
 
-  let tx = `${cat.icon} *${title}*\n`;
-  tx += `┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n`;
+  let tx = `╔══════════════════════╗\n`;
+  tx += `║ ${cat.icon} *${title} Commands*\n`;
+  tx += `╚══════════════════════╝\n\n`;
 
   cat.cmds.forEach((name, i) => {
     const cmd   = `${prefix}${name}`;
     const label = t(name, lang);
-    const num   = i + 1;
-    tx += `${num}. *${cmd}* — ${label}\n`;
+    const num   = String(i + 1).padStart(2, ' ');
+    tx += `│ ${num}. *${cmd}*\n`;
+    tx += `│    ╰ ${label}\n`;
   });
 
-  tx += `┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n`;
-  tx += `> ${cat.icon} ${title} · ${cat.cmds.length} ${t('commands', lang)}`;
+  tx += `\n╔══════════════════════╗\n`;
+  tx += `║ ${emoji} ${title} · ${cat.cmds.length} ${t('commands', lang)}\n`;
+  tx += `╚══════════════════════╝`;
   return tx;
 }
 
-// ─────────────────────────────────────────────
-//  COMMAND EXPORT
-// ─────────────────────────────────────────────
 module.exports = {
   name: 'menu',
   aliases: [
@@ -163,7 +167,6 @@ module.exports = {
       (CATEGORIES[usedCmd] ? usedCmd : null) ||
       (CATEGORIES[subArg]  ? subArg  : null);
 
-    // ── SUBMENU ──────────────────────────────────────────────────────────────
     if (submenuKey) {
       const cat  = CATEGORIES[submenuKey];
       const text = buildSubmenu(submenuKey, prefix, lang);
@@ -174,13 +177,12 @@ module.exports = {
         footer: `${cat.icon} ${t(cat.titleKey, lang)} · ${cat.cmds.length} ${t('commands', lang)}`,
         ...(image ? { image } : {}),
         buttons: [
-          btn('menu', t('backMenu', lang)),
+          btn('menu', `🏠 ${t('backMenu', lang)}`),
           urlBtn('🌐 Website', 'https://infinitymd.online'),
         ],
       }, { quoted: msg });
     }
 
-    // ── MAIN MENU ────────────────────────────────────────────────────────────
     const total = Object.values(CATEGORIES).reduce((n, c) => n + c.cmds.length, 0);
     const text  = buildMainMenu({ botName, owner, senderNum, uptimeStr, ramMB, prefix, lang });
 
