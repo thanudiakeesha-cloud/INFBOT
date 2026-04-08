@@ -71,13 +71,23 @@ server.listen(PORT, '0.0.0.0', () => {
       next();
     });
     app.use(express.json());
+    const sessionDir = path.join(__dirname, 'database', 'sessions_store');
+    if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
+    const FileStore = require('session-file-store')(require('express-session'));
     app.use(require('express-session')({
+      store: new FileStore({
+        path: sessionDir,
+        ttl: 86400,
+        retries: 3,
+        logFn: () => {}
+      }),
       secret: 'infinity-md-secret',
       resave: false,
       saveUninitialized: false,
       cookie: {
         secure: false,
         httpOnly: true,
+        sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000
       }
     }));
@@ -321,12 +331,30 @@ async function connectSession(id, sessionData) {
       if (isLoggedOut || isDeleted) {
         activeSessions.delete(id);
         console.log(`❌ Session ${id} stopped (${isLoggedOut ? 'Logged out' : 'Deleted'})`);
-      } else if (isConnectionReplaced && process.env.DEV_MODE === 'true') {
-        // In dev/testing mode: another instance (production) took over this session.
-        // Stop reconnecting to avoid a fight loop between the two environments.
-        activeSessions.delete(id);
-        console.log(`⏸️ Session ${id} paused — another instance (production) is active. Set DEV_MODE=false or remove it to allow reconnection here.`);
+      } else if (isConnectionReplaced) {
+        // Track consecutive 440 (connection replaced) counts separately
+        if (!sessionData._440Count) sessionData._440Count = 0;
+        sessionData._440Count++;
+
+        if (process.env.DEV_MODE === 'true') {
+          // In dev/testing mode: production took over — stop here.
+          activeSessions.delete(id);
+          console.log(`⏸️ Session ${id} paused — another instance (production) is active.`);
+        } else if (sessionData._440Count > 5) {
+          // After 5 consecutive 440s this session is being permanently displaced
+          // (likely a duplicate session for the same number). Stop reconnecting
+          // to break the infinite fight loop.
+          activeSessions.delete(id);
+          console.log(`⛔ Session ${id} stopped after ${sessionData._440Count} connection-replaced errors — possible duplicate session. Remove the duplicate bot from the dashboard.`);
+        } else {
+          // Use longer backoff for 440 errors to let the other instance stabilise
+          const delay440 = Math.min(15000 * sessionData._440Count, 120000);
+          console.log(`🔄 Reconnecting session ${id} (Status: 440, attempt ${sessionData._440Count}/5, delay ${Math.round(delay440/1000)}s)...`);
+          setTimeout(() => connectSession(id, sessionData), delay440);
+        }
       } else {
+        // Reset 440 counter on any non-440 disconnect
+        sessionData._440Count = 0;
         if (!sessionData._retryCount) sessionData._retryCount = 0;
         sessionData._retryCount++;
         const delay = Math.min(5000 * Math.pow(1.5, sessionData._retryCount - 1), 120000);
@@ -646,6 +674,25 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
   } catch (phoneErr) {
     num = cleaned;
   }
+
+  // Prevent duplicate sessions for the same phone number
+  try {
+    const existingSessions = await database.getAllSessions();
+    const duplicate = Object.entries(existingSessions).find(([sid, sdata]) => {
+      // Check if session ID contains the number (paired sessions are named paired_<num>_<ts>)
+      if (sid.includes(`paired_${num}_`) || sid.includes(`_${num}_`)) return true;
+      // Also check ownerNumber match
+      const ownerNum = (sdata.ownerNumber || '').replace(/[^0-9]/g, '');
+      return ownerNum === num;
+    });
+    if (duplicate) {
+      const [dupId] = duplicate;
+      return res.status(400).json({
+        success: false,
+        message: `A bot for number +${num} already exists in the dashboard (${dupId.substring(0, 30)}…). Remove it first before adding a new one.`
+      });
+    }
+  } catch (_) { /* DB read failed — allow pairing to continue */ }
 
   const pairId = `pair_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
   const pairDir = path.join(__dirname, 'session', pairId);

@@ -468,17 +468,20 @@ async function logout() {
 async function refresh() { if (currentPage === 'sessions') loadSessions(false); }
 
 async function init() {
+  // Load user info from server (current logged-in user)
   try {
-    const r = await fetch('/api/sessions');
-    const sessions = await r.json();
-    renderSessions(sessions);
-    const first = sessions[0];
-    if (first) {
-      document.getElementById('userName').textContent = first.userId || 'User';
-      document.getElementById('userAv').textContent = (first.userId || 'U')[0].toUpperCase();
-      document.getElementById('userRole').textContent = first.userId ? 'Session Owner' : 'User';
+    const r = await fetch('/api/user-info');
+    if (r.status === 401 || r.status === 403) { window.location.href = '/login'; return; }
+    const info = await r.json();
+    if (info && info.username) {
+      document.getElementById('userName').textContent = info.username;
+      document.getElementById('userAv').textContent = info.username[0].toUpperCase();
+      document.getElementById('userRole').textContent = info.isOwner ? 'Admin / Owner' : 'User';
     }
   } catch (_) {}
+
+  // Load sessions
+  await loadSessions(false);
 
   // Poll for session updates every 15s
   setInterval(() => { if (currentPage === 'sessions') loadSessions(false); }, 15000);

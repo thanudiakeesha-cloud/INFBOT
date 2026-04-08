@@ -797,8 +797,8 @@ const handleMessage = async (sock, msg) => {
       }
     }
 
-    // Map known button IDs to commands
-    const p = config.prefix;
+    // Map known button IDs to commands — use the per-session prefix when available
+    const p = sock?._customConfig?.settings?.prefix || config.prefix || '.';
     const btnCmdMap = {
       // General nav (by ID)
       'cmd_menu': `${p}menu`,
@@ -1044,6 +1044,7 @@ const handleMessage = async (sock, msg) => {
               return;
             }
 
+            const sessionPrefix = sock?._customConfig?.settings?.prefix || config.prefix || '.';
             await executeFn(sock, msg, args, {
               from, sender, isGroup, groupMetadata,
               isOwner: isOwner(sender, sock),
@@ -1051,6 +1052,7 @@ const handleMessage = async (sock, msg) => {
               isBotAdmin: botAdminResult,
               isMod: isMod(sender),
               commandName,
+              prefix: sessionPrefix,
               reply: (text) => sock.sendMessage(from, { text }, { quoted: msg }).catch(() => {}),
               react: (emoji) => sock.sendMessage(from, { react: { text: emoji, key: msg.key } }).catch(() => {})
             });
