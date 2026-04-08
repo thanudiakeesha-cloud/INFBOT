@@ -174,6 +174,11 @@ server.listen(PORT, '0.0.0.0', () => {
 });
 
 async function connectSession(id, sessionData) {
+  // Guard: if folder is missing, derive one from the session id
+  if (!sessionData.folder) {
+    sessionData.folder = `session_${id.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30)}`;
+    console.warn(`⚠️ Session ${id} had no folder — assigned: ${sessionData.folder}`);
+  }
   const sessionFolder = path.join(__dirname, 'session', sessionData.folder);
 
   if (!fs.existsSync(sessionFolder)) {
@@ -298,10 +303,20 @@ async function connectSession(id, sessionData) {
         ? lastDisconnect.error.output?.statusCode
         : lastDisconnect?.error?.output?.statusCode;
 
-      const sessions = await database.getAllSessions();
       const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
-      const isDeleted = !sessions[id] && id !== config.sessionID;
       const isConnectionReplaced = statusCode === 440;
+
+      // Only check "deleted" if the session was explicitly removed — never on a 440
+      // and only if Firebase returned a non-empty sessions object to avoid false-positives
+      // on startup race conditions or failed DB reads.
+      let isDeleted = false;
+      if (!isLoggedOut && !isConnectionReplaced && id !== config.sessionID) {
+        try {
+          const sessions = await database.getAllSessions();
+          // Only treat as deleted if Firebase returned actual data AND this id is missing
+          isDeleted = Object.keys(sessions).length > 0 && !sessions[id];
+        } catch (_) { /* DB read failed — assume not deleted, retry */ }
+      }
 
       if (isLoggedOut || isDeleted) {
         activeSessions.delete(id);
@@ -1454,7 +1469,12 @@ async function initAllSessions() {
 }
 
 function initSessions() {
-  initAllSessions();
+  // Delay startup slightly so the previous deployment instance has time
+  // to fully shut down before this instance grabs WhatsApp connections.
+  // This prevents cascading 440 (Connection Replaced) errors on redeploy.
+  const STARTUP_DELAY = parseInt(process.env.SESSION_STARTUP_DELAY_MS || '8000', 10);
+  console.log(`⏳ Waiting ${STARTUP_DELAY / 1000}s before connecting sessions (letting old instance close)...`);
+  setTimeout(() => initAllSessions(), STARTUP_DELAY);
 }
 
 function clearReconnectTimer() {
