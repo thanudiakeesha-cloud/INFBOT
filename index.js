@@ -384,7 +384,16 @@ app.post('/api/auth/login', async (req, res) => {
     req.session.loggedIn = true;
     req.session.username = authResult.username;
     req.session.isOwner = authResult.isOwner || false;
-    res.json({ success: true });
+    // Explicitly save the session before responding to avoid a race condition
+    // where the client redirects to /dashboard before the session is persisted,
+    // making the auth check fail and sending them back to /login (looks like a "refresh").
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error:', err);
+        return res.status(500).json({ success: false, message: 'Session error, please try again' });
+      }
+      res.json({ success: true, isOwner: authResult.isOwner || false });
+    });
   } else {
     res.status(401).json({ success: false, message: 'Invalid credentials' });
   }

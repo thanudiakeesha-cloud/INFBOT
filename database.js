@@ -318,6 +318,15 @@ module.exports = {
     return true;
   },
 
+  saveDashboardUserData: async (username, data) => {
+    const current = dashboardUsersCache[username];
+    if (!current) return false;
+    dashboardUsersCache[username] = { ...current, data };
+    firebaseUpdate(`dashboard_users/${sanitizeKey(username)}`, { data });
+    try { db.prepare(`UPDATE dashboard_users SET data = ? WHERE username = ?`).run(JSON.stringify(data), username); } catch {}
+    return true;
+  },
+
   getDashboardUser: async (username) => {
     if (dashboardUsersCache[username]) return { username, ...dashboardUsersCache[username] };
     // Try Firebase
