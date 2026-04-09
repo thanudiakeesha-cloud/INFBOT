@@ -157,9 +157,22 @@ async function resolveDownloadUrl(linkUrl) {
   if (!linkUrl.includes('sinhalasub.lk/links/')) {
     return linkUrl;
   }
-  const html = await fetchPage(linkUrl);
+
+  let html;
+  try {
+    const res = await axios.get(linkUrl, {
+      headers: HEADERS,
+      timeout: 12000,
+      maxRedirects: 8,
+    });
+    html = res.data;
+  } catch (_) {
+    return linkUrl;
+  }
+
   const $ = cheerio.load(html);
 
+  // Primary: the "Continue" link after the countdown
   const continueHref =
     $('.wait-done a:not(.prev-lnk)').first().attr('href')
     || $('.wait-done a').first().attr('href')
@@ -168,7 +181,25 @@ async function resolveDownloadUrl(linkUrl) {
   if (continueHref && continueHref.startsWith('http') && !continueHref.includes('sinhalasub.lk')) {
     return continueHref;
   }
-  return linkUrl;
+
+  // Fallback: any external link on the page that looks like a file host
+  let fallback = null;
+  $('a[href]').each((_, el) => {
+    if (fallback) return;
+    const href = $(el).attr('href') || '';
+    if (
+      href.startsWith('http') &&
+      !href.includes('sinhalasub.lk') &&
+      (
+        /terabox|4funbox|momerybox|mediafire|mega\.nz|pixeldrain|drive\.google|1drv\.ms|onedrive/i.test(href) ||
+        /\.(mp4|mkv|avi|webm)(\?|$)/i.test(href)
+      )
+    ) {
+      fallback = href;
+    }
+  });
+
+  return fallback || linkUrl;
 }
 
 module.exports = {
@@ -189,14 +220,14 @@ module.exports = {
       const session = detailSessions.get(chatId);
       if (!session || isNaN(idx) || !session[idx]) {
         return sock.sendMessage(chatId, {
-          text: `⏱️ Session expired.\n\nSearch again with \`${prefix}film3 <movie name>\`.`,
+          text: `⏱️ Session expired.\n\nSearch again with \`${prefix}film <movie name>\`.`,
         }, { quoted: msg });
       }
 
       const entry = session[idx];
       await react(sock, msg, '⬇️');
 
-      // Resolve intermediate link page first
+      // First resolve the sinhalasub.lk/links/ intermediate page to get the real host URL
       let resolvedUrl = entry.url;
       try { resolvedUrl = await resolveDownloadUrl(entry.url); } catch (_) {}
 

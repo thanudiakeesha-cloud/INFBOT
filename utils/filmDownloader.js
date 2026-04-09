@@ -30,7 +30,7 @@ function ext(ct, url) {
 function isGDrive(url)     { return /drive\.google\.com|docs\.google\.com/.test(url); }
 function isMega(url)       { return /mega\.nz|mega\.co\.nz/.test(url); }
 function isMediaFire(url)  { return /mediafire\.com/.test(url); }
-function isTeraBox(url)    { return /terabox\.com|4funbox\.com|momerybox\.com/.test(url); }
+function isTeraBox(url)    { return /terabox\.com|4funbox\.com|momerybox\.com|teraboxapp\.com|freeterabox\.com|1024terabox\.com|teraboxlink\.com/.test(url); }
 function isOneDrive(url)   { return /onedrive\.live\.com|1drv\.ms/.test(url); }
 function isPixelDrain(url) { return /pixeldrain\.com/.test(url); }
 function isDirectFile(url) { return /\.(mp4|mkv|avi|webm|mov|m4v)(\?|$)/i.test(url); }
@@ -66,6 +66,118 @@ async function resolveMediaFire(url) {
     $('a[href][id*="download"]').first().attr('href') || null;
   if (direct && direct.startsWith('http')) return direct;
   throw new Error('MediaFire: could not extract direct link');
+}
+
+/**
+ * TeraBox → direct download URL via their public share API.
+ * Flow: extract surl → fetch page for cookies → call shorturlinfo API →
+ *       call share/download API → get dlink (CDN URL).
+ */
+async function resolveTeraBox(shareUrl) {
+  // Normalize to main domain
+  const normalUrl = shareUrl.replace(/freeterabox\.com|1024terabox\.com|teraboxlink\.com|4funbox\.com|momerybox\.com/, 'teraboxapp.com');
+
+  // Extract surl (short URL code)
+  const surlMatch = normalUrl.match(/[?&]surl=([^&]+)/) || normalUrl.match(/\/s\/([^/?&#]+)/);
+  if (!surlMatch) return null;
+  const surl = surlMatch[1];
+
+  let cookies = '';
+  let jsToken = '';
+
+  // Step 1: Load the share page to grab cookies + jsToken
+  try {
+    const pageRes = await axios.get(normalUrl, {
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      },
+      timeout: 15000,
+      maxRedirects: 10,
+    });
+    const setCookies = pageRes.headers['set-cookie'] || [];
+    cookies = setCookies.map(c => c.split(';')[0]).join('; ');
+
+    // Extract jsToken from page HTML
+    const jtMatch = pageRes.data.match(/(?:window\.)?jsToken\s*=\s*["']([^"']+)["']/)
+      || pageRes.data.match(/fn\("jsToken",\s*"([^"]+)"\)/)
+      || pageRes.data.match(/"jsToken"\s*:\s*"([^"]+)"/);
+    if (jtMatch) jsToken = jtMatch[1];
+  } catch (err) {
+    console.error('[terabox] page fetch error:', err.message);
+  }
+
+  // Step 2: Get file list from shorturlinfo API
+  let shareid, uk, sign, timestamp, fsId, filename, fileSize;
+  try {
+    const infoRes = await axios.get('https://www.terabox.com/api/shorturlinfo', {
+      params: { app_id: 250528, shorturl: surl, root: 1, web: 1, channel: 'dubox', clienttype: 0, jsToken },
+      headers: {
+        'User-Agent': UA,
+        'Cookie': cookies,
+        'Referer': normalUrl,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      timeout: 15000,
+    });
+
+    const data = infoRes.data;
+    if (data.errno !== 0) {
+      console.error('[terabox] shorturlinfo errno:', data.errno, data.errmsg);
+      return null;
+    }
+
+    const file = data.list?.[0];
+    if (!file) return null;
+
+    fsId      = file.fs_id;
+    filename  = file.server_filename;
+    fileSize  = file.size;
+    shareid   = data.shareid;
+    uk        = data.uk;
+    sign      = data.sign;
+    timestamp = data.timestamp;
+  } catch (err) {
+    console.error('[terabox] shorturlinfo error:', err.message);
+    return null;
+  }
+
+  // Step 3: Get the actual download dlink
+  try {
+    const dlRes = await axios.get('https://www.terabox.com/share/download', {
+      params: {
+        app_id: 250528,
+        channel: 'dubox',
+        clienttype: 0,
+        web: 1,
+        jsToken,
+        'dp-logid': '',
+        shareid,
+        uk,
+        primaryid: fsId,
+        fid_list: `[${fsId}]`,
+        sign,
+        timestamp,
+      },
+      headers: {
+        'User-Agent': UA,
+        'Cookie': cookies,
+        'Referer': normalUrl,
+      },
+      timeout: 15000,
+      maxRedirects: 5,
+    });
+
+    const dlink = dlRes.data?.dlink;
+    if (dlink && dlink.startsWith('http')) {
+      return { url: dlink, filename, size: fileSize };
+    }
+  } catch (err) {
+    console.error('[terabox] download API error:', err.message);
+  }
+
+  return null;
 }
 
 /** Follow HTTP redirects and return final URL + headers */
@@ -178,7 +290,13 @@ async function resolveToDownloadable(url) {
   if (isMediaFire(url)) {
     try { return await resolveMediaFire(url); } catch (_) { return null; }
   }
-  if (isMega(url) || isTeraBox(url) || isOneDrive(url)) return null; // can't direct-dl
+  if (isMega(url) || isOneDrive(url)) return null; // can't direct-dl
+  if (isTeraBox(url)) {
+    try {
+      const result = await resolveTeraBox(url);
+      return result?.url || null;
+    } catch (_) { return null; }
+  }
 
   // Unknown: follow redirects, if final URL is a file, use it
   const { finalUrl } = await followRedirects(url);
