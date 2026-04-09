@@ -97,7 +97,7 @@ async function getDownloadOptions(movieUrl) {
 }
 
 module.exports = {
-  name: 'film',
+  name: 'film3',
   aliases: ['movie', 'filmsel', 'filmselect', 'filmdown'],
   category: 'media',
   description: 'Search and download movies with Sinhala subtitles from Cinesubz',
@@ -156,7 +156,7 @@ module.exports = {
           footer: '♾️ Infinity MD Mini • Cinesubz',
           buttons: [
             urlBtn('🌐 Movie Page', movie.url),
-            btn('film', '🔍 New Search'),
+            btn('film3', '🔍 New Search'),
           ],
         }, { quoted: msg });
       }
@@ -176,7 +176,7 @@ module.exports = {
       text += `\n> 💡 _Bot will download & send the file directly_\n> 🎬 _Infinity MD Mini_`;
 
       const dlBtns = dlSession.map((q, i) => btn(`filmdown_${i}`, `⬇️ ${q.label.slice(0, 20)}`));
-      dlBtns.push(btn('film', '🔍 New Search'));
+      dlBtns.push(btn('film3', '🔍 New Search'));
 
       const payload = { text, footer: '♾️ Infinity MD Mini • Cinesubz', buttons: dlBtns };
       if (details.thumbnail) payload.image = { url: details.thumbnail };

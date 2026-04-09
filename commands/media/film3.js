@@ -172,7 +172,7 @@ async function resolveDownloadUrl(linkUrl) {
 }
 
 module.exports = {
-  name: 'film3',
+  name: 'film',
   aliases: ['sinhalasub', 'film3sel', 'film3select', 'film3dl'],
   category: 'media',
   description: 'Search and download movies from SinhalaSub.lk',
@@ -240,7 +240,7 @@ module.exports = {
           footer: '♾️ Infinity MD Mini • SinhalaSub.lk',
           buttons: [
             urlBtn('🌐 Movie Page', movie.url),
-            btn('film3', '🔍 New Search'),
+            btn('film', '🔍 New Search'),
           ],
         }, { quoted: msg });
       }
@@ -270,7 +270,7 @@ module.exports = {
       text += `\n> 💡 _Bot will download & send the full file_\n> 🎬 _Infinity MD Mini_`;
 
       const dlBtns = dlSession.map((q, i) => btn(`film3dl_${i}`, `⬇️ ${q.label.slice(0, 20)}`));
-      dlBtns.push(btn('film3', '🔍 New Search'));
+      dlBtns.push(btn('film', '🔍 New Search'));
 
       const payload = { text, footer: '♾️ Infinity MD Mini • SinhalaSub.lk', buttons: dlBtns };
       if (details.thumbnail) payload.image = { url: details.thumbnail };

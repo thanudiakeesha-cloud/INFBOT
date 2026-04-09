@@ -96,7 +96,7 @@ async function searchMovies(query) {
 }
 
 module.exports = {
-  name: 'film1',
+  name: '_film1_disabled',
   aliases: ['film1sel', 'film1select'],
   category: 'media',
   description: 'Search and download movies from SriHub (Sinhala subtitles)',
