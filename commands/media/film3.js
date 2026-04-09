@@ -231,10 +231,24 @@ module.exports = {
       let resolvedUrl = entry.url;
       try { resolvedUrl = await resolveDownloadUrl(entry.url); } catch (_) {}
 
+      // Build fallback URLs: resolve all OTHER quality entries from the same movie session
+      // so that if the chosen server fails, the bot automatically tries the rest.
+      const fallbackUrls = [];
+      for (let fi = 0; fi < session.length; fi++) {
+        if (fi === idx) continue; // skip the one we're already trying
+        try {
+          const fbResolved = await resolveDownloadUrl(session[fi].url).catch(() => session[fi].url);
+          fallbackUrls.push(fbResolved);
+        } catch (_) {
+          fallbackUrls.push(session[fi].url);
+        }
+      }
+
       return downloadAndSend(sock, chatId, msg, {
         title: entry.movieTitle,
         quality: `${entry.label}${entry.size ? ` — ${entry.size}` : ''}`,
         downloadUrl: resolvedUrl,
+        fallbackUrls,
       });
     }
 

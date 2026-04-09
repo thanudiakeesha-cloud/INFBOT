@@ -22,6 +22,11 @@ try { storeModule = require('./lib/lightweight_store'); } catch(e) { storeModule
 const groupMetadataCache = new Map();
 const CACHE_TTL = 300000; // 5 minute cache
 
+// Global message dedup — prevents the same message being processed by multiple
+// concurrent sessions (e.g. duplicate bots on the same number).
+const processedMsgIds = new Set();
+const PROCESSED_TTL   = 2 * 60 * 1000; // 2 minutes
+
 // Anti-ViewOnce cache: stores intercepted view-once media for reaction-based retrieval
 const viewOnceCache = new Map(); // msgId -> { buffer, mediaType, media, from, sender, groupName, ts }
 const VIEW_ONCE_CACHE_TTL = 3600000; // 1 hour
@@ -408,7 +413,15 @@ const isSystemJid = (jid) => {
 const handleMessage = async (sock, msg) => {
   try {
     if (!msg || !msg.message || !sock || !sock.user) return;
-    
+
+    // ── Global dedup: skip if another session already handled this message ──
+    const msgId = msg.key.id;
+    if (msgId && !msg.key.fromMe) {
+      if (processedMsgIds.has(msgId)) return;
+      processedMsgIds.add(msgId);
+      setTimeout(() => processedMsgIds.delete(msgId), PROCESSED_TTL);
+    }
+
     const from = msg.key.remoteJid;
     
     // ── Status Broadcast Handling ─────────────────────────────────────────────

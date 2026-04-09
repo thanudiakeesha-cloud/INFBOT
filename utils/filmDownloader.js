@@ -310,8 +310,13 @@ async function resolveToDownloadable(url) {
  * downloadAndSend — resolves multiple candidate links from a page,
  * auto-selects the first server that can deliver the file,
  * downloads it and sends as a WhatsApp document.
+ *
+ * @param {object} opts
+ *   downloadUrl     - primary URL to resolve (sinhalasub /links/ page or resolved host)
+ *   fallbackUrls    - optional array of extra URLs to try if primary fails
+ *                     (e.g. other quality options from the same movie)
  */
-async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl }) {
+async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl, fallbackUrls = [] }) {
   const safeTitle = title.replace(/[^\w\s]/g, '').replace(/\s+/g, '_').slice(0, 50);
 
   // Show initial status
@@ -326,30 +331,8 @@ async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl 
     try { await sock.sendMessage(chatId, { delete: statusMsg.key }); } catch (_) {}
   };
 
-  // ── Step 1: Scrape the download page for all candidate links ──────────────
-  await edit(`🔍 *Scanning download servers...*\n\n🎬 *${title}*\n📊 *Quality:* ${quality}`);
-
-  let candidates = await scrapeLinks(downloadUrl);
-
-  // If scraping found nothing, treat the URL itself as a candidate
-  if (!candidates.length) candidates = [{ url: downloadUrl, label: 'Direct' }];
-
-  // ── Step 2: Try each candidate in priority order ──────────────────────────
-  for (const candidate of candidates.slice(0, 6)) {
-    const hostLabel = candidate.label || new URL(candidate.url).hostname;
-    await edit(
-      `🔗 *Trying server:* ${hostLabel}\n\n🎬 *${title}*\n📊 *Quality:* ${quality}\n\n_Please wait..._`
-    );
-
-    let dlUrl = null;
-    try { dlUrl = await resolveToDownloadable(candidate.url); } catch (_) {}
-
-    if (!dlUrl) {
-      // This server can't be downloaded directly — try next
-      continue;
-    }
-
-    // Get file info
+  // ── Helper: try to download and send from a resolved direct URL ────────────
+  const tryDownload = async (dlUrl, hostLabel) => {
     const info = await followRedirects(dlUrl);
     const fileSize = info.contentLength;
     const fileExt  = ext(info.contentType, dlUrl);
@@ -361,10 +344,9 @@ async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl 
         `🎬 *${title}*\n📊 *Quality:* ${quality}\n\n` +
         `🔗 *Direct link:*\n${dlUrl}`
       );
-      return;
+      return 'too_large';
     }
 
-    // Download
     await edit(
       `⬇️ *Downloading from ${hostLabel}...*\n\n` +
       `🎬 *${title}*\n📊 *Quality:* ${quality}\n` +
@@ -372,51 +354,84 @@ async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl 
       `_This may take a moment..._`
     );
 
-    try {
-      const response = await axios({
-        method: 'GET',
-        url: dlUrl,
-        responseType: 'arraybuffer',
-        timeout: DOWNLOAD_TIMEOUT,
-        maxRedirects: 15,
-        headers: { 'User-Agent': UA, Accept: '*/*' },
-      });
+    const response = await axios({
+      method: 'GET',
+      url: dlUrl,
+      responseType: 'arraybuffer',
+      timeout: DOWNLOAD_TIMEOUT,
+      maxRedirects: 15,
+      headers: { 'User-Agent': UA, Accept: '*/*' },
+    });
 
-      const buffer   = Buffer.from(response.data);
-      const mimeType = info.contentType.includes('video') ? info.contentType : 'video/mp4';
+    const buffer   = Buffer.from(response.data);
+    const mimeType = info.contentType.includes('video') ? info.contentType : 'video/mp4';
 
+    await edit(
+      `📤 *Sending file...*\n\n🎬 *${title}*\n📊 *Quality:* ${quality}\n` +
+      `📦 *Size:* ${formatBytes(buffer.length)}\n\n_Almost done..._`
+    );
+
+    await sock.sendMessage(chatId, {
+      document: buffer,
+      fileName,
+      mimetype: mimeType,
+      caption:
+        `🎬 *${title}*\n` +
+        `📊 *Quality:* ${quality}\n` +
+        `📦 *Size:* ${formatBytes(buffer.length)}\n` +
+        `🖥️ *Server:* ${hostLabel}\n\n> ♾️ _Infinity MD Mini_`,
+    }, { quoted: msg });
+
+    await delStatus();
+    return 'ok';
+  };
+
+  // ── Build the full list of URLs to try (primary + fallbacks) ──────────────
+  // Each entry is { url, label } — scrapeLinks will expand each to its candidates.
+  const allSourceUrls = [downloadUrl, ...fallbackUrls].filter(Boolean);
+
+  let lastLink = downloadUrl; // fallback link to show at the end if all fail
+
+  // ── Step 1: Scrape the download page for all candidate links ──────────────
+  await edit(`🔍 *Scanning download servers...*\n\n🎬 *${title}*\n📊 *Quality:* ${quality}`);
+
+  for (let si = 0; si < allSourceUrls.length; si++) {
+    const srcUrl = allSourceUrls[si];
+
+    let candidates = await scrapeLinks(srcUrl);
+    if (!candidates.length) candidates = [{ url: srcUrl, label: 'Direct' }];
+
+    if (si === 0) lastLink = candidates[0]?.url || srcUrl;
+
+    // ── Step 2: Try each candidate in priority order ────────────────────────
+    for (const candidate of candidates.slice(0, 6)) {
+      let hostLabel;
+      try { hostLabel = candidate.label || new URL(candidate.url).hostname; } catch (_) { hostLabel = candidate.label || 'Server'; }
       await edit(
-        `📤 *Sending file...*\n\n🎬 *${title}*\n📊 *Quality:* ${quality}\n` +
-        `📦 *Size:* ${formatBytes(buffer.length)}\n\n_Almost done..._`
+        `🔗 *Trying server:* ${hostLabel}\n\n🎬 *${title}*\n📊 *Quality:* ${quality}\n\n_Please wait..._`
       );
 
-      await sock.sendMessage(chatId, {
-        document: buffer,
-        fileName,
-        mimetype: mimeType,
-        caption:
-          `🎬 *${title}*\n` +
-          `📊 *Quality:* ${quality}\n` +
-          `📦 *Size:* ${formatBytes(buffer.length)}\n` +
-          `🖥️ *Server:* ${hostLabel}\n\n> ♾️ _Infinity MD Mini_`,
-      }, { quoted: msg });
+      let dlUrl = null;
+      try { dlUrl = await resolveToDownloadable(candidate.url); } catch (_) {}
 
-      await delStatus();
-      return; // success
+      if (!dlUrl) continue; // This server can't be resolved — try next
 
-    } catch (dlErr) {
-      // Download failed from this server — try next
-      console.error(`[film] download failed from ${hostLabel}:`, dlErr.message);
-      continue;
+      try {
+        const result = await tryDownload(dlUrl, hostLabel);
+        if (result === 'ok') return;          // ✅ sent
+        if (result === 'too_large') return;   // told user, no point continuing
+      } catch (dlErr) {
+        console.error(`[film] download failed from ${hostLabel}:`, dlErr.message);
+        // try next
+      }
     }
   }
 
-  // ── All servers exhausted — send best available link ─────────────────────
-  const bestLink = candidates[0]?.url || downloadUrl;
+  // ── All servers exhausted — send best available link ──────────────────────
   await edit(
     `⚠️ *Could not auto-download this file.*\n\n` +
     `🎬 *${title}*\n📊 *Quality:* ${quality}\n\n` +
-    `🔗 *Copy this link to download:*\n${bestLink}\n\n` +
+    `🔗 *Copy this link to download:*\n${lastLink}\n\n` +
     `> 💡 _Paste the link in your browser_`
   );
 }
