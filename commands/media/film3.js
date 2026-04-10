@@ -154,18 +154,24 @@ async function getMovieDetails(pageUrl) {
 }
 
 async function resolveDownloadUrl(linkUrl) {
-  if (!linkUrl.includes('sinhalasub.lk/links/')) {
+  if (!linkUrl.includes('sinhalasub.lk/links/') && !linkUrl.includes('sinhalasub.lk/go/')) {
     return linkUrl;
   }
 
-  let html;
+  let html = '';
   try {
     const res = await axios.get(linkUrl, {
       headers: HEADERS,
-      timeout: 12000,
-      maxRedirects: 8,
+      timeout: 15000,
+      maxRedirects: 10,
     });
     html = res.data;
+
+    // If we were redirected away from sinhalasub, the final URL is what we want
+    const finalUrl = res.request?.res?.responseUrl || res.config?.url || linkUrl;
+    if (!finalUrl.includes('sinhalasub.lk')) {
+      return finalUrl;
+    }
   } catch (_) {
     return linkUrl;
   }
@@ -176,10 +182,35 @@ async function resolveDownloadUrl(linkUrl) {
   const continueHref =
     $('.wait-done a:not(.prev-lnk)').first().attr('href')
     || $('.wait-done a').first().attr('href')
+    || $('a.wait-link').first().attr('href')
     || null;
 
   if (continueHref && continueHref.startsWith('http') && !continueHref.includes('sinhalasub.lk')) {
     return continueHref;
+  }
+
+  // Look in JavaScript for the redirect URL or known host links
+  const scripts = [];
+  $('script').each((_, el) => { scripts.push($(el).html() || ''); });
+  const allJs = scripts.join('\n');
+
+  const hostPatterns = [
+    /["'`](https?:\/\/(?:www\.)?pixeldrain\.com\/u\/[^"'`\s]+)["'`]/,
+    /["'`](https?:\/\/drive\.google\.com\/[^"'`\s]+)["'`]/,
+    /["'`](https?:\/\/(?:www\.)?mediafire\.com\/[^"'`\s]+)["'`]/,
+    /["'`](https?:\/\/(?:[^"'`\s]*\.)?terabox(?:app)?\.com\/[^"'`\s]+)["'`]/,
+    /["'`](https?:\/\/(?:[^"'`\s]*\.)?4funbox\.com\/[^"'`\s]+)["'`]/,
+    /["'`](https?:\/\/mega\.nz\/[^"'`\s]+)["'`]/,
+    /["'`](https?:\/\/[^"'`\s]+\.(?:mp4|mkv|avi|webm)[^"'`\s]*)["'`]/,
+    /window\.location(?:\.href)?\s*=\s*["'`](https?:\/\/[^"'`\s]+)["'`]/,
+    /(?:url|href|link|redirect)\s*[:=]\s*["'`](https?:\/\/[^"'`\s]+)["'`]/i,
+  ];
+
+  for (const pat of hostPatterns) {
+    const m = allJs.match(pat);
+    if (m && m[1] && !m[1].includes('sinhalasub.lk')) {
+      return m[1];
+    }
   }
 
   // Fallback: any external link on the page that looks like a file host

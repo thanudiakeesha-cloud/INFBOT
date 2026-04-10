@@ -6,13 +6,16 @@
 
 const axios   = require('axios');
 const cheerio = require('cheerio');
+const fs      = require('fs');
+const path    = require('path');
+const os      = require('os');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-const DOWNLOAD_TIMEOUT = 8 * 60 * 1000; // 8 min for large files
+const DOWNLOAD_TIMEOUT = 10 * 60 * 1000; // 10 min for large files
 const MAX_SIZE = 1.9 * 1024 * 1024 * 1024; // 1.9 GB
 
 function formatBytes(b) {
-  if (!b) return '?';
+  if (!b || b <= 0) return '?';
   if (b >= 1e9) return (b / 1e9).toFixed(2) + ' GB';
   return (b / 1e6).toFixed(1) + ' MB';
 }
@@ -23,6 +26,10 @@ function ext(ct, url) {
     if (c.includes(e) || url.toLowerCase().includes('.' + e)) return e;
   }
   return 'mp4';
+}
+
+function isVideoContentType(ct) {
+  return /video|octet-stream|binary/i.test(ct || '');
 }
 
 // ── Host detectors ────────────────────────────────────────────────────────────
@@ -56,28 +63,40 @@ function pixeldrainDirectUrl(url) {
 /** MediaFire → scrape the direct download link */
 async function resolveMediaFire(url) {
   const res = await axios.get(url, {
-    headers: { 'User-Agent': UA }, timeout: 20000, maxRedirects: 10,
+    headers: {
+      'User-Agent': UA,
+      'Accept': 'text/html,application/xhtml+xml,*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    timeout: 20000,
+    maxRedirects: 10,
   });
   const $ = cheerio.load(res.data);
+
+  // Try multiple selectors for MediaFire's download button
   const direct =
     $('a#downloadButton').attr('href') ||
+    $('a[id="downloadButton"]').attr('href') ||
     $('a.btn-payment-dashboard[href]').attr('href') ||
     $('a[href*="download.mediafire.com"]').first().attr('href') ||
-    $('a[href][id*="download"]').first().attr('href') || null;
+    $('a[href][id*="download"]').first().attr('href') ||
+    $('a.btn[href*="mediafire"]').first().attr('href') || null;
+
   if (direct && direct.startsWith('http')) return direct;
+
+  // Try extracting from JavaScript in the page
+  const scriptMatch = res.data.match(/"(https:\/\/download\.mediafire\.com\/[^"]+)"/);
+  if (scriptMatch) return scriptMatch[1];
+
   throw new Error('MediaFire: could not extract direct link');
 }
 
 /**
  * TeraBox → direct download URL via their public share API.
- * Flow: extract surl → fetch page for cookies → call shorturlinfo API →
- *       call share/download API → get dlink (CDN URL).
  */
 async function resolveTeraBox(shareUrl) {
-  // Normalize to main domain
   const normalUrl = shareUrl.replace(/freeterabox\.com|1024terabox\.com|teraboxlink\.com|4funbox\.com|momerybox\.com/, 'teraboxapp.com');
 
-  // Extract surl (short URL code)
   const surlMatch = normalUrl.match(/[?&]surl=([^&]+)/) || normalUrl.match(/\/s\/([^/?&#]+)/);
   if (!surlMatch) return null;
   const surl = surlMatch[1];
@@ -85,7 +104,6 @@ async function resolveTeraBox(shareUrl) {
   let cookies = '';
   let jsToken = '';
 
-  // Step 1: Load the share page to grab cookies + jsToken
   try {
     const pageRes = await axios.get(normalUrl, {
       headers: {
@@ -99,7 +117,6 @@ async function resolveTeraBox(shareUrl) {
     const setCookies = pageRes.headers['set-cookie'] || [];
     cookies = setCookies.map(c => c.split(';')[0]).join('; ');
 
-    // Extract jsToken from page HTML
     const jtMatch = pageRes.data.match(/(?:window\.)?jsToken\s*=\s*["']([^"']+)["']/)
       || pageRes.data.match(/fn\("jsToken",\s*"([^"]+)"\)/)
       || pageRes.data.match(/"jsToken"\s*:\s*"([^"]+)"/);
@@ -108,7 +125,6 @@ async function resolveTeraBox(shareUrl) {
     console.error('[terabox] page fetch error:', err.message);
   }
 
-  // Step 2: Get file list from shorturlinfo API
   let shareid, uk, sign, timestamp, fsId, filename, fileSize;
   try {
     const infoRes = await axios.get('https://www.terabox.com/api/shorturlinfo', {
@@ -143,7 +159,6 @@ async function resolveTeraBox(shareUrl) {
     return null;
   }
 
-  // Step 3: Get the actual download dlink
   try {
     const dlRes = await axios.get('https://www.terabox.com/share/download', {
       params: {
@@ -180,8 +195,12 @@ async function resolveTeraBox(shareUrl) {
   return null;
 }
 
-/** Follow HTTP redirects and return final URL + headers */
+/**
+ * Follow HTTP redirects and return final URL + headers.
+ * Uses GET with range header to avoid loading entire file just for headers.
+ */
 async function followRedirects(url) {
+  // Try HEAD first
   try {
     const res = await axios.head(url, {
       maxRedirects: 15, timeout: 25000,
@@ -189,11 +208,36 @@ async function followRedirects(url) {
       validateStatus: s => s < 400,
     });
     const final = res.request?.res?.responseUrl || res.config?.url || url;
+    const ct = res.headers['content-type'] || '';
+    const cl = parseInt(res.headers['content-length'] || '0', 10);
+
+    // Only trust Content-Length if it's a real file (not HTML redirect page)
+    const trustedSize = isVideoContentType(ct) ? cl : 0;
+
     return {
       finalUrl: final,
-      contentType:   res.headers['content-type']   || '',
-      contentLength: parseInt(res.headers['content-length'] || '0', 10),
+      contentType: ct,
+      contentLength: trustedSize,
     };
+  } catch (_) {}
+
+  // HEAD failed — try GET with Range to get just the headers
+  try {
+    const res = await axios.get(url, {
+      maxRedirects: 15, timeout: 20000,
+      headers: { 'User-Agent': UA, Accept: '*/*', Range: 'bytes=0-0' },
+      validateStatus: s => s < 400,
+      responseType: 'stream',
+    });
+    // Destroy the stream immediately — we just want headers
+    try { res.data.destroy(); } catch (_) {}
+
+    const final = res.request?.res?.responseUrl || url;
+    const ct = res.headers['content-type'] || '';
+    const cl = parseInt(res.headers['content-range']?.split('/')[1] || res.headers['content-length'] || '0', 10);
+    const trustedSize = isVideoContentType(ct) ? cl : 0;
+
+    return { finalUrl: final, contentType: ct, contentLength: trustedSize };
   } catch (_) {
     return { finalUrl: url, contentType: '', contentLength: 0 };
   }
@@ -201,7 +245,6 @@ async function followRedirects(url) {
 
 /**
  * Scrape a download-page URL and collect all candidate download links.
- * Returns array of { url, label } sorted by priority (direct files first).
  */
 async function scrapeLinks(pageUrl) {
   let html;
@@ -219,6 +262,7 @@ async function scrapeLinks(pageUrl) {
 
   const add = (href, label = '') => {
     if (!href || !href.startsWith('http')) return;
+    href = href.split(' ')[0]; // remove trailing spaces
     if (seen.has(href)) return;
     seen.add(href);
     found.push({ url: href, label: label.trim() });
@@ -245,7 +289,7 @@ async function scrapeLinks(pageUrl) {
   $('a[href*="mega.nz"], a[href*="mega.co.nz"]').each((_, el) => add($(el).attr('href'), 'MEGA'));
 
   // TeraBox / similar
-  $('a[href*="terabox"], a[href*="4funbox"], a[href*="momerybox"]').each((_, el) =>
+  $('a[href*="terabox"], a[href*="4funbox"], a[href*="momerybox"], a[href*="freeterabox"], a[href*="1024terabox"]').each((_, el) =>
     add($(el).attr('href'), 'TeraBox')
   );
 
@@ -254,6 +298,7 @@ async function scrapeLinks(pageUrl) {
     'a.download-btn', 'a.btn-download', 'a[download]',
     '.wait-done a', 'a.direct-link', '#download a',
     'a[href*="/download/"]', 'a.btn[href*="http"]',
+    'a[href*="sinhalasub"], a[href*="cinesubz"]',
   ];
   for (const sel of btnSelectors) {
     $(sel).each((_, el) => {
@@ -261,6 +306,24 @@ async function scrapeLinks(pageUrl) {
       if (href.startsWith('http')) add(href, $(el).text());
     });
   }
+
+  // Also scan JavaScript for known host URLs
+  $('script').each((_, el) => {
+    const js = $(el).html() || '';
+    const patterns = [
+      /["'](https?:\/\/pixeldrain\.com\/u\/[^"'\s]+)["']/g,
+      /["'](https?:\/\/drive\.google\.com\/[^"'\s]+)["']/g,
+      /["'](https?:\/\/(?:www\.)?mediafire\.com\/[^"'\s]+)["']/g,
+      /["'](https?:\/\/(?:www\.)?terabox(?:app)?\.com\/[^"'\s]+)["']/g,
+      /["'](https?:\/\/[^"'\s]+\.(?:mp4|mkv|avi|webm)[^"'\s]*)["']/g,
+    ];
+    for (const pat of patterns) {
+      let m;
+      while ((m = pat.exec(js)) !== null) {
+        add(m[1], 'Script Link');
+      }
+    }
+  });
 
   // Sort: direct files first, then pixeldrain, then gdrive, then others
   const priority = u => {
@@ -278,7 +341,6 @@ async function scrapeLinks(pageUrl) {
 
 /**
  * Given a candidate URL, resolve it to a directly downloadable URL.
- * Returns null if the host cannot be directly downloaded (MEGA, TeraBox, etc.).
  */
 async function resolveToDownloadable(url) {
   if (isDirectFile(url))   return url;
@@ -290,7 +352,7 @@ async function resolveToDownloadable(url) {
   if (isMediaFire(url)) {
     try { return await resolveMediaFire(url); } catch (_) { return null; }
   }
-  if (isMega(url) || isOneDrive(url)) return null; // can't direct-dl
+  if (isMega(url) || isOneDrive(url)) return null;
   if (isTeraBox(url)) {
     try {
       const result = await resolveTeraBox(url);
@@ -301,7 +363,17 @@ async function resolveToDownloadable(url) {
   // Unknown: follow redirects, if final URL is a file, use it
   const { finalUrl } = await followRedirects(url);
   if (isDirectFile(finalUrl)) return finalUrl;
-  return null; // give up
+
+  // Last resort: try scraping the page for links
+  try {
+    const links = await scrapeLinks(url);
+    if (links.length > 0) {
+      const resolved = await resolveToDownloadable(links[0].url);
+      if (resolved) return resolved;
+    }
+  } catch (_) {}
+
+  return null;
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -310,16 +382,10 @@ async function resolveToDownloadable(url) {
  * downloadAndSend — resolves multiple candidate links from a page,
  * auto-selects the first server that can deliver the file,
  * downloads it and sends as a WhatsApp document.
- *
- * @param {object} opts
- *   downloadUrl     - primary URL to resolve (sinhalasub /links/ page or resolved host)
- *   fallbackUrls    - optional array of extra URLs to try if primary fails
- *                     (e.g. other quality options from the same movie)
  */
 async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl, fallbackUrls = [] }) {
   const safeTitle = title.replace(/[^\w\s]/g, '').replace(/\s+/g, '_').slice(0, 50);
 
-  // Show initial status
   const statusMsg = await sock.sendMessage(chatId, {
     text: `⏳ *Preparing movie...*\n\n🎬 *${title}*\n📊 *Quality:* ${quality}\n\n_Resolving download server..._`,
   }, { quoted: msg });
@@ -331,40 +397,121 @@ async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl,
     try { await sock.sendMessage(chatId, { delete: statusMsg.key }); } catch (_) {}
   };
 
-  // ── Helper: try to download and send from a resolved direct URL ────────────
+  // ── Helper: download using streaming to temp file, then send ────────────────
   const tryDownload = async (dlUrl, hostLabel) => {
     const info = await followRedirects(dlUrl);
-    const fileSize = info.contentLength;
+    const fileSize = info.contentLength; // 0 if unknown/HTML page
     const fileExt  = ext(info.contentType, dlUrl);
     const fileName = `${safeTitle}.${fileExt}`;
 
+    // Only block if we're confident this is a real video file that's too large
     if (fileSize > MAX_SIZE) {
       await edit(
         `⚠️ *File too large for WhatsApp* (${formatBytes(fileSize)})\n\n` +
         `🎬 *${title}*\n📊 *Quality:* ${quality}\n\n` +
-        `🔗 *Direct link:*\n${dlUrl}`
+        `🔗 *Direct download link:*\n${dlUrl}\n\n` +
+        `> 💡 _Paste this link in your browser to download_`
       );
       return 'too_large';
     }
+
+    const tmpFile = path.join(os.tmpdir(), `film_${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`);
 
     await edit(
       `⬇️ *Downloading from ${hostLabel}...*\n\n` +
       `🎬 *${title}*\n📊 *Quality:* ${quality}\n` +
       `📦 *Size:* ${fileSize ? formatBytes(fileSize) : 'Checking...'}\n\n` +
-      `_This may take a moment..._`
+      `_This may take a few minutes for large files..._`
     );
 
-    const response = await axios({
-      method: 'GET',
-      url: dlUrl,
-      responseType: 'arraybuffer',
-      timeout: DOWNLOAD_TIMEOUT,
-      maxRedirects: 15,
-      headers: { 'User-Agent': UA, Accept: '*/*' },
-    });
+    let downloadedBytes = 0;
+    let lastProgressUpdate = Date.now();
 
-    const buffer   = Buffer.from(response.data);
-    const mimeType = info.contentType.includes('video') ? info.contentType : 'video/mp4';
+    try {
+      const response = await axios({
+        method: 'GET',
+        url: dlUrl,
+        responseType: 'stream',
+        timeout: DOWNLOAD_TIMEOUT,
+        maxRedirects: 15,
+        headers: { 'User-Agent': UA, Accept: '*/*' },
+      });
+
+      // Check actual content-type from response
+      const actualCt = response.headers['content-type'] || '';
+      const actualCl = parseInt(response.headers['content-length'] || '0', 10);
+
+      // If response is HTML (redirect/error page), skip this server
+      if (actualCt.includes('text/html') && !actualCt.includes('video')) {
+        try { fs.unlinkSync(tmpFile); } catch (_) {}
+        return 'failed';
+      }
+
+      // If real size is now known and too large, abort
+      if (actualCl > MAX_SIZE) {
+        response.data.destroy();
+        await edit(
+          `⚠️ *File too large for WhatsApp* (${formatBytes(actualCl)})\n\n` +
+          `🎬 *${title}*\n📊 *Quality:* ${quality}\n\n` +
+          `🔗 *Direct download link:*\n${dlUrl}\n\n` +
+          `> 💡 _Paste this link in your browser to download_`
+        );
+        return 'too_large';
+      }
+
+      await new Promise((resolve, reject) => {
+        const writeStream = fs.createWriteStream(tmpFile);
+        response.data.on('data', (chunk) => {
+          downloadedBytes += chunk.length;
+          // Abort if file grows beyond max size
+          if (downloadedBytes > MAX_SIZE) {
+            response.data.destroy();
+            writeStream.destroy();
+            reject(new Error('FILE_TOO_LARGE'));
+            return;
+          }
+          // Update progress every 15 seconds for large files
+          const now = Date.now();
+          if (now - lastProgressUpdate > 15000) {
+            lastProgressUpdate = now;
+            const known = actualCl || fileSize;
+            const pct = known > 0 ? ` (${Math.round((downloadedBytes / known) * 100)}%)` : '';
+            edit(
+              `⬇️ *Downloading from ${hostLabel}...*\n\n` +
+              `🎬 *${title}*\n📊 *Quality:* ${quality}\n` +
+              `📦 *Downloaded:* ${formatBytes(downloadedBytes)}${pct}\n\n` +
+              `_Please wait..._`
+            );
+          }
+        });
+        response.data.on('error', reject);
+        response.data.pipe(writeStream);
+        writeStream.on('finish', resolve);
+        writeStream.on('error', reject);
+      });
+    } catch (err) {
+      try { fs.unlinkSync(tmpFile); } catch (_) {}
+      if (err.message === 'FILE_TOO_LARGE') {
+        await edit(
+          `⚠️ *File too large for WhatsApp*\n\n` +
+          `🎬 *${title}*\n📊 *Quality:* ${quality}\n\n` +
+          `🔗 *Direct download link:*\n${dlUrl}\n\n` +
+          `> 💡 _Paste this link in your browser to download_`
+        );
+        return 'too_large';
+      }
+      throw err;
+    }
+
+    // Read the downloaded file
+    let buffer;
+    try {
+      buffer = fs.readFileSync(tmpFile);
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch (_) {}
+    }
+
+    const mimeType = info.contentType.includes('video') ? info.contentType.split(';')[0].trim() : 'video/mp4';
 
     await edit(
       `📤 *Sending file...*\n\n🎬 *${title}*\n📊 *Quality:* ${quality}\n` +
@@ -386,13 +533,9 @@ async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl,
     return 'ok';
   };
 
-  // ── Build the full list of URLs to try (primary + fallbacks) ──────────────
-  // Each entry is { url, label } — scrapeLinks will expand each to its candidates.
   const allSourceUrls = [downloadUrl, ...fallbackUrls].filter(Boolean);
+  let lastLink = downloadUrl;
 
-  let lastLink = downloadUrl; // fallback link to show at the end if all fail
-
-  // ── Step 1: Scrape the download page for all candidate links ──────────────
   await edit(`🔍 *Scanning download servers...*\n\n🎬 *${title}*\n📊 *Quality:* ${quality}`);
 
   for (let si = 0; si < allSourceUrls.length; si++) {
@@ -403,10 +546,10 @@ async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl,
 
     if (si === 0) lastLink = candidates[0]?.url || srcUrl;
 
-    // ── Step 2: Try each candidate in priority order ────────────────────────
-    for (const candidate of candidates.slice(0, 6)) {
+    for (const candidate of candidates.slice(0, 8)) {
       let hostLabel;
       try { hostLabel = candidate.label || new URL(candidate.url).hostname; } catch (_) { hostLabel = candidate.label || 'Server'; }
+
       await edit(
         `🔗 *Trying server:* ${hostLabel}\n\n🎬 *${title}*\n📊 *Quality:* ${quality}\n\n_Please wait..._`
       );
@@ -414,25 +557,28 @@ async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl,
       let dlUrl = null;
       try { dlUrl = await resolveToDownloadable(candidate.url); } catch (_) {}
 
-      if (!dlUrl) continue; // This server can't be resolved — try next
+      if (!dlUrl) {
+        console.log(`[film] could not resolve: ${candidate.url}`);
+        continue;
+      }
 
       try {
         const result = await tryDownload(dlUrl, hostLabel);
-        if (result === 'ok') return;          // ✅ sent
-        if (result === 'too_large') return;   // told user, no point continuing
+        if (result === 'ok') return;
+        if (result === 'too_large') return;
+        // result === 'failed' → try next
       } catch (dlErr) {
         console.error(`[film] download failed from ${hostLabel}:`, dlErr.message);
-        // try next
       }
     }
   }
 
-  // ── All servers exhausted — send best available link ──────────────────────
+  // All servers exhausted
   await edit(
     `⚠️ *Could not auto-download this file.*\n\n` +
     `🎬 *${title}*\n📊 *Quality:* ${quality}\n\n` +
-    `🔗 *Copy this link to download:*\n${lastLink}\n\n` +
-    `> 💡 _Paste the link in your browser_`
+    `🔗 *Copy this link to download manually:*\n${lastLink}\n\n` +
+    `> 💡 _Paste the link in your browser_\n> 🎬 _Infinity MD Mini_`
   );
 }
 
