@@ -144,7 +144,7 @@ async function getDownloadOptions(movieUrl) {
 const MAINTENANCE_MSG = `🔧 *Film Download — Under Maintenance*\n\nThis feature is temporarily unavailable.\nPlease try again later.\n\n> ♾️ _Infinity MD Mini_`;
 
 module.exports = {
-  name: 'film3',
+  name: 'film',
   aliases: ['movie', 'filmsel', 'filmselect', 'filmdown'],
   category: 'media',
   description: 'Search and download movies with Sinhala subtitles from Cinesubz',

@@ -35,86 +35,87 @@ function pickMenuImage() {
   return fs.existsSync(fallback) ? fallback : null;
 }
 
+// Each cmd.desc is now a lang key (desc_*) so it can be translated
 const CATEGORIES = {
   media: {
-    icon: '📥', label: 'Media & Download',
+    icon: '📥', labelKey: 'cat_label_media',
     cmds: [
-      { name: 'film',   desc: 'SinhalaSub.lk movies 🎬' },
-      { name: 'film3',  desc: 'Cinesubz.com movies 🎞️' },
-      { name: 'song',   desc: 'Download songs 🎵' },
-      { name: 'yt',     desc: 'YouTube info & search 🔍' },
-      { name: 'ytmp3',  desc: 'YouTube → MP3 🎧' },
-      { name: 'ytmp4',  desc: 'YouTube → MP4 📹' },
-      { name: 'play',   desc: 'Play & send audio ▶️' },
-      { name: 'tiktok', desc: 'TikTok downloader 🎵' },
-      { name: 'lyrics', desc: 'Search song lyrics 🎤' },
+      { name: 'film',   descKey: 'desc_film'   },
+      { name: 'film3',  descKey: 'desc_film3'  },
+      { name: 'song',   descKey: 'desc_song'   },
+      { name: 'yt',     descKey: 'desc_yt'     },
+      { name: 'ytmp3',  descKey: 'desc_ytmp3'  },
+      { name: 'ytmp4',  descKey: 'desc_ytmp4'  },
+      { name: 'play',   descKey: 'desc_play'   },
+      { name: 'tiktok', descKey: 'desc_tiktok' },
+      { name: 'lyrics', descKey: 'desc_lyrics' },
     ],
   },
   admin: {
-    icon: '🛡️', label: 'Group Admin',
+    icon: '🛡️', labelKey: 'cat_label_admin',
     cmds: [
-      { name: 'antilink',  desc: 'Block group invite links 🔗' },
-      { name: 'tagall',    desc: 'Tag all members 📢' },
-      { name: 'hidetag',   desc: 'Silent tag everyone 🔕' },
-      { name: 'kick',      desc: 'Remove a member 🦶' },
-      { name: 'promote',   desc: 'Promote to admin ⬆️' },
-      { name: 'demote',    desc: 'Remove admin role ⬇️' },
-      { name: 'mute',      desc: 'Mute the group 🔇' },
-      { name: 'unmute',    desc: 'Unmute the group 🔊' },
-      { name: 'lock',      desc: 'Lock group settings 🔒' },
-      { name: 'unlock',    desc: 'Unlock group settings 🔓' },
-      { name: 'welcome',   desc: 'Welcome new members 👋' },
-      { name: 'goodbye',   desc: 'Farewell message 🚪' },
-      { name: 'members',   desc: 'List all members 👥' },
-      { name: 'setname',   desc: 'Change group name ✏️' },
-      { name: 'warn',      desc: 'Issue a warning ⚠️' },
+      { name: 'antilink',  descKey: 'desc_antilink'  },
+      { name: 'tagall',    descKey: 'desc_tagall'    },
+      { name: 'hidetag',   descKey: 'desc_hidetag'   },
+      { name: 'kick',      descKey: 'desc_kick'      },
+      { name: 'promote',   descKey: 'desc_promote'   },
+      { name: 'demote',    descKey: 'desc_demote'    },
+      { name: 'mute',      descKey: 'desc_mute'      },
+      { name: 'unmute',    descKey: 'desc_unmute'    },
+      { name: 'lock',      descKey: 'desc_lock'      },
+      { name: 'unlock',    descKey: 'desc_unlock'    },
+      { name: 'welcome',   descKey: 'desc_welcome'   },
+      { name: 'goodbye',   descKey: 'desc_goodbye'   },
+      { name: 'members',   descKey: 'desc_members'   },
+      { name: 'setname',   descKey: 'desc_setname'   },
+      { name: 'warn',      descKey: 'desc_warn'      },
     ],
   },
   owner: {
-    icon: '👑', label: 'Owner Only',
+    icon: '👑', labelKey: 'cat_label_owner',
     cmds: [
-      { name: 'mode',         desc: 'Public / private mode 🔀' },
-      { name: 'settings',     desc: 'Bot settings panel ⚙️' },
-      { name: 'broadcast',    desc: 'Broadcast to all chats 📡' },
-      { name: 'block',        desc: 'Block a user 🚫' },
-      { name: 'unblock',      desc: 'Unblock a user ✅' },
-      { name: 'join',         desc: 'Join a group by link 🔗' },
-      { name: 'leave',        desc: 'Leave a group 🚶' },
-      { name: 'anticall',     desc: 'Auto-reject calls 📵' },
-      { name: 'antidelete',   desc: 'Recover deleted msgs 🗑️' },
-      { name: 'antiviewonce', desc: 'Save view-once media 👁️' },
-      { name: 'autoreact',    desc: 'Auto-react to msgs 😊' },
-      { name: 'autoreply',    desc: 'Auto-reply to msgs 💬' },
-      { name: 'autostatus',   desc: 'Auto-view statuses 👀' },
+      { name: 'mode',         descKey: 'desc_mode'         },
+      { name: 'settings',     descKey: 'desc_settings'     },
+      { name: 'broadcast',    descKey: 'desc_broadcast'    },
+      { name: 'block',        descKey: 'desc_block'        },
+      { name: 'unblock',      descKey: 'desc_unblock'      },
+      { name: 'join',         descKey: 'desc_join'         },
+      { name: 'leave',        descKey: 'desc_leave'        },
+      { name: 'anticall',     descKey: 'desc_anticall'     },
+      { name: 'antidelete',   descKey: 'desc_antidelete'   },
+      { name: 'antiviewonce', descKey: 'desc_antiviewonce' },
+      { name: 'autoreact',    descKey: 'desc_autoreact'    },
+      { name: 'autoreply',    descKey: 'desc_autoreply'    },
+      { name: 'autostatus',   descKey: 'desc_autostatus'   },
     ],
   },
   tools: {
-    icon: '🛠️', label: 'Tools & AI',
+    icon: '🛠️', labelKey: 'cat_label_tools',
     cmds: [
-      { name: 'ai',        desc: 'Ask AI anything 🤖' },
-      { name: 'gpt',       desc: 'ChatGPT responses 💡' },
-      { name: 'calc',      desc: 'Calculator 🔢' },
-      { name: 'translate', desc: 'Translate text 🌍' },
-      { name: 'weather',   desc: 'Weather forecast ☀️' },
-      { name: 'wiki',      desc: 'Wikipedia search 📚' },
-      { name: 'sticker',   desc: 'Image → sticker 🖼️' },
-      { name: 'togif',     desc: 'Video → GIF 🎞️' },
-      { name: 'toimg',     desc: 'Sticker → image 🖼️' },
-      { name: 'tomp3',     desc: 'Video → MP3 🎵' },
+      { name: 'ai',        descKey: 'desc_ai'        },
+      { name: 'gpt',       descKey: 'desc_gpt'       },
+      { name: 'calc',      descKey: 'desc_calc'      },
+      { name: 'translate', descKey: 'desc_translate' },
+      { name: 'weather',   descKey: 'desc_weather'   },
+      { name: 'wiki',      descKey: 'desc_wiki'      },
+      { name: 'sticker',   descKey: 'desc_sticker'   },
+      { name: 'togif',     descKey: 'desc_togif'     },
+      { name: 'toimg',     descKey: 'desc_toimg'     },
+      { name: 'tomp3',     descKey: 'desc_tomp3'     },
     ],
   },
   fun: {
-    icon: '🎮', label: 'Fun & General',
+    icon: '🎮', labelKey: 'cat_label_fun',
     cmds: [
-      { name: 'fact',    desc: 'Random interesting fact 💡' },
-      { name: 'joke',    desc: 'Tell a random joke 😂' },
-      { name: 'meme',    desc: 'Send a random meme 🤣' },
-      { name: 'alive',   desc: 'Check bot is alive 💚' },
-      { name: 'ping',    desc: 'Bot response speed ⚡' },
-      { name: 'owner',   desc: 'Contact the owner 👤' },
-      { name: 'runtime', desc: 'Bot uptime info ⏱️' },
-      { name: 'lang',    desc: 'Change bot language 🌐' },
-      { name: 'save',    desc: 'Save a message 💾' },
+      { name: 'fact',    descKey: 'desc_fact'    },
+      { name: 'joke',    descKey: 'desc_joke'    },
+      { name: 'meme',    descKey: 'desc_meme'    },
+      { name: 'alive',   descKey: 'desc_alive'   },
+      { name: 'ping',    descKey: 'desc_ping'    },
+      { name: 'owner',   descKey: 'desc_owner'   },
+      { name: 'runtime', descKey: 'desc_runtime' },
+      { name: 'lang',    descKey: 'desc_lang'    },
+      { name: 'save',    descKey: 'desc_save'    },
     ],
   },
 };
@@ -135,13 +136,17 @@ const MAIN_BUTTONS = [
   btn('funmenu',   '🎮 Fun'),
 ];
 
-function buildMainMenu({ botName, ownerName, senderNum, uptimeStr, ramMB, prefix }) {
+function buildMainMenu({ botName, ownerName, senderNum, uptimeStr, ramMB, prefix, lang }) {
   const totalCmds = Object.values(CATEGORIES).reduce((n, c) => n + c.cmds.length, 0);
   const totalMB   = Math.round(os.totalmem() / 1024 / 1024);
   const bar       = ramBar(Number(ramMB), totalMB);
 
-  const hour     = new Date().getHours();
-  const greeting = hour < 12 ? '🌅 Good Morning' : hour < 17 ? '☀️ Good Afternoon' : '🌙 Good Evening';
+  const hour = new Date().getHours();
+  const greeting = hour < 12
+    ? t('greeting_morning',   lang)
+    : hour < 17
+      ? t('greeting_afternoon', lang)
+      : t('greeting_evening',   lang);
 
   let tx = '';
   tx += `┏━━━━━━━━━━━━━━━━━━━━┓\n`;
@@ -151,45 +156,49 @@ function buildMainMenu({ botName, ownerName, senderNum, uptimeStr, ramMB, prefix
 
   tx += `${greeting}, @${senderNum}! 👋\n\n`;
 
-  tx += `┌───── 📊 *BOT STATUS* ─────\n`;
-  tx += `│ 👑 *Owner  :* ${ownerName}\n`;
-  tx += `│ ⌨️  *Prefix :* \`${prefix}\`\n`;
-  tx += `│ ⏱️  *Uptime :* ${uptimeStr}\n`;
-  tx += `│ 💾 *RAM    :* ${bar}\n`;
-  tx += `│ 📦 *Total  :* ${totalCmds} commands\n`;
+  tx += `┌───── 📊 *${t('menu_bot_status', lang)}* ─────\n`;
+  tx += `│ 👑 *${t('owner', lang)}  :* ${ownerName}\n`;
+  tx += `│ ⌨️  *${t('prefix', lang)} :* \`${prefix}\`\n`;
+  tx += `│ ⏱️  *${t('uptime', lang)} :* ${uptimeStr}\n`;
+  tx += `│ 💾 *${t('ram', lang)}    :* ${bar}\n`;
+  tx += `│ 📦 *${t('menu_total', lang)}  :* ${totalCmds} ${t('menu_cmds', lang)}\n`;
   tx += `└───────────────────────────\n\n`;
 
-  tx += `┌────── 📋 *CATEGORIES* ─────\n`;
+  tx += `┌────── 📋 *${t('categories', lang)}* ─────\n`;
   for (const [, cat] of Object.entries(CATEGORIES)) {
     const n    = cat.cmds.length;
     const dots = '●'.repeat(Math.min(n, 10)) + '○'.repeat(Math.max(0, 10 - n));
+    const label = t(cat.labelKey, lang);
     tx += `│\n`;
-    tx += `│  ${cat.icon}  *${cat.label}*\n`;
-    tx += `│     ${dots}  ${n} cmds\n`;
+    tx += `│  ${cat.icon}  *${label}*\n`;
+    tx += `│     ${dots}  ${n} ${t('menu_cmds', lang)}\n`;
   }
   tx += `└───────────────────────────\n\n`;
-  tx += `> 💡 _Tap a button below to view commands_\n`;
-  tx += `> 🔖 _Type_ \`${prefix}<command>\` _for usage help_`;
+  tx += `> ${t('menu_tap', lang)}\n`;
+  tx += `> ${t('menu_type_help', lang).replace('{prefix}', prefix)}`;
 
   return tx;
 }
 
-function buildSubmenu(catKey, prefix) {
+function buildSubmenu(catKey, prefix, lang) {
   const cat = CATEGORIES[catKey];
   if (!cat) return null;
 
+  const label = t(cat.labelKey, lang);
+
   let tx = `┏━━━━━━━━━━━━━━━━━━━━┓\n`;
-  tx += `┃  ${cat.icon}  *${cat.label}*\n`;
+  tx += `┃  ${cat.icon}  *${label}*\n`;
   tx += `┗━━━━━━━━━━━━━━━━━━━━┛\n\n`;
 
   cat.cmds.forEach((cmd, i) => {
-    const num = String(i + 1).padStart(2, '0');
+    const num  = String(i + 1).padStart(2, '0');
+    const desc = t(cmd.descKey, lang);
     tx += `│ *${num}.* \`${prefix}${cmd.name}\`\n`;
-    tx += `│      ╰ ${cmd.desc}\n`;
+    tx += `│      ╰ ${desc}\n`;
   });
 
-  tx += `\n> 📌 _${cat.cmds.length} commands available_\n`;
-  tx += `> 💬 _Send any command to get usage details_`;
+  tx += `\n> 📌 _${cat.cmds.length} ${t('cmds_available', lang)}_\n`;
+  tx += `> 💬 _${t('send_cmd_usage', lang)}_`;
 
   return tx;
 }
@@ -238,15 +247,16 @@ module.exports = {
 
     if (submenuKey) {
       const cat  = CATEGORIES[submenuKey];
-      const text = buildSubmenu(submenuKey, prefix);
+      const text = buildSubmenu(submenuKey, prefix, lang);
       if (!text) return sock.sendMessage(chatId, { text: '❌ Unknown menu section.' }, { quoted: msg });
 
+      const label = t(cat.labelKey, lang);
       return sendBtn(sock, chatId, {
         text,
-        footer: `${cat.icon} ${cat.label} · ${cat.cmds.length} commands`,
+        footer: `${cat.icon} ${label} · ${cat.cmds.length} ${t('menu_cmds', lang)}`,
         ...(image ? { image } : {}),
         buttons: [
-          btn('menu', '🏠 Main Menu'),
+          btn('menu', '🏠 ' + t('backMenu', lang).replace('🔙 ', '')),
           urlBtn('💬 Support', 'https://wa.me/94770612011'),
         ],
       }, { quoted: msg });
@@ -257,7 +267,7 @@ module.exports = {
 
     return sendBtn(sock, chatId, {
       text,
-      footer: `♾️ ${botName} · ${totalCmds} commands ready`,
+      footer: `♾️ ${botName} · ${totalCmds} ${t('cmdReady', lang)}`,
       ...(image ? { image } : {}),
       buttons: MAIN_BUTTONS,
       mentions: [sender],

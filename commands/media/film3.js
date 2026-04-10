@@ -167,7 +167,6 @@ async function resolveDownloadUrl(linkUrl) {
     });
     html = res.data;
 
-    // If we were redirected away from sinhalasub, the final URL is what we want
     const finalUrl = res.request?.res?.responseUrl || res.config?.url || linkUrl;
     if (!finalUrl.includes('sinhalasub.lk')) {
       return finalUrl;
@@ -178,7 +177,6 @@ async function resolveDownloadUrl(linkUrl) {
 
   const $ = cheerio.load(html);
 
-  // Primary: the "Continue" link after the countdown
   const continueHref =
     $('.wait-done a:not(.prev-lnk)').first().attr('href')
     || $('.wait-done a').first().attr('href')
@@ -189,7 +187,6 @@ async function resolveDownloadUrl(linkUrl) {
     return continueHref;
   }
 
-  // Look in JavaScript for the redirect URL or known host links
   const scripts = [];
   $('script').each((_, el) => { scripts.push($(el).html() || ''); });
   const allJs = scripts.join('\n');
@@ -213,7 +210,6 @@ async function resolveDownloadUrl(linkUrl) {
     }
   }
 
-  // Fallback: any external link on the page that looks like a file host
   let fallback = null;
   $('a[href]').each((_, el) => {
     if (fallback) return;
@@ -233,21 +229,14 @@ async function resolveDownloadUrl(linkUrl) {
   return fallback || linkUrl;
 }
 
-const MAINTENANCE_MSG = `🔧 *Film Download — Under Maintenance*\n\nThis feature is temporarily unavailable.\nPlease try again later.\n\n> ♾️ _Infinity MD Mini_`;
-
 module.exports = {
-  name: 'film',
+  name: 'film3',
   aliases: ['sinhalasub', 'film3sel', 'film3select', 'film3dl'],
   category: 'media',
   description: 'Search and download movies from SinhalaSub.lk',
   usage: 'film3 <movie name>',
 
   async execute(sock, msg, args = [], extra = {}) {
-    const chatId = extra?.from || msg?.key?.remoteJid;
-    return sock.sendMessage(chatId, { text: MAINTENANCE_MSG }, { quoted: msg });
-  },
-
-  async _disabled_execute(sock, msg, args = [], extra = {}) {
     const chatId  = extra?.from || msg?.key?.remoteJid;
     const prefix  = extra?.prefix || '.';
     const cmdName = String(extra?.commandName || '').toLowerCase().replace(prefix, '');
@@ -258,22 +247,19 @@ module.exports = {
       const session = detailSessions.get(chatId);
       if (!session || isNaN(idx) || !session[idx]) {
         return sock.sendMessage(chatId, {
-          text: `⏱️ Session expired.\n\nSearch again with \`${prefix}film <movie name>\`.`,
+          text: `⏱️ Session expired.\n\nSearch again with \`${prefix}film3 <movie name>\`.`,
         }, { quoted: msg });
       }
 
       const entry = session[idx];
       await react(sock, msg, '⬇️');
 
-      // First resolve the sinhalasub.lk/links/ intermediate page to get the real host URL
       let resolvedUrl = entry.url;
       try { resolvedUrl = await resolveDownloadUrl(entry.url); } catch (_) {}
 
-      // Build fallback URLs: resolve all OTHER quality entries from the same movie session
-      // so that if the chosen server fails, the bot automatically tries the rest.
       const fallbackUrls = [];
       for (let fi = 0; fi < session.length; fi++) {
-        if (fi === idx) continue; // skip the one we're already trying
+        if (fi === idx) continue;
         try {
           const fbResolved = await resolveDownloadUrl(session[fi].url).catch(() => session[fi].url);
           fallbackUrls.push(fbResolved);
@@ -323,7 +309,7 @@ module.exports = {
           footer: '♾️ Infinity MD Mini • SinhalaSub.lk',
           buttons: [
             urlBtn('🌐 Movie Page', movie.url),
-            btn('film', '🔍 New Search'),
+            btn('film3', '🔍 New Search'),
           ],
         }, { quoted: msg });
       }
@@ -353,7 +339,7 @@ module.exports = {
       text += `\n> 💡 _Bot will download & send the full file_\n> 🎬 _Infinity MD Mini_`;
 
       const dlBtns = dlSession.map((q, i) => btn(`film3dl_${i}`, `⬇️ ${q.label.slice(0, 20)}`));
-      dlBtns.push(btn('film', '🔍 New Search'));
+      dlBtns.push(btn('film3', '🔍 New Search'));
 
       const payload = { text, footer: '♾️ Infinity MD Mini • SinhalaSub.lk', buttons: dlBtns };
       if (details.thumbnail) payload.image = { url: details.thumbnail };
@@ -379,7 +365,7 @@ module.exports = {
       const isBlocked = String(err.message).includes('403');
       return sock.sendMessage(chatId, {
         text: isBlocked
-          ? `❌ *SinhalaSub.lk is currently blocking requests.*\n\nTry \`${prefix}film\` (Cinesubz) or \`${prefix}film1\` (SriHub) instead.`
+          ? `❌ *SinhalaSub.lk is currently blocking requests.*\n\nTry \`${prefix}film\` (Cinesubz) instead.`
           : `❌ Search failed. Please try again in a moment.`,
       }, { quoted: msg });
     }

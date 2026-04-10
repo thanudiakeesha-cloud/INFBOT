@@ -4,7 +4,7 @@ const { sendBtn, btn, urlBtn, CHANNEL_URL } = require('../../utils/sendBtn');
 const TIKWM_BASE = 'https://tikwm.com';
 
 // Store pending search results per sender (expires after 5 minutes)
-const pendingSearches = nbutew Map();
+const pendingSearches = new Map();
 const PENDING_TTL = 5 * 60 * 1000;
 
 function storePending(senderJid, videos) {
