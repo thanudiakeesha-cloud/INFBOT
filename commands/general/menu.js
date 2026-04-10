@@ -144,22 +144,22 @@ function buildMainMenu({ botName, ownerName, senderNum, uptimeStr, ramMB, prefix
   const greeting = hour < 12 ? '🌅 Good Morning' : hour < 17 ? '☀️ Good Afternoon' : '🌙 Good Evening';
 
   let tx = '';
-  tx += `┏━━━━━━━━━━━━━━━━━━━━━━━┓\n`;
+  tx += `┏━━━━━━━━━━━━━━━━━━━━┓\n`;
   tx += `┃  ♾️  *${botName}*\n`;
   tx += `┃  _WhatsApp Multi-Bot Manager_\n`;
-  tx += `┗━━━━━━━━━━━━━━━━━━━━━━━┛\n\n`;
+  tx += `┗━━━━━━━━━━━━━━━━━━━━┛\n\n`;
 
   tx += `${greeting}, @${senderNum}! 👋\n\n`;
 
-  tx += `┌────── 📊 *BOT STATUS* ───────\n`;
+  tx += `┌───── 📊 *BOT STATUS* ─────\n`;
   tx += `│ 👑 *Owner  :* ${ownerName}\n`;
   tx += `│ ⌨️  *Prefix :* \`${prefix}\`\n`;
   tx += `│ ⏱️  *Uptime :* ${uptimeStr}\n`;
   tx += `│ 💾 *RAM    :* ${bar}\n`;
   tx += `│ 📦 *Total  :* ${totalCmds} commands\n`;
-  tx += `└──────────────────────────────\n\n`;
+  tx += `└───────────────────────────\n\n`;
 
-  tx += `┌────── 📋 *CATEGORIES* ───────\n`;
+  tx += `┌────── 📋 *CATEGORIES* ─────\n`;
   for (const [, cat] of Object.entries(CATEGORIES)) {
     const n    = cat.cmds.length;
     const dots = '●'.repeat(Math.min(n, 10)) + '○'.repeat(Math.max(0, 10 - n));
@@ -167,7 +167,7 @@ function buildMainMenu({ botName, ownerName, senderNum, uptimeStr, ramMB, prefix
     tx += `│  ${cat.icon}  *${cat.label}*\n`;
     tx += `│     ${dots}  ${n} cmds\n`;
   }
-  tx += `└──────────────────────────────\n\n`;
+  tx += `└───────────────────────────\n\n`;
   tx += `> 💡 _Tap a button below to view commands_\n`;
   tx += `> 🔖 _Type_ \`${prefix}<command>\` _for usage help_`;
 
@@ -178,9 +178,9 @@ function buildSubmenu(catKey, prefix) {
   const cat = CATEGORIES[catKey];
   if (!cat) return null;
 
-  let tx = `┏━━━━━━━━━━━━━━━━━━━━━━━┓\n`;
+  let tx = `┏━━━━━━━━━━━━━━━━━━━━┓\n`;
   tx += `┃  ${cat.icon}  *${cat.label}*\n`;
-  tx += `┗━━━━━━━━━━━━━━━━━━━━━━━┛\n\n`;
+  tx += `┗━━━━━━━━━━━━━━━━━━━━┛\n\n`;
 
   cat.cmds.forEach((cmd, i) => {
     const num = String(i + 1).padStart(2, '0');

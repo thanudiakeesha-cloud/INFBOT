@@ -233,6 +233,8 @@ async function resolveDownloadUrl(linkUrl) {
   return fallback || linkUrl;
 }
 
+const MAINTENANCE_MSG = `🔧 *Film Download — Under Maintenance*\n\nThis feature is temporarily unavailable.\nPlease try again later.\n\n> ♾️ _Infinity MD Mini_`;
+
 module.exports = {
   name: 'film',
   aliases: ['sinhalasub', 'film3sel', 'film3select', 'film3dl'],
@@ -241,6 +243,11 @@ module.exports = {
   usage: 'film3 <movie name>',
 
   async execute(sock, msg, args = [], extra = {}) {
+    const chatId = extra?.from || msg?.key?.remoteJid;
+    return sock.sendMessage(chatId, { text: MAINTENANCE_MSG }, { quoted: msg });
+  },
+
+  async _disabled_execute(sock, msg, args = [], extra = {}) {
     const chatId  = extra?.from || msg?.key?.remoteJid;
     const prefix  = extra?.prefix || '.';
     const cmdName = String(extra?.commandName || '').toLowerCase().replace(prefix, '');
