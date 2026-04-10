@@ -151,11 +151,6 @@ module.exports = {
   usage: 'film <movie name>',
 
   async execute(sock, msg, args = [], extra = {}) {
-    const chatId = extra?.from || msg?.key?.remoteJid;
-    return sock.sendMessage(chatId, { text: MAINTENANCE_MSG }, { quoted: msg });
-  },
-
-  async _disabled_execute(sock, msg, args = [], extra = {}) {
     const chatId  = extra?.from || msg?.key?.remoteJid;
     const prefix  = extra?.prefix || '.';
     const cmdName = String(extra?.commandName || '').toLowerCase().replace(prefix, '');

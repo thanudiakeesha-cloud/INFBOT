@@ -1,22 +1,14 @@
 /**
- * .film3 — SinhalaSub.lk scraper
+ * .film3 — SinhalaSub.lk scraper (Puppeteer-based, bypasses Cloudflare)
  * Sends the actual movie file as a document instead of just a link.
  */
 
-const axios   = require('axios');
-const cheerio = require('cheerio');
+const puppeteer = require('puppeteer');
+const cheerio   = require('cheerio');
 const { sendBtn, btn, urlBtn } = require('../../utils/sendBtn');
 const { downloadAndSend } = require('../../utils/filmDownloader');
 
 const BASE_URL = 'https://sinhalasub.lk';
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
-const HEADERS = {
-  'User-Agent': UA,
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-  'Accept-Language': 'en-US,en;q=0.5',
-  'Referer': BASE_URL,
-};
 
 const searchSessions = new Map();
 const detailSessions = new Map();
@@ -40,26 +32,74 @@ function cleanTitle(raw) {
     .trim();
 }
 
-async function fetchPage(url) {
-  const res = await axios.get(url, {
-    headers: HEADERS,
-    timeout: 20000,
-    maxRedirects: 8,
+const PUPPETEER_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-accelerated-2d-canvas',
+  '--no-first-run',
+  '--no-zygote',
+  '--disable-gpu',
+  '--disable-extensions',
+  '--disable-background-networking',
+  '--disable-default-apps',
+  '--disable-sync',
+  '--disable-translate',
+  '--hide-scrollbars',
+  '--mute-audio',
+];
+
+/** Launch a headless Chrome, fetch the URL, return page HTML. */
+async function fetchWithBrowser(url, waitFor = null) {
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: PUPPETEER_ARGS,
   });
-  return res.data;
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+    );
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    });
+
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+
+    // Wait out any Cloudflare JS challenge (title "Just a moment" → wait for it to pass)
+    for (let i = 0; i < 6; i++) {
+      const title = await page.title();
+      if (title.toLowerCase().includes('just a moment') || title.toLowerCase().includes('checking your')) {
+        await new Promise(r => setTimeout(r, 3000));
+      } else {
+        break;
+      }
+    }
+
+    if (waitFor) {
+      try { await page.waitForSelector(waitFor, { timeout: 10000 }); } catch (_) {}
+    }
+
+    return await page.content();
+  } finally {
+    await browser.close();
+  }
 }
 
 async function searchMovies(query) {
-  const url = `${BASE_URL}/?s=${encodeURIComponent(query)}`;
-  const html = await fetchPage(url);
-  const $ = cheerio.load(html);
+  const url  = `${BASE_URL}/?s=${encodeURIComponent(query)}`;
+  const html = await fetchWithBrowser(url, '.display-item, .module-item, .ml-item');
+  const $    = cheerio.load(html);
 
   const results = [];
-  const seen = new Set();
+  const seen    = new Set();
 
   $('.display-item, .module-item, .ml-item').each((_, el) => {
     if (results.length >= 5) return;
-    const $el = $(el);
+    const $el   = $(el);
     const $link = $el.find('a[href]').first();
     let movieUrl = $link.attr('href') || '';
     if (!movieUrl) return;
@@ -97,11 +137,11 @@ async function searchMovies(query) {
 }
 
 async function getMovieDetails(pageUrl) {
-  const html = await fetchPage(pageUrl);
-  const $ = cheerio.load(html);
+  const html = await fetchWithBrowser(pageUrl, '#links, .entry-content');
+  const $    = cheerio.load(html);
 
   const rawTitle = $('title').first().text() || '';
-  const title = cleanTitle(rawTitle) || 'Unknown Title';
+  const title    = cleanTitle(rawTitle) || 'Unknown Title';
 
   const thumbnail =
     $('img.wp-post-image, .post-thumbnail img, .item-thumb img, .poster img').first().attr('src')
@@ -111,21 +151,21 @@ async function getMovieDetails(pageUrl) {
   const description =
     $('.entry-content > p, .post-content > p, .desc-wrap p, .sinopsis p').first().text().trim() || null;
 
-  const year = $('span.year, .date, time, [itemprop="datePublished"]').first().text().trim() || null;
+  const year     = $('span.year, .date, time, [itemprop="datePublished"]').first().text().trim() || null;
   const language = $('span.language, .lang, [itemprop="inLanguage"]').first().text().trim() || null;
   const genreLinks = $('a[rel="category tag"], .category a, .genres a, .genre a');
-  const genre = genreLinks.length > 0
+  const genre    = genreLinks.length > 0
     ? genreLinks.map((_, el) => $(el).text().trim()).get().filter(Boolean).join(', ')
     : null;
 
   const qualities = [];
 
   $('#links .links-table tbody tr').each((_, row) => {
-    const $row = $(row);
-    const $a = $row.find('a[href]').first();
-    const href = $a.attr('href') || '';
+    const $row       = $(row);
+    const $a         = $row.find('a[href]').first();
+    const href       = $a.attr('href') || '';
     const qualityText = $row.find('.quality, td:nth-child(2)').first().text().trim();
-    const sizeText = $row.find('td:nth-child(3) span, td:nth-child(3)').first().text().trim();
+    const sizeText   = $row.find('td:nth-child(3) span, td:nth-child(3)').first().text().trim();
     const serverName = $a.text().trim();
 
     if (href && href.startsWith('http')) {
@@ -138,7 +178,7 @@ async function getMovieDetails(pageUrl) {
 
   if (qualities.length === 0) {
     $(".links-table a[href], .content-links a[href], a[href*='/links/']").each((_, el) => {
-      const $a = $(el);
+      const $a   = $(el);
       const href = $a.attr('href') || '';
       const text = $a.text().trim();
       if (href && (href.includes('/links/') || href.startsWith('http')) && text) {
@@ -158,75 +198,61 @@ async function resolveDownloadUrl(linkUrl) {
     return linkUrl;
   }
 
-  let html = '';
   try {
-    const res = await axios.get(linkUrl, {
-      headers: HEADERS,
-      timeout: 15000,
-      maxRedirects: 10,
-    });
-    html = res.data;
+    const html = await fetchWithBrowser(linkUrl, '.wait-done a, a.wait-link');
+    const $    = cheerio.load(html);
 
-    const finalUrl = res.request?.res?.responseUrl || res.config?.url || linkUrl;
-    if (!finalUrl.includes('sinhalasub.lk')) {
-      return finalUrl;
+    const continueHref =
+      $('.wait-done a:not(.prev-lnk)').first().attr('href')
+      || $('.wait-done a').first().attr('href')
+      || $('a.wait-link').first().attr('href')
+      || null;
+
+    if (continueHref && continueHref.startsWith('http') && !continueHref.includes('sinhalasub.lk')) {
+      return continueHref;
     }
+
+    const scripts = [];
+    $('script').each((_, el) => { scripts.push($(el).html() || ''); });
+    const allJs = scripts.join('\n');
+
+    const hostPatterns = [
+      /["'`](https?:\/\/(?:www\.)?pixeldrain\.com\/u\/[^"'`\s]+)["'`]/,
+      /["'`](https?:\/\/drive\.google\.com\/[^"'`\s]+)["'`]/,
+      /["'`](https?:\/\/(?:www\.)?mediafire\.com\/[^"'`\s]+)["'`]/,
+      /["'`](https?:\/\/(?:[^"'`\s]*\.)?terabox(?:app)?\.com\/[^"'`\s]+)["'`]/,
+      /["'`](https?:\/\/(?:[^"'`\s]*\.)?4funbox\.com\/[^"'`\s]+)["'`]/,
+      /["'`](https?:\/\/mega\.nz\/[^"'`\s]+)["'`]/,
+      /["'`](https?:\/\/[^"'`\s]+\.(?:mp4|mkv|avi|webm)[^"'`\s]*)["'`]/,
+      /window\.location(?:\.href)?\s*=\s*["'`](https?:\/\/[^"'`\s]+)["'`]/,
+      /(?:url|href|link|redirect)\s*[:=]\s*["'`](https?:\/\/[^"'`\s]+)["'`]/i,
+    ];
+
+    for (const pat of hostPatterns) {
+      const m = allJs.match(pat);
+      if (m && m[1] && !m[1].includes('sinhalasub.lk')) return m[1];
+    }
+
+    let fallback = null;
+    $('a[href]').each((_, el) => {
+      if (fallback) return;
+      const href = $(el).attr('href') || '';
+      if (
+        href.startsWith('http') &&
+        !href.includes('sinhalasub.lk') &&
+        (
+          /terabox|4funbox|momerybox|mediafire|mega\.nz|pixeldrain|drive\.google|1drv\.ms|onedrive/i.test(href) ||
+          /\.(mp4|mkv|avi|webm)(\?|$)/i.test(href)
+        )
+      ) {
+        fallback = href;
+      }
+    });
+
+    return fallback || linkUrl;
   } catch (_) {
     return linkUrl;
   }
-
-  const $ = cheerio.load(html);
-
-  const continueHref =
-    $('.wait-done a:not(.prev-lnk)').first().attr('href')
-    || $('.wait-done a').first().attr('href')
-    || $('a.wait-link').first().attr('href')
-    || null;
-
-  if (continueHref && continueHref.startsWith('http') && !continueHref.includes('sinhalasub.lk')) {
-    return continueHref;
-  }
-
-  const scripts = [];
-  $('script').each((_, el) => { scripts.push($(el).html() || ''); });
-  const allJs = scripts.join('\n');
-
-  const hostPatterns = [
-    /["'`](https?:\/\/(?:www\.)?pixeldrain\.com\/u\/[^"'`\s]+)["'`]/,
-    /["'`](https?:\/\/drive\.google\.com\/[^"'`\s]+)["'`]/,
-    /["'`](https?:\/\/(?:www\.)?mediafire\.com\/[^"'`\s]+)["'`]/,
-    /["'`](https?:\/\/(?:[^"'`\s]*\.)?terabox(?:app)?\.com\/[^"'`\s]+)["'`]/,
-    /["'`](https?:\/\/(?:[^"'`\s]*\.)?4funbox\.com\/[^"'`\s]+)["'`]/,
-    /["'`](https?:\/\/mega\.nz\/[^"'`\s]+)["'`]/,
-    /["'`](https?:\/\/[^"'`\s]+\.(?:mp4|mkv|avi|webm)[^"'`\s]*)["'`]/,
-    /window\.location(?:\.href)?\s*=\s*["'`](https?:\/\/[^"'`\s]+)["'`]/,
-    /(?:url|href|link|redirect)\s*[:=]\s*["'`](https?:\/\/[^"'`\s]+)["'`]/i,
-  ];
-
-  for (const pat of hostPatterns) {
-    const m = allJs.match(pat);
-    if (m && m[1] && !m[1].includes('sinhalasub.lk')) {
-      return m[1];
-    }
-  }
-
-  let fallback = null;
-  $('a[href]').each((_, el) => {
-    if (fallback) return;
-    const href = $(el).attr('href') || '';
-    if (
-      href.startsWith('http') &&
-      !href.includes('sinhalasub.lk') &&
-      (
-        /terabox|4funbox|momerybox|mediafire|mega\.nz|pixeldrain|drive\.google|1drv\.ms|onedrive/i.test(href) ||
-        /\.(mp4|mkv|avi|webm)(\?|$)/i.test(href)
-      )
-    ) {
-      fallback = href;
-    }
-  });
-
-  return fallback || linkUrl;
 }
 
 module.exports = {
@@ -261,8 +287,7 @@ module.exports = {
       for (let fi = 0; fi < session.length; fi++) {
         if (fi === idx) continue;
         try {
-          const fbResolved = await resolveDownloadUrl(session[fi].url).catch(() => session[fi].url);
-          fallbackUrls.push(fbResolved);
+          fallbackUrls.push(await resolveDownloadUrl(session[fi].url).catch(() => session[fi].url));
         } catch (_) {
           fallbackUrls.push(session[fi].url);
         }
@@ -294,11 +319,8 @@ module.exports = {
         details = await getMovieDetails(movie.url);
       } catch (err) {
         await react(sock, msg, '❌');
-        const isBlocked = String(err.message).includes('403');
         return sock.sendMessage(chatId, {
-          text: isBlocked
-            ? `❌ *SinhalaSub.lk is currently blocking requests.*\n\n🔗 Open the page directly:\n${movie.url}\n\n> 🎬 _Infinity MD Mini_`
-            : `❌ Couldn't load the movie page. Please try again.`,
+          text: `❌ Couldn't load the movie page.\n\n🔗 Open directly:\n${movie.url}\n\n> 🎬 _Infinity MD Mini_`,
         }, { quoted: msg });
       }
 
@@ -315,10 +337,7 @@ module.exports = {
       }
 
       const dlSession = details.qualities.slice(0, 5).map(q => ({
-        label: q.label,
-        url: q.url,
-        size: q.size,
-        movieTitle: details.title,
+        label: q.label, url: q.url, size: q.size, movieTitle: details.title,
       }));
       setTTL(detailSessions, chatId, dlSession);
 
@@ -356,19 +375,27 @@ module.exports = {
     const query = args.join(' ');
     await react(sock, msg, '🔍');
 
+    // Warn user it may take a moment (browser launch is slow)
+    const waitMsg = await sock.sendMessage(chatId, {
+      text: `⏳ _Searching SinhalaSub.lk for *"${query}"*..._\n_Please wait a moment..._`,
+    }, { quoted: msg });
+    const delWait = async () => {
+      try { await sock.sendMessage(chatId, { delete: waitMsg.key }); } catch (_) {}
+    };
+
     let results;
     try {
       results = await searchMovies(query);
     } catch (err) {
       console.error('[film3] search error:', err.message);
+      await delWait();
       await react(sock, msg, '❌');
-      const isBlocked = String(err.message).includes('403');
       return sock.sendMessage(chatId, {
-        text: isBlocked
-          ? `❌ *SinhalaSub.lk is currently blocking requests.*\n\nTry \`${prefix}film\` (Cinesubz) instead.`
-          : `❌ Search failed. Please try again in a moment.`,
+        text: `❌ Search failed. Please try again in a moment.\n\n_If this keeps failing, try \`${prefix}film\` instead._`,
       }, { quoted: msg });
     }
+
+    await delWait();
 
     if (!results.length) {
       await react(sock, msg, '❌');
@@ -396,12 +423,8 @@ module.exports = {
       btn(`film3sel_${i}`, `${i + 1}. ${m.title.slice(0, 22)}`)
     );
 
-    const thumb = results.find(m => m.thumbnail)?.thumbnail;
-    const payload = {
-      text,
-      footer: '♾️ Infinity MD Mini • SinhalaSub.lk',
-      buttons: pickBtns,
-    };
+    const thumb   = results.find(m => m.thumbnail)?.thumbnail;
+    const payload = { text, footer: '♾️ Infinity MD Mini • SinhalaSub.lk', buttons: pickBtns };
     if (thumb) payload.image = { url: thumb };
     return sendBtn(sock, chatId, payload, { quoted: msg });
   },

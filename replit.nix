@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.chromium
     pkgs.python3
     pkgs.pixman
     pkgs.librsvg
