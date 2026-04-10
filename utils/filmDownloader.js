@@ -14,6 +14,19 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const DOWNLOAD_TIMEOUT = 10 * 60 * 1000; // 10 min for large files
 const MAX_SIZE = 1.9 * 1024 * 1024 * 1024; // 1.9 GB
 
+const BROWSER_HEADERS = {
+  'User-Agent': UA,
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Connection': 'keep-alive',
+  'Upgrade-Insecure-Requests': '1',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Cache-Control': 'max-age=0',
+};
+
 function formatBytes(b) {
   if (!b || b <= 0) return '?';
   if (b >= 1e9) return (b / 1e9).toFixed(2) + ' GB';
@@ -63,12 +76,8 @@ function pixeldrainDirectUrl(url) {
 /** MediaFire → scrape the direct download link */
 async function resolveMediaFire(url) {
   const res = await axios.get(url, {
-    headers: {
-      'User-Agent': UA,
-      'Accept': 'text/html,application/xhtml+xml,*/*',
-      'Accept-Language': 'en-US,en;q=0.9',
-    },
-    timeout: 20000,
+    headers: { ...BROWSER_HEADERS, Referer: 'https://www.mediafire.com/' },
+    timeout: 25000,
     maxRedirects: 10,
   });
   const $ = cheerio.load(res.data);
@@ -80,13 +89,21 @@ async function resolveMediaFire(url) {
     $('a.btn-payment-dashboard[href]').attr('href') ||
     $('a[href*="download.mediafire.com"]').first().attr('href') ||
     $('a[href][id*="download"]').first().attr('href') ||
-    $('a.btn[href*="mediafire"]').first().attr('href') || null;
+    $('a.btn[href*="mediafire"]').first().attr('href') ||
+    $('a[href*="mediafire.com/file/"]').first().attr('href') || null;
 
   if (direct && direct.startsWith('http')) return direct;
 
   // Try extracting from JavaScript in the page
-  const scriptMatch = res.data.match(/"(https:\/\/download\.mediafire\.com\/[^"]+)"/);
-  if (scriptMatch) return scriptMatch[1];
+  const patterns = [
+    /"(https:\/\/download\.mediafire\.com\/[^"]+)"/,
+    /href\s*=\s*"(https:\/\/download\.mediafire\.com\/[^"]+)"/,
+    /window\.location\s*=\s*['"]?(https:\/\/download\.mediafire\.com\/[^'"?\s]+)/,
+  ];
+  for (const pat of patterns) {
+    const m = res.data.match(pat);
+    if (m) return m[1];
+  }
 
   throw new Error('MediaFire: could not extract direct link');
 }
@@ -106,12 +123,8 @@ async function resolveTeraBox(shareUrl) {
 
   try {
     const pageRes = await axios.get(normalUrl, {
-      headers: {
-        'User-Agent': UA,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-      },
-      timeout: 15000,
+      headers: { ...BROWSER_HEADERS, Referer: 'https://www.terabox.com/' },
+      timeout: 20000,
       maxRedirects: 10,
     });
     const setCookies = pageRes.headers['set-cookie'] || [];
@@ -204,7 +217,7 @@ async function followRedirects(url) {
   try {
     const res = await axios.head(url, {
       maxRedirects: 15, timeout: 25000,
-      headers: { 'User-Agent': UA, Accept: '*/*' },
+      headers: { 'User-Agent': UA, Accept: '*/*', 'Accept-Language': 'en-US,en;q=0.9' },
       validateStatus: s => s < 400,
     });
     const final = res.request?.res?.responseUrl || res.config?.url || url;
@@ -248,12 +261,16 @@ async function followRedirects(url) {
  */
 async function scrapeLinks(pageUrl) {
   let html;
+  let finalPageUrl = pageUrl;
   try {
+    let origin = '';
+    try { origin = new URL(pageUrl).origin; } catch (_) {}
     const res = await axios.get(pageUrl, {
-      headers: { 'User-Agent': UA, Referer: new URL(pageUrl).origin },
-      timeout: 20000, maxRedirects: 10,
+      headers: { ...BROWSER_HEADERS, Referer: origin || pageUrl },
+      timeout: 25000, maxRedirects: 15,
     });
     html = res.data;
+    finalPageUrl = res.request?.res?.responseUrl || res.config?.url || pageUrl;
   } catch (_) { return []; }
 
   const $ = cheerio.load(html);
@@ -261,17 +278,18 @@ async function scrapeLinks(pageUrl) {
   const seen  = new Set();
 
   const add = (href, label = '') => {
-    if (!href || !href.startsWith('http')) return;
-    href = href.split(' ')[0]; // remove trailing spaces
+    if (!href || typeof href !== 'string') return;
+    href = href.split(' ')[0].trim();
+    if (!href.startsWith('http')) return;
     if (seen.has(href)) return;
     seen.add(href);
-    found.push({ url: href, label: label.trim() });
+    found.push({ url: href, label: label.trim() || '' });
   };
 
   // Direct video file links
   $('a[href]').each((_, el) => {
     const href = $(el).attr('href') || '';
-    if (isDirectFile(href)) add(href, $(el).text());
+    if (isDirectFile(href)) add(href, $(el).text().trim() || 'Direct');
   });
 
   // PixelDrain
@@ -289,38 +307,66 @@ async function scrapeLinks(pageUrl) {
   $('a[href*="mega.nz"], a[href*="mega.co.nz"]').each((_, el) => add($(el).attr('href'), 'MEGA'));
 
   // TeraBox / similar
-  $('a[href*="terabox"], a[href*="4funbox"], a[href*="momerybox"], a[href*="freeterabox"], a[href*="1024terabox"]').each((_, el) =>
+  $('a[href*="terabox"], a[href*="4funbox"], a[href*="momerybox"], a[href*="freeterabox"], a[href*="1024terabox"], a[href*="teraboxlink"]').each((_, el) =>
     add($(el).attr('href'), 'TeraBox')
   );
 
-  // Generic download buttons / continue links
+  // OneDrive
+  $('a[href*="onedrive.live.com"], a[href*="1drv.ms"]').each((_, el) => add($(el).attr('href'), 'OneDrive'));
+
+  // Generic download buttons / continue links — more selectors
   const btnSelectors = [
     'a.download-btn', 'a.btn-download', 'a[download]',
     '.wait-done a', 'a.direct-link', '#download a',
     'a[href*="/download/"]', 'a.btn[href*="http"]',
-    'a[href*="sinhalasub"], a[href*="cinesubz"]',
+    '.download-link a', '.dl-link a', '.movie-download-button',
+    'a.movie-download-button', '.download-section a[href]',
+    '.entry-content a[href*="download"]', '.post-content a[href*="http"]',
+    'a[href*="sinhalasub"]', 'a[href*="cinesubz"]',
+    '.wp-block-button a', 'a.wp-element-button',
+    'a.elementor-button', 'a[href*="gdrive"]',
+    '.download-table a', '.link-table a',
+    'a[data-wpel-link]', 'a[href*="go."]', 'a.go-btn',
   ];
   for (const sel of btnSelectors) {
     $(sel).each((_, el) => {
       const href = $(el).attr('href') || '';
-      if (href.startsWith('http')) add(href, $(el).text());
+      if (href.startsWith('http')) add(href, $(el).text().trim());
     });
   }
 
-  // Also scan JavaScript for known host URLs
+  // Any external link from a movie download site
+  $('a[href]').each((_, el) => {
+    const href = $(el).attr('href') || '';
+    if (!href.startsWith('http')) return;
+    try {
+      const linkHost = new URL(href).hostname;
+      const pageHost = new URL(finalPageUrl).hostname;
+      if (linkHost !== pageHost) add(href, $(el).text().trim());
+    } catch (_) {}
+  });
+
+  // Scan JavaScript for known host URLs
   $('script').each((_, el) => {
     const js = $(el).html() || '';
     const patterns = [
-      /["'](https?:\/\/pixeldrain\.com\/u\/[^"'\s]+)["']/g,
-      /["'](https?:\/\/drive\.google\.com\/[^"'\s]+)["']/g,
-      /["'](https?:\/\/(?:www\.)?mediafire\.com\/[^"'\s]+)["']/g,
-      /["'](https?:\/\/(?:www\.)?terabox(?:app)?\.com\/[^"'\s]+)["']/g,
-      /["'](https?:\/\/[^"'\s]+\.(?:mp4|mkv|avi|webm)[^"'\s]*)["']/g,
+      /["'`](https?:\/\/pixeldrain\.com\/u\/[^"'`\s]{5,})["'`]/g,
+      /["'`](https?:\/\/drive\.google\.com\/[^"'`\s]{10,})["'`]/g,
+      /["'`](https?:\/\/(?:www\.)?mediafire\.com\/[^"'`\s]{10,})["'`]/g,
+      /["'`](https?:\/\/(?:[^"'`\s]*\.)?terabox(?:app)?\.com\/[^"'`\s]{10,})["'`]/g,
+      /["'`](https?:\/\/(?:[^"'`\s]*\.)?4funbox\.com\/[^"'`\s]{5,})["'`]/g,
+      /["'`](https?:\/\/mega\.nz\/[^"'`\s]{5,})["'`]/g,
+      /["'`](https?:\/\/1drv\.ms\/[^"'`\s]{5,})["'`]/g,
+      /["'`](https?:\/\/[^"'`\s]+\.(?:mp4|mkv|avi|webm)(?:\?[^"'`\s]*)?)["'`]/g,
+      /(?:url|href|link|file|src)\s*[:=]\s*["'`](https?:\/\/[^"'`\s]{15,})["'`]/gi,
+      /window\.location(?:\.href)?\s*=\s*["'`](https?:\/\/[^"'`\s]+)["'`]/g,
     ];
     for (const pat of patterns) {
       let m;
+      pat.lastIndex = 0;
       while ((m = pat.exec(js)) !== null) {
-        add(m[1], 'Script Link');
+        const u = m[1];
+        if (!u.includes(finalPageUrl)) add(u, 'Script');
       }
     }
   });
@@ -333,7 +379,8 @@ async function scrapeLinks(pageUrl) {
     if (isMediaFire(u))  return 3;
     if (isTeraBox(u))    return 4;
     if (isMega(u))       return 5;
-    return 6;
+    if (isOneDrive(u))   return 6;
+    return 7;
   };
   found.sort((a, b) => priority(a.url) - priority(b.url));
   return found;

@@ -85,13 +85,58 @@ async function getDownloadOptions(movieUrl) {
   }
 
   const qualities = [];
+  const seenUrls = new Set();
+
+  const addQuality = (href, label) => {
+    if (!href || seenUrls.has(href)) return;
+    seenUrls.add(href);
+    qualities.push({ label: label || 'Download', url: href });
+  };
+
+  // Primary selector
   $('.movie-download-link-item').each((_, item) => {
-    const $a = $(item).find('a.movie-download-button');
+    const $a = $(item).find('a.movie-download-button, a[href]').first();
     const href = $a.attr('href');
     if (!href) return;
-    const meta = $(item).find('.movie-download-meta').text().trim();
-    qualities.push({ label: meta || 'Download', url: href });
+    const meta = $(item).find('.movie-download-meta, .meta, span').first().text().trim();
+    addQuality(href, meta || $a.text().trim() || 'Download');
   });
+
+  // Fallback 1: any download button
+  if (!qualities.length) {
+    $('a.movie-download-button, a.download-button, a[class*="download"]').each((_, el) => {
+      const href = $(el).attr('href');
+      if (!href) return;
+      const label = $(el).closest('[class*="item"], [class*="link"]').find('[class*="meta"], [class*="quality"], span').first().text().trim() || $(el).text().trim() || 'Download';
+      addQuality(href, label);
+    });
+  }
+
+  // Fallback 2: any external download-like links on the page
+  if (!qualities.length) {
+    $('a[href]').each((_, el) => {
+      const href = $(el).attr('href') || '';
+      if (!href.startsWith('http') || href.includes('cinesubz.net/movies/') || href.includes('cinesubz.net/?')) return;
+      const text = $(el).text().trim();
+      if (text.length < 2 || text.length > 80) return;
+      addQuality(href, text);
+    });
+  }
+
+  // Fallback 3: scan JavaScript for download URLs
+  if (!qualities.length) {
+    $('script').each((_, el) => {
+      const js = $(el).html() || '';
+      const patterns = [
+        /["'](https?:\/\/(?:pixeldrain|mediafire|drive\.google|mega\.nz|terabox|4funbox)[^\s"']{5,})["']/g,
+        /["'](https?:\/\/[^\s"']+\.(?:mp4|mkv|avi|webm)[^\s"']*)["']/g,
+      ];
+      for (const pat of patterns) {
+        let m; pat.lastIndex = 0;
+        while ((m = pat.exec(js)) !== null) addQuality(m[1], 'Download');
+      }
+    });
+  }
 
   return { title, thumbnail, qualities };
 }

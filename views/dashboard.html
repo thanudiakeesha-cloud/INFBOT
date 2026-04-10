@@ -98,7 +98,7 @@ html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:
 .form-group{margin-bottom:14px}
 .form-label{display:block;font-size:0.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
 input[type=text],input[type=password],input[type=number]{width:100%;padding:10px 13px;border-radius:9px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:inherit;font-size:0.85rem;outline:none;transition:border-color .2s,box-shadow .2s}
-input:focus{border-color:rgba(99,102,241,.5);box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+input:focus,textarea:focus{border-color:rgba(99,102,241,.5);box-shadow:0 0 0 3px rgba(99,102,241,.1)}
 input::placeholder{color:var(--dim)}
 
 .qr-wrap{text-align:center;padding:24px;border-radius:12px;background:var(--bg2);border:2px dashed var(--border);min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
@@ -160,6 +160,7 @@ input::placeholder{color:var(--dim)}
     <div class="sb-nav">
       <div class="nav-item active" onclick="navTo('sessions')"><span>🤖</span> My Bots <span id="nb-online" style="margin-left:auto;background:var(--surface2);color:var(--muted);font-size:.6rem;font-weight:700;padding:2px 6px;border-radius:4px">0</span></div>
       <div class="nav-item" onclick="navTo('connect')"><span>🔗</span> Connect Bot</div>
+      <div class="nav-item" id="nav-owner-tools" style="display:none" onclick="navTo('owner')"><span>⚡</span> Owner Tools</div>
     </div>
 
     <div class="sb-footer">
@@ -279,6 +280,51 @@ input::placeholder{color:var(--dim)}
         </div>
 
       </div>
+
+      <!-- OWNER TOOLS PAGE -->
+      <div class="page" id="page-owner">
+        <div class="page-hdr">
+          <div class="page-title">⚡ Owner Tools</div>
+          <div class="page-sub">Broadcast messages and manage channel reactions across all bots</div>
+        </div>
+
+        <!-- BROADCAST -->
+        <div class="card">
+          <div class="card-title">📡 Broadcast Message</div>
+          <div class="info-box">Send a message from <strong>all online bots</strong>. Leave target blank to message each bot's own owner. Or enter a phone number / group JID to send from every bot to that target.</div>
+          <div class="form-group">
+            <label class="form-label">Message</label>
+            <textarea id="bc-message" rows="4" style="width:100%;padding:10px 13px;border-radius:9px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:inherit;font-size:.85rem;outline:none;resize:vertical;transition:border-color .2s" placeholder="Type your broadcast message here…"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Target (optional) <span style="font-weight:400;font-size:.8em;color:var(--dim)">phone number or group JID</span></label>
+            <input type="text" id="bc-target" placeholder="e.g. 94770612011 or 94770612011-1234567890@g.us">
+          </div>
+          <div id="bc-result" style="display:none;margin-bottom:12px"></div>
+          <button class="btn btn-primary btn-full" id="bcBtn" onclick="doBroadcast()">📡 Send Broadcast</button>
+        </div>
+
+        <!-- CHANNEL REACT -->
+        <div class="card">
+          <div class="card-title">❤️ Channel Post Reaction</div>
+          <div class="info-box">Paste a WhatsApp channel link and all online bots will instantly react to the latest post. You can also provide a specific message ID if auto-fetch fails.</div>
+          <div class="form-group">
+            <label class="form-label">Channel Link or JID</label>
+            <input type="text" id="cr-channel" placeholder="https://whatsapp.com/channel/... or ID@newsletter">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Message ID <span style="font-weight:400;font-size:.8em;color:var(--dim)">(optional — auto-fetches latest post)</span></label>
+            <input type="text" id="cr-msgid" placeholder="Leave blank to auto-detect latest post">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Reaction Emoji</label>
+            <input type="text" id="cr-emoji" value="❤️" placeholder="❤️" style="max-width:120px">
+          </div>
+          <div id="cr-result" style="display:none;margin-bottom:12px"></div>
+          <button class="btn btn-primary btn-full" id="crBtn" onclick="doChannelReact()">❤️ React with All Bots</button>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -298,10 +344,11 @@ function navTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
+  const titles = { sessions: 'My Bots', connect: 'Connect Bot', owner: 'Owner Tools' };
+  const keywords = { sessions: 'bots', connect: 'connect', owner: 'owner' };
   document.querySelectorAll('.nav-item').forEach(n => {
-    if (n.textContent.toLowerCase().includes(page === 'sessions' ? 'bots' : 'connect')) n.classList.add('active');
+    if (n.textContent.toLowerCase().includes(keywords[page] || page)) n.classList.add('active');
   });
-  const titles = { sessions: 'My Bots', connect: 'Connect Bot' };
   document.getElementById('topbarTitle').textContent = titles[page] || page;
   currentPage = page;
   closeSidebar();
@@ -464,6 +511,66 @@ function switchTab(tab) {
   tabs[tab === 'pair' ? 0 : 1].classList.add('active');
 }
 
+/* ──────── OWNER TOOLS ──────── */
+async function doBroadcast() {
+  const message = document.getElementById('bc-message').value.trim();
+  const target = document.getElementById('bc-target').value.trim();
+  const resultEl = document.getElementById('bc-result');
+  const btn = document.getElementById('bcBtn');
+  if (!message) { toast('Enter a message to broadcast', 'error'); return; }
+  btn.disabled = true; btn.textContent = '📡 Sending…';
+  resultEl.style.display = 'none';
+  try {
+    const res = await fetch('/api/owner/broadcast', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, target })
+    });
+    const d = await res.json();
+    if (d.success) {
+      resultEl.style.display = 'block';
+      resultEl.className = 'info-box ok';
+      resultEl.textContent = `✅ Broadcast complete — Sent: ${d.sent}, Failed: ${d.failed}, Total bots: ${d.total}`;
+      toast('Broadcast sent!', 'success');
+    } else {
+      resultEl.style.display = 'block';
+      resultEl.className = 'info-box warn';
+      resultEl.textContent = '❌ ' + (d.message || 'Broadcast failed');
+      toast(d.message || 'Broadcast failed', 'error');
+    }
+  } catch (e) { toast('Network error. Try again.', 'error'); }
+  finally { btn.disabled = false; btn.textContent = '📡 Send Broadcast'; }
+}
+
+async function doChannelReact() {
+  const channelUrl = document.getElementById('cr-channel').value.trim();
+  const messageId = document.getElementById('cr-msgid').value.trim();
+  const emoji = document.getElementById('cr-emoji').value.trim() || '❤️';
+  const resultEl = document.getElementById('cr-result');
+  const btn = document.getElementById('crBtn');
+  if (!channelUrl) { toast('Enter a channel link or JID', 'error'); return; }
+  btn.disabled = true; btn.textContent = '❤️ Reacting…';
+  resultEl.style.display = 'none';
+  try {
+    const res = await fetch('/api/owner/channel-react', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelUrl, messageId, emoji })
+    });
+    const d = await res.json();
+    if (d.success) {
+      resultEl.style.display = 'block';
+      resultEl.className = 'info-box ok';
+      resultEl.textContent = `✅ Reacted! — ${d.reacted} bots reacted, ${d.failed} failed · Post ID: ${d.messageId}`;
+      toast('All bots reacted!', 'success');
+    } else {
+      resultEl.style.display = 'block';
+      resultEl.className = 'info-box warn';
+      resultEl.textContent = '❌ ' + (d.message || 'Reaction failed');
+      toast(d.message || 'Reaction failed', 'error');
+    }
+  } catch (e) { toast('Network error. Try again.', 'error'); }
+  finally { btn.disabled = false; btn.textContent = '❤️ React with All Bots'; }
+}
+
 /* ──────── AUTH ──────── */
 let _loginRoute = '/login';
 async function logout() {
@@ -485,6 +592,9 @@ async function init() {
       document.getElementById('userName').textContent = info.username;
       document.getElementById('userAv').textContent = info.username[0].toUpperCase();
       document.getElementById('userRole').textContent = info.isOwner ? 'Admin / Owner' : 'User';
+      if (info.isOwner) {
+        document.getElementById('nav-owner-tools').style.display = '';
+      }
     }
   } catch (_) {}
 

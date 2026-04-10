@@ -1172,6 +1172,117 @@ app.post('/bot-owner/logout', (req, res) => {
   res.json({ success: true });
 });
 
+// ── Owner tools: Broadcast & Channel React ─────────────────────────────────
+
+function isBotOwnerApi(req, res, next) {
+  if (req.session.botOwner || req.session.isOwner) return next();
+  return res.status(403).json({ success: false, message: 'Owner access required' });
+}
+
+app.post('/api/owner/broadcast', isBotOwnerApi, async (req, res) => {
+  const { message, target } = req.body || {};
+  if (!message || !message.trim()) return res.status(400).json({ success: false, message: 'Message is required' });
+
+  const bots = [...activeSessions.entries()];
+  if (!bots.length) return res.json({ success: false, message: 'No bots are currently online' });
+
+  const results = { sent: 0, failed: 0, total: bots.length };
+
+  // If a specific target is provided, send to that JID from all bots
+  if (target && target.trim()) {
+    let targetJid = target.trim();
+    if (!targetJid.includes('@')) {
+      targetJid = targetJid.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+    }
+    for (const [sessionId, sock] of bots) {
+      try {
+        await sock.sendMessage(targetJid, { text: message.trim() });
+        results.sent++;
+      } catch (err) {
+        console.error(`[owner/broadcast] session ${sessionId} failed:`, err.message);
+        results.failed++;
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+  } else {
+    // No target: each bot broadcasts to its own owner number
+    const sessions = await database.getAllSessions();
+    for (const [sessionId, sock] of bots) {
+      try {
+        const sdata = sessions[sessionId];
+        const ownerNum = (sdata?.ownerNumber || '').replace(/[^0-9]/g, '');
+        if (!ownerNum) { results.failed++; continue; }
+        const ownerJid = ownerNum + '@s.whatsapp.net';
+        await sock.sendMessage(ownerJid, { text: message.trim() });
+        results.sent++;
+      } catch (err) {
+        console.error(`[owner/broadcast] session ${sessionId} failed:`, err.message);
+        results.failed++;
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
+  res.json({ success: true, ...results });
+});
+
+app.post('/api/owner/channel-react', isBotOwnerApi, async (req, res) => {
+  const { channelUrl, messageId, emoji } = req.body || {};
+  if (!channelUrl || !channelUrl.trim()) return res.status(400).json({ success: false, message: 'Channel URL or JID is required' });
+
+  const bots = [...activeSessions.entries()];
+  if (!bots.length) return res.json({ success: false, message: 'No bots are currently online' });
+
+  // Extract newsletter JID from URL or use as-is
+  let newsletterJid = channelUrl.trim();
+  if (newsletterJid.startsWith('http')) {
+    const m = newsletterJid.match(/channel\/([a-zA-Z0-9_\-]+)/i);
+    if (m) newsletterJid = m[1] + '@newsletter';
+  } else if (!newsletterJid.includes('@')) {
+    newsletterJid = newsletterJid + '@newsletter';
+  }
+
+  const reactionEmoji = (emoji || '❤️').trim();
+  let targetMsgId = (messageId || '').trim();
+
+  // If no messageId, try to fetch latest post using the first online bot
+  if (!targetMsgId) {
+    try {
+      const [, firstSock] = bots[0];
+      const msgs = await firstSock.newsletterFetchMessages(newsletterJid, 1);
+      if (msgs && msgs.length > 0) {
+        targetMsgId = msgs[0].key?.id || '';
+      }
+    } catch (err) {
+      console.error('[channel-react] fetch messages error:', err.message);
+    }
+  }
+
+  if (!targetMsgId) {
+    return res.status(400).json({ success: false, message: 'Could not find the latest post ID. Please provide the message ID manually.' });
+  }
+
+  const results = { reacted: 0, failed: 0, total: bots.length, newsletterJid, messageId: targetMsgId };
+
+  for (const [sessionId, sock] of bots) {
+    try {
+      await sock.sendMessage(newsletterJid, {
+        react: {
+          text: reactionEmoji,
+          key: { remoteJid: newsletterJid, id: targetMsgId, fromMe: false }
+        }
+      });
+      results.reacted++;
+    } catch (err) {
+      console.error(`[channel-react] session ${sessionId} failed:`, err.message);
+      results.failed++;
+    }
+    await new Promise(r => setTimeout(r, 400));
+  }
+
+  res.json({ success: true, ...results });
+});
+
 // ══════════════════════════════════════════════════════════════════
 // COMPETITION SYSTEM — Competitor routes (/comp/...)
 // ══════════════════════════════════════════════════════════════════
