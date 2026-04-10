@@ -1182,8 +1182,7 @@ app.get('/comp/api/me', isCompAuth, (req, res) => {
   try {
     const comp = competition.getCompetitor(req.session.compUsername);
     if (!comp) { delete req.session.compUsername; return res.status(401).json({ success: false }); }
-    const comps = competition.getCompetitions();
-    const myComp = comps.find(c => c.id === comp.competitionId);
+    const myComp = competition.getCompetition(comp.competitionId);
     return res.json({
       username: comp.username,
       firstName: comp.firstName,
@@ -1191,6 +1190,9 @@ app.get('/comp/api/me', isCompAuth, (req, res) => {
       referralCode: comp.referralCode || null,
       competitionId: comp.competitionId,
       competitionName: myComp?.name || 'Active Competition',
+      competitionEnded: myComp?.ended || false,
+      competitionEndDate: myComp?.endDate || null,
+      minPoints: myComp?.minPoints != null ? myComp.minPoints : 10,
     });
   } catch (e) { return res.status(500).json({ success: false }); }
 });
@@ -1255,10 +1257,10 @@ app.get('/comp-owner/api/competitions', isOwnerAuth, (req, res) => {
 });
 
 app.post('/comp-owner/api/competitions', isOwnerAuth, (req, res) => {
-  const { name } = req.body || {};
+  const { name, endDate, minPoints } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'Name required.' });
   try {
-    const comp = competition.createCompetition(name.trim());
+    const comp = competition.createCompetition(name.trim(), endDate || null, minPoints != null ? minPoints : 10);
     return res.json({ success: true, competition: comp });
   } catch (e) { return res.status(500).json({ success: false, message: 'Server error.' }); }
 });

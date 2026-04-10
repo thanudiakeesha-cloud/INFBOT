@@ -24,23 +24,22 @@
     h1{font-size:1.7rem;font-weight:800;margin-bottom:4px}
     .sub{color:var(--dim);font-size:.9rem;margin-bottom:28px}
 
-    /* Tabs */
     .tabs{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
     .tab{padding:8px 20px;border-radius:10px;font-size:.88rem;font-weight:600;cursor:pointer;border:1px solid var(--border);color:var(--dim);transition:all .2s;background:var(--surface)}
     .tab.active{background:rgba(139,92,246,0.15);border-color:rgba(139,92,246,0.4);color:#a78bfa}
 
-    /* Cards */
     .card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:24px;margin-bottom:20px}
     .card-title{font-size:.82rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:18px;display:flex;align-items:center;gap:8px}
     .section{display:none}
     .section.active{display:block}
 
-    /* Forms */
     .form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:16px}
     label{display:block;font-size:.78rem;font-weight:600;color:var(--dim);margin-bottom:5px;letter-spacing:.04em;text-transform:uppercase}
     input,select{width:100%;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:.9rem;outline:none;transition:border-color .2s;font-family:'Inter',sans-serif}
     input:focus,select:focus{border-color:rgba(139,92,246,0.5)}
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator{filter:invert(0.6)}
     select option{background:#0a0a18}
+    .hint{font-size:.76rem;color:var(--muted);margin-top:4px}
     .btn{padding:10px 20px;border-radius:10px;font-size:.88rem;font-weight:700;border:none;cursor:pointer;transition:all .2s;font-family:'Inter',sans-serif;display:inline-flex;align-items:center;gap:7px}
     .btn-primary{background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff}
     .btn-primary:hover{opacity:.9}
@@ -49,25 +48,27 @@
     .btn-danger:hover{background:rgba(239,68,68,0.2)}
     .btn-sm{padding:6px 14px;font-size:.8rem}
 
-    /* Table */
     .tbl-wrap{overflow-x:auto}
     table{width:100%;border-collapse:collapse;font-size:.88rem}
     th{text-align:left;padding:10px 12px;font-size:.75rem;font-weight:600;color:var(--dim);letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--border)}
     td{padding:12px 12px;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:middle}
     tr:last-child td{border-bottom:none}
     tr:hover td{background:rgba(255,255,255,0.02)}
+
     .pill{font-size:.72rem;font-weight:600;padding:3px 9px;border-radius:20px;display:inline-block}
     .pill-active{background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);color:#6ee7b7}
+    .pill-ended{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#fca5a5}
     .pill-code{background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.25);color:#a78bfa;font-family:'Orbitron',monospace;font-size:.7rem;letter-spacing:.08em}
     .pill-none{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--muted)}
+    .pill-pass{background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);color:#6ee7b7}
+    .pill-elim{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#fca5a5}
     .pts{color:#10b981;font-weight:700}
+    .pts-low{color:#ef4444;font-weight:700}
     .rank1{color:#f59e0b;font-weight:800}
 
-    /* Competition select */
     .comp-selector{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
     .comp-selector label{margin:0;white-space:nowrap}
 
-    /* Toast */
     .toast{position:fixed;bottom:24px;right:24px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);color:#6ee7b7;padding:12px 20px;border-radius:12px;font-size:.88rem;font-weight:600;z-index:999;animation:slideIn .3s ease}
     .toast.err{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:#fca5a5}
     @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -106,6 +107,16 @@
         <div>
           <label>Competition Name</label>
           <input type="text" id="newCompName" placeholder="e.g. April Challenge 2026">
+        </div>
+        <div>
+          <label>End Date &amp; Time</label>
+          <input type="datetime-local" id="newCompEndDate">
+          <div class="hint">Leave blank for no end date</div>
+        </div>
+        <div>
+          <label>Min. Points (to qualify)</label>
+          <input type="number" id="newCompMinPts" value="10" min="1" max="9999">
+          <div class="hint">Competitors below this are eliminated</div>
         </div>
       </div>
       <button class="btn btn-primary" onclick="createCompetition()">➕ Create Competition</button>
@@ -195,6 +206,11 @@ async function logout() {
   window.location.href = '/comp-owner';
 }
 
+function fmtDate(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 function populateSelects() {
   const opts = competitions.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   document.getElementById('newCompId').innerHTML = '<option value="">— Select Competition —</option>' + opts;
@@ -210,10 +226,12 @@ async function loadCompetitions() {
   const el = document.getElementById('compList');
   if (!competitions.length) { el.innerHTML = '<div class="empty">No competitions yet. Create one above.</div>'; return; }
   el.innerHTML = `<div class="tbl-wrap"><table>
-    <thead><tr><th>Name</th><th>Status</th><th>Created</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Status</th><th>End Date</th><th>Min Points</th><th>Created</th><th></th></tr></thead>
     <tbody>${competitions.map(c => `<tr>
       <td style="font-weight:600">${esc(c.name)}</td>
-      <td><span class="pill pill-active">Active</span></td>
+      <td>${c.ended ? '<span class="pill pill-ended">Ended</span>' : '<span class="pill pill-active">Active</span>'}</td>
+      <td style="color:var(--dim);font-size:.82rem">${fmtDate(c.endDate)}</td>
+      <td style="color:var(--yellow);font-weight:700">${c.minPoints != null ? c.minPoints : 10}</td>
       <td style="color:var(--dim);font-size:.82rem">${new Date(c.createdAt).toLocaleDateString()}</td>
       <td><button class="btn btn-danger btn-sm" onclick="deleteCompetition('${c.id}')">Delete</button></td>
     </tr>`).join('')}</tbody>
@@ -223,10 +241,21 @@ async function loadCompetitions() {
 async function createCompetition() {
   const name = document.getElementById('newCompName').value.trim();
   if (!name) { toast('Enter a competition name', true); return; }
-  const r = await fetch('/comp-owner/api/competitions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+  const endDateVal = document.getElementById('newCompEndDate').value;
+  const minPoints = parseInt(document.getElementById('newCompMinPts').value) || 10;
+  const endDate = endDateVal ? new Date(endDateVal).getTime() : null;
+  const r = await fetch('/comp-owner/api/competitions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, endDate, minPoints })
+  });
   const d = await r.json();
-  if (d.success) { document.getElementById('newCompName').value = ''; toast('Competition created!'); loadCompetitions(); }
-  else toast(d.message || 'Failed', true);
+  if (d.success) {
+    document.getElementById('newCompName').value = '';
+    document.getElementById('newCompEndDate').value = '';
+    document.getElementById('newCompMinPts').value = '10';
+    toast('Competition created!');
+    loadCompetitions();
+  } else toast(d.message || 'Failed', true);
 }
 
 async function deleteCompetition(id) {
@@ -288,21 +317,39 @@ async function deleteCompetitor(username) {
 
 async function loadLeaderboard() {
   const compId = document.getElementById('lbComp').value;
+  const comp = competitions.find(c => c.id === compId);
+  const ended = comp?.ended || false;
+  const minPts = comp?.minPoints != null ? comp.minPoints : 10;
   const url = '/comp-owner/api/leaderboard' + (compId ? '?competitionId=' + encodeURIComponent(compId) : '');
   const r = await fetch(url);
   if (!r.ok) return;
   const list = await r.json();
   const el = document.getElementById('lbTable');
   if (!list.length) { el.innerHTML = '<div class="empty">No competitors yet.</div>'; return; }
-  el.innerHTML = `<div class="tbl-wrap"><table>
-    <thead><tr><th>#</th><th>Competitor</th><th>Username</th><th>Code</th><th>Points</th></tr></thead>
-    <tbody>${list.map(c => `<tr>
-      <td class="${c.rank <= 3 ? 'rank1' : ''}">${c.rank === 1 ? '🥇' : c.rank === 2 ? '🥈' : c.rank === 3 ? '🥉' : c.rank}</td>
-      <td style="font-weight:600">${esc(c.firstName)}</td>
-      <td style="color:var(--dim);font-size:.85rem">${esc(c.username)}</td>
-      <td>${c.referralCode ? `<span class="pill pill-code">${esc(c.referralCode)}</span>` : '<span class="pill pill-none">—</span>'}</td>
-      <td class="pts">${c.points}</td>
-    </tr>`).join('')}</tbody>
+
+  const headerExtra = ended ? '<th>Result</th>' : '';
+  el.innerHTML = `
+    ${ended ? `<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);color:#fca5a5;font-size:.82rem;padding:10px 14px;border-radius:10px;margin-bottom:14px">
+      🏁 Competition ended — min. <strong>${minPts} points</strong> required to qualify
+    </div>` : ''}
+    <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>Competitor</th><th>Username</th><th>Code</th><th>Points</th>${headerExtra}</tr></thead>
+    <tbody>${list.map(c => {
+      const pts = c.points;
+      const isElim = ended && pts < minPts;
+      const isPassed = ended && pts >= minPts;
+      const resultCell = ended
+        ? `<td>${isPassed ? '<span class="pill pill-pass">✅ Qualified</span>' : '<span class="pill pill-elim">❌ Eliminated</span>'}</td>`
+        : '';
+      return `<tr>
+        <td class="${c.rank <= 3 ? 'rank1' : ''}">${c.rank === 1 ? '🥇' : c.rank === 2 ? '🥈' : c.rank === 3 ? '🥉' : c.rank}</td>
+        <td style="font-weight:600;${isElim ? 'opacity:.55' : ''}">${esc(c.firstName)}</td>
+        <td style="color:var(--dim);font-size:.85rem">${esc(c.username)}</td>
+        <td>${c.referralCode ? `<span class="pill pill-code">${esc(c.referralCode)}</span>` : '<span class="pill pill-none">—</span>'}</td>
+        <td class="${isElim ? 'pts-low' : 'pts'}">${pts}</td>
+        ${resultCell}
+      </tr>`;
+    }).join('')}</tbody>
   </table></div>`;
 }
 
