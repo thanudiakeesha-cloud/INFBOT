@@ -229,6 +229,10 @@ input::placeholder{color:var(--dim)}
               <label class="form-label">WhatsApp Number (with country code)</label>
               <input type="text" id="p-number" placeholder="94770612011" inputmode="numeric">
             </div>
+            <div class="form-group">
+              <label class="form-label">Referral Code <span style="color:var(--muted);font-weight:400;font-size:.8em">(optional)</span></label>
+              <input type="text" id="p-refcode" placeholder="e.g. john742" autocomplete="off" style="text-transform:lowercase">
+            </div>
             <button class="btn btn-primary btn-full" onclick="getPairCode()" id="pairBtn">Get Pair Code</button>
           </div>
 
@@ -256,8 +260,8 @@ input::placeholder{color:var(--dim)}
               <input type="text" id="q-ownername" placeholder="Your Name">
             </div>
             <div class="form-group">
-              <label class="form-label">Owner Number (with country code)</label>
-              <input type="text" id="q-owner-number" placeholder="94770612011" inputmode="numeric">
+              <label class="form-label">Referral Code <span style="color:var(--muted);font-weight:400;font-size:.8em">(optional)</span></label>
+              <input type="text" id="q-refcode" placeholder="e.g. john742" autocomplete="off" style="text-transform:lowercase">
             </div>
             <button class="btn btn-primary btn-full" onclick="startQR()" id="qrBtn">Generate QR Code</button>
           </div>
@@ -394,6 +398,7 @@ async function getPairCode() {
   const num = document.getElementById('p-number').value.trim().replace(/[^0-9]/g, '');
   const botName = document.getElementById('p-botname').value.trim() || 'Infinity MD Mini';
   const ownerName = document.getElementById('p-ownername').value.trim() || 'Owner';
+  const refCode = (document.getElementById('p-refcode').value || '').trim().toLowerCase();
   if (!num) { toast('Enter a phone number', 'error'); return; }
 
   const btn = document.getElementById('pairBtn');
@@ -404,7 +409,7 @@ async function getPairCode() {
     const res = await fetch('/api/pair', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ number: num, botName, ownerName, ownerNumber: num })
+      body: JSON.stringify({ number: num, botName, ownerName, ownerNumber: num, referralCode: refCode || undefined })
     });
     const d = await res.json();
     if (d.success && d.code) {
@@ -423,7 +428,7 @@ async function getPairCode() {
 async function startQR() {
   const botName = document.getElementById('q-botname').value.trim() || 'Infinity MD Mini';
   const ownerName = document.getElementById('q-ownername').value.trim() || 'Owner';
-  const ownerNumber = document.getElementById('q-owner-number').value.trim().replace(/[^0-9]/g, '');
+  const refCode = (document.getElementById('q-refcode').value || '').trim().toLowerCase();
 
   const btn = document.getElementById('qrBtn');
   btn.disabled = true; btn.textContent = 'Starting…';
@@ -431,7 +436,8 @@ async function startQR() {
   document.getElementById('qrWrap').innerHTML = '<div class="spinner-ring"></div><p style="font-size:.8rem;color:var(--muted);margin-top:8px">Connecting to WhatsApp…</p>';
 
   try {
-    const res = await fetch(`/api/qr?botName=${encodeURIComponent(botName)}&ownerName=${encodeURIComponent(ownerName)}&ownerNumber=${encodeURIComponent(ownerNumber)}`);
+    const url = `/api/qr?botName=${encodeURIComponent(botName)}&ownerName=${encodeURIComponent(ownerName)}${refCode ? '&referralCode=' + encodeURIComponent(refCode) : ''}`;
+    const res = await fetch(url);
     const d = await res.json();
     if (d.success && d.qr) {
       document.getElementById('qrWrap').innerHTML = `<img src="${d.qr}" alt="QR Code" style="max-width:200px;border-radius:10px"><p style="font-size:.75rem;color:var(--muted);margin-top:8px">Scan with WhatsApp</p>`;

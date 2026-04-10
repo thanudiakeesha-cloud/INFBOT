@@ -34,7 +34,7 @@ async function flushNotifications(sessionId, sock) {
 let pino, Boom, makeWASocket, useMultiFileAuthState, DisconnectReason,
     fetchLatestBaileysVersion, makeCacheableSignalKeyStore, Browsers,
     jidNormalizedUser, baileysDelay, QRCode, pn, logger;
-let config, handler, database, auth;
+let config, handler, database, auth, competition;
 
 server = http.createServer((req, res) => {
   if (!app) {
@@ -154,6 +154,8 @@ server.listen(PORT, '0.0.0.0', () => {
       handler = require('./handler');
       database = require('./database');
       auth = require('./utils/auth');
+      competition = require('./utils/competition');
+      competition.bootstrap().catch(e => console.error('Competition bootstrap error:', e.message));
       const { initializeTempSystem } = require('./utils/tempManager');
       const { startCleanup } = require('./utils/cleanup');
       initializeTempSystem();
@@ -657,7 +659,7 @@ app.post('/api/session/add', isAuthenticated, async (req, res) => {
 const pairSessions = new Map();
 
 app.post('/api/pair', isAuthenticated, async (req, res) => {
-  const { number, botName, ownerName, ownerNumber } = req.body;
+  const { number, botName, ownerName, ownerNumber, referralCode } = req.body;
   if (!number) return res.status(400).json({ success: false, message: 'Phone number is required' });
 
   const cleaned = number.replace(/[^0-9]/g, '');
@@ -756,6 +758,11 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
           };
           await database.saveSession(sessionId, sessionData);
           await connectSession(sessionId, sessionData);
+
+          // Award referral point if a referral code was provided
+          if (referralCode && competition) {
+            try { competition.awardPoint(referralCode.toLowerCase().trim(), sessionId); } catch (_) {}
+          }
 
           console.log(`✅ Pair session auto-deployed as ${sessionId}`);
         } catch (err) {
@@ -925,6 +932,7 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
     const botName = req.query.botName || 'Infinity MD';
     const ownerName = req.query.ownerName || config.ownerName[0];
     const ownerNumber = req.query.ownerNumber || config.ownerNumber[0];
+    const referralCode = (req.query.referralCode || '').trim().toLowerCase() || null;
 
     qrSock.ev.on('creds.update', saveCreds);
 
@@ -983,6 +991,11 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
           };
           await database.saveSession(sessionId, sessionData);
           await connectSession(sessionId, sessionData);
+
+          // Award referral point if a referral code was provided
+          if (referralCode && competition) {
+            try { competition.awardPoint(referralCode, sessionId); } catch (_) {}
+          }
 
           console.log(`✅ QR session auto-deployed as ${sessionId}`);
         } catch (err) {
@@ -1116,6 +1129,186 @@ app.get('/api/user-info', isAuthenticated, (req, res) => {
     username: req.session.username,
     isOwner: req.session.isOwner || false
   });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// COMPETITION SYSTEM — Competitor routes (/comp/...)
+// ══════════════════════════════════════════════════════════════════
+
+function isCompAuth(req, res, next) {
+  if (req.session.compUsername) return next();
+  return res.status(401).json({ success: false, message: 'Not authenticated' });
+}
+
+function isOwnerAuth(req, res, next) {
+  if (req.session.compOwner) return next();
+  return res.status(401).json({ success: false, message: 'Not authenticated' });
+}
+
+// Competitor login page
+app.get('/comp', (req, res) => {
+  if (req.session.compUsername) return res.redirect('/comp/dashboard');
+  res.sendFile(path.join(__dirname, 'views', 'comp-login.html'));
+});
+
+app.get('/comp/dashboard', (req, res) => {
+  if (!req.session.compUsername) return res.redirect('/comp');
+  res.sendFile(path.join(__dirname, 'views', 'comp-dashboard.html'));
+});
+
+app.post('/comp/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ success: false, message: 'Username and password required.' });
+  try {
+    const comp = competition.authenticateCompetitor(username.trim(), password.trim());
+    if (!comp) return res.status(401).json({ success: false, message: 'Invalid username or password.' });
+    req.session.compUsername = comp.username;
+    req.session.save(err => {
+      if (err) return res.status(500).json({ success: false, message: 'Session error. Try again.' });
+      return res.json({ success: true });
+    });
+  } catch (e) {
+    console.error('Comp login error:', e.message);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+app.post('/comp/logout', (req, res) => {
+  delete req.session.compUsername;
+  res.json({ success: true });
+});
+
+app.get('/comp/api/me', isCompAuth, (req, res) => {
+  try {
+    const comp = competition.getCompetitor(req.session.compUsername);
+    if (!comp) { delete req.session.compUsername; return res.status(401).json({ success: false }); }
+    const comps = competition.getCompetitions();
+    const myComp = comps.find(c => c.id === comp.competitionId);
+    return res.json({
+      username: comp.username,
+      firstName: comp.firstName,
+      points: comp.points,
+      referralCode: comp.referralCode || null,
+      competitionId: comp.competitionId,
+      competitionName: myComp?.name || 'Active Competition',
+    });
+  } catch (e) { return res.status(500).json({ success: false }); }
+});
+
+app.post('/comp/api/generate-code', isCompAuth, (req, res) => {
+  try {
+    const code = competition.generateReferralCode(req.session.compUsername);
+    if (!code) return res.status(400).json({ success: false, message: 'Could not generate code. Try again.' });
+    return res.json({ success: true, code });
+  } catch (e) { return res.status(500).json({ success: false, message: 'Server error.' }); }
+});
+
+app.get('/comp/api/leaderboard', isCompAuth, (req, res) => {
+  try {
+    const comp = competition.getCompetitor(req.session.compUsername);
+    const list = competition.getLeaderboard(comp?.competitionId || null);
+    return res.json(list);
+  } catch (e) { return res.status(500).json({ success: false }); }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// COMPETITION SYSTEM — Owner routes (/comp-owner/...)
+// ══════════════════════════════════════════════════════════════════
+
+const COMP_OWNER_USER = 'owner321';
+const COMP_OWNER_PASS = 'savi321';
+
+app.get('/comp-owner', (req, res) => {
+  if (req.session.compOwner) return res.redirect('/comp-owner/dashboard');
+  res.sendFile(path.join(__dirname, 'views', 'comp-owner-login.html'));
+});
+
+app.get('/comp-owner/dashboard', (req, res) => {
+  if (!req.session.compOwner) return res.redirect('/comp-owner');
+  res.sendFile(path.join(__dirname, 'views', 'comp-owner.html'));
+});
+
+app.post('/comp-owner/login', (req, res) => {
+  const { username, password } = req.body || {};
+  const u = (username || '').trim();
+  const p = (password || '').trim();
+  console.log(`[comp-owner/login] attempt: "${u}"`);
+  if (u === COMP_OWNER_USER && p === COMP_OWNER_PASS) {
+    req.session.compOwner = true;
+    req.session.save(err => {
+      if (err) { console.error('[comp-owner/login] session save error:', err); return res.status(500).json({ success: false, message: 'Session error. Try again.' }); }
+      return res.json({ success: true });
+    });
+    return;
+  }
+  return res.status(401).json({ success: false, message: 'Invalid credentials.' });
+});
+
+app.post('/comp-owner/logout', (req, res) => {
+  delete req.session.compOwner;
+  res.json({ success: true });
+});
+
+app.get('/comp-owner/api/competitions', isOwnerAuth, (req, res) => {
+  try { return res.json(competition.getCompetitions()); }
+  catch (e) { return res.status(500).json({ success: false }); }
+});
+
+app.post('/comp-owner/api/competitions', isOwnerAuth, (req, res) => {
+  const { name } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'Name required.' });
+  try {
+    const comp = competition.createCompetition(name.trim());
+    return res.json({ success: true, competition: comp });
+  } catch (e) { return res.status(500).json({ success: false, message: 'Server error.' }); }
+});
+
+app.delete('/comp-owner/api/competitions/:id', isOwnerAuth, (req, res) => {
+  try {
+    competition.deleteCompetition(req.params.id);
+    return res.json({ success: true });
+  } catch (e) { return res.status(500).json({ success: false }); }
+});
+
+app.get('/comp-owner/api/competitors', isOwnerAuth, (req, res) => {
+  try {
+    const list = competition.getCompetitors(req.query.competitionId || null);
+    return res.json(list);
+  } catch (e) { return res.status(500).json({ success: false }); }
+});
+
+app.post('/comp-owner/api/competitors', isOwnerAuth, (req, res) => {
+  const { username, password, firstName, competitionId } = req.body || {};
+  if (!username || !password || !firstName || !competitionId) {
+    return res.status(400).json({ success: false, message: 'All fields required.' });
+  }
+  // Check username not already taken
+  const existing = competition.getCompetitor(username.trim());
+  if (existing) return res.status(409).json({ success: false, message: 'Username already exists.' });
+  try {
+    const comp = competition.addCompetitor(username.trim(), password, firstName.trim(), competitionId);
+    return res.json({ success: true, competitor: comp });
+  } catch (e) { return res.status(500).json({ success: false, message: 'Server error.' }); }
+});
+
+app.delete('/comp-owner/api/competitors/:username', isOwnerAuth, (req, res) => {
+  try {
+    competition.deleteCompetitor(req.params.username);
+    return res.json({ success: true });
+  } catch (e) { return res.status(500).json({ success: false }); }
+});
+
+app.get('/comp-owner/api/leaderboard', isOwnerAuth, (req, res) => {
+  try {
+    const list = competition.getLeaderboard(req.query.competitionId || null);
+    return res.json(list);
+  } catch (e) { return res.status(500).json({ success: false }); }
+});
+
+// Referral link landing (redirects to signup with ref code pre-filled)
+app.get('/link', (req, res) => {
+  const ref = req.query.ref || '';
+  res.redirect('/signup' + (ref ? '?ref=' + encodeURIComponent(ref) : ''));
 });
 
 app.get('/api/global-settings', isAuthenticated, async (req, res) => {
