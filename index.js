@@ -338,15 +338,17 @@ async function connectSession(id, sessionData) {
         if (!sessionData._440Count) sessionData._440Count = 0;
         sessionData._440Count++;
 
+        // Always remove the stale (closed) socket immediately so broadcast/react
+        // don't try to use a disconnected connection during the backoff window.
+        activeSessions.delete(id);
+
         if (process.env.DEV_MODE === 'true') {
           // In dev/testing mode: production took over — stop here.
-          activeSessions.delete(id);
           console.log(`⏸️ Session ${id} paused — another instance (production) is active.`);
         } else if (sessionData._440Count > 5) {
           // After 5 consecutive 440s this session is being permanently displaced
           // (likely a duplicate session for the same number). Stop reconnecting
           // to break the infinite fight loop.
-          activeSessions.delete(id);
           console.log(`⛔ Session ${id} stopped after ${sessionData._440Count} connection-replaced errors — possible duplicate session. Remove the duplicate bot from the dashboard.`);
         } else {
           // Use longer backoff for 440 errors to let the other instance stabilise
