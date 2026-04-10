@@ -1127,8 +1127,49 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
 app.get('/api/user-info', isAuthenticated, (req, res) => {
   res.json({
     username: req.session.username,
-    isOwner: req.session.isOwner || false
+    isOwner: req.session.isOwner || false,
+    loginRoute: req.session.botOwner ? '/bot-owner' : '/login'
   });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// BOT OWNER CONTROL — Separate login/dashboard (/bot-owner/...)
+// ══════════════════════════════════════════════════════════════════
+
+app.get('/bot-owner', (req, res) => {
+  if (req.session.botOwner) return res.redirect('/bot-owner/dashboard');
+  res.sendFile(path.join(__dirname, 'views', 'bot-owner-login.html'));
+});
+
+app.get('/bot-owner/dashboard', (req, res) => {
+  if (!req.session.botOwner) return res.redirect('/bot-owner');
+  res.sendFile(path.join(__dirname, 'views', 'dashboard.html'));
+});
+
+app.post('/bot-owner/login', async (req, res) => {
+  if (!serverReady || !auth) return res.status(503).json({ success: false, message: 'Server starting, please wait…' });
+  const { username, password } = req.body || {};
+  const u = (username || '').trim();
+  const p = (password || '');
+  if (!u || !p) return res.status(400).json({ success: false, message: 'Username and password required.' });
+  const authResult = await auth.login(u, p);
+  if (authResult && authResult.isOwner) {
+    req.session.botOwner = true;
+    req.session.loggedIn = true;
+    req.session.isOwner = true;
+    req.session.username = authResult.username;
+    req.session.save(err => {
+      if (err) { console.error('[bot-owner/login] session save error:', err); return res.status(500).json({ success: false, message: 'Session error. Try again.' }); }
+      return res.json({ success: true });
+    });
+    return;
+  }
+  return res.status(401).json({ success: false, message: authResult ? 'This account does not have owner access.' : 'Invalid username or password.' });
+});
+
+app.post('/bot-owner/logout', (req, res) => {
+  req.session.destroy();
+  res.json({ success: true });
 });
 
 // ══════════════════════════════════════════════════════════════════

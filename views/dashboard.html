@@ -465,9 +465,10 @@ function switchTab(tab) {
 }
 
 /* ──────── AUTH ──────── */
+let _loginRoute = '/login';
 async function logout() {
   await fetch('/api/auth/logout');
-  window.location.href = '/login';
+  window.location.href = _loginRoute;
 }
 
 /* ──────── INIT ──────── */
@@ -477,9 +478,10 @@ async function init() {
   // Load user info from server (current logged-in user)
   try {
     const r = await fetch('/api/user-info');
-    if (r.status === 401 || r.status === 403) { window.location.href = '/login'; return; }
+    if (r.status === 401 || r.status === 403) { window.location.href = _loginRoute; return; }
     const info = await r.json();
     if (info && info.username) {
+      if (info.loginRoute) _loginRoute = info.loginRoute;
       document.getElementById('userName').textContent = info.username;
       document.getElementById('userAv').textContent = info.username[0].toUpperCase();
       document.getElementById('userRole').textContent = info.isOwner ? 'Admin / Owner' : 'User';
