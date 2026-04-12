@@ -174,6 +174,28 @@
     .star-spin{animation:star-rot 5s linear infinite;display:inline-block;font-size:0.85rem;color:rgba(245,158,11,0.6)}
     @keyframes star-rot{to{transform:rotate(360deg)}}
 
+    /* ── Rainbow progress bar ── */
+    .progress-wrap{
+      height:5px;border-radius:99px;overflow:hidden;margin-top:14px;
+      background:rgba(255,255,255,0.06);
+      opacity:0;transition:opacity 0.25s;
+    }
+    .progress-wrap.visible{opacity:1}
+    .progress-bar{
+      height:100%;width:0%;border-radius:99px;
+      background:linear-gradient(90deg,
+        #f43f5e,#f97316,#facc15,#22c55e,#06b6d4,#6366f1,#a855f7,#f43f5e,
+        #f97316,#facc15,#22c55e,#06b6d4,#6366f1,#a855f7);
+      background-size:200% 100%;
+      animation:rainbow-slide 1.4s linear infinite;
+      transition:width 0.12s linear;
+      box-shadow:0 0 8px 1px rgba(168,85,247,0.5);
+    }
+    @keyframes rainbow-slide{
+      0%{background-position:0% 50%}
+      100%{background-position:200% 50%}
+    }
+
     @media(max-width:480px){
       .page{padding:16px;align-items:flex-start;padding-top:28px}
       .auth-card{padding:28px 22px;border-radius:18px}
@@ -224,6 +246,10 @@
           <div class="spinner" id="btnSpinner"></div>
         </button>
 
+        <div class="progress-wrap" id="progressWrap">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+
         <p class="footer-link">Don't have an account? <a href="/signup">Create one free</a></p>
       </div>
 
@@ -240,6 +266,37 @@
     document.getElementById('username').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('password').focus()});
     document.getElementById('password').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
 
+    /* ── Rainbow progress bar controller ── */
+    let _progTimer=null, _progRaf=null;
+    function startProgress(){
+      const wrap=document.getElementById('progressWrap');
+      const bar=document.getElementById('progressBar');
+      // Reset
+      bar.style.transition='none';
+      bar.style.width='0%';
+      wrap.classList.add('visible');
+      // Force reflow so transition reset takes effect
+      bar.getBoundingClientRect();
+      // Animate to 92% over 7 s (holds just short of 100 until we know the result)
+      bar.style.transition='width 7s cubic-bezier(0.25,0.1,0.25,1)';
+      bar.style.width='92%';
+    }
+    function finishProgress(success){
+      const wrap=document.getElementById('progressWrap');
+      const bar=document.getElementById('progressBar');
+      if(success){
+        bar.style.transition='width 0.3s ease';
+        bar.style.width='100%';
+        // fade out after redirect
+        setTimeout(()=>{ wrap.classList.remove('visible'); },1200);
+      } else {
+        // Collapse quickly on failure
+        bar.style.transition='width 0.3s ease,opacity 0.3s ease';
+        bar.style.width='0%';
+        setTimeout(()=>{ wrap.classList.remove('visible'); },350);
+      }
+    }
+
     async function login(){
       const btn=document.getElementById('loginBtn');
       const errEl=document.getElementById('errorMsg');
@@ -250,6 +307,7 @@
       btn.disabled=true;
       document.getElementById('btnText').textContent='Signing in…';
       document.getElementById('btnSpinner').style.display='block';
+      startProgress();
       let redirecting=false;
       try{
         const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({username:u,password:p})});
@@ -257,13 +315,19 @@
         if(data.success){
           redirecting=true;
           document.getElementById('btnText').textContent='Redirecting…';
+          finishProgress(true);
           // Small delay so the browser can commit the session cookie before the next request
           setTimeout(()=>{ window.location.replace('/dashboard'); }, 120);
         }else{
+          finishProgress(false);
           errEl.textContent=data.message||'Invalid username or password';
           errEl.style.display='block';
         }
-      }catch(e){errEl.textContent='Connection error. Please try again.';errEl.style.display='block'}
+      }catch(e){
+        finishProgress(false);
+        errEl.textContent='Connection error. Please try again.';
+        errEl.style.display='block';
+      }
       finally{
         if(!redirecting){
           btn.disabled=false;
