@@ -251,7 +251,7 @@
       document.getElementById('btnText').textContent='Signing in…';
       document.getElementById('btnSpinner').style.display='block';
       try{
-        const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+        const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({username:u,password:p})});
         const data=await res.json();
         if(data.success){
           document.getElementById('btnText').textContent='Redirecting…';

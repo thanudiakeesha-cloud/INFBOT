@@ -259,7 +259,7 @@
       document.getElementById('btnText').textContent='Creating account…';
       document.getElementById('btnSpinner').style.display='block';
       try{
-        const res=await fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+        const res=await fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({username:u,password:p})});
         const data=await res.json();
         if(data.success){
           showMsg('Account created! Redirecting to login…','success');

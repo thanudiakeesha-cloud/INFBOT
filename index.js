@@ -77,18 +77,20 @@ server.listen(PORT, '0.0.0.0', () => {
     app.use(require('express-session')({
       store: new FileStore({
         path: sessionDir,
-        ttl: 86400,
-        retries: 3,
+        ttl: 86400 * 7,       // 7-day file TTL
+        reapInterval: 3600,   // clean up expired files once per hour
+        retries: 5,
         logFn: () => {}
       }),
-      secret: 'infinity-md-secret',
-      resave: false,
+      secret: process.env.SESSION_SECRET || 'infinity-md-secret-2025',
+      resave: true,            // touch session on every request → prevents expiry for active users
       saveUninitialized: false,
+      rolling: true,           // reset cookie maxAge on every response → keeps login alive
       cookie: {
-        secure: false,
+        secure: true,          // trust proxy is set; Replit always uses HTTPS
         httpOnly: true,
         sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000
+        maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days
       }
     }));
 
@@ -268,6 +270,7 @@ async function connectSession(id, sessionData) {
       const isFirstConnect = !sessionData._firstConnectDone;
       activeSessions.set(id, newSock);
       sessionData._retryCount = 0;
+      sessionData._440Count = 0;  // reset on every successful open so the 5-strike limit is per-run, not cumulative
       sessionData._firstConnectDone = true;
       console.log(`✅ Session ${id} connected!`);
 
@@ -442,8 +445,10 @@ app.post('/api/auth/signup', async (req, res) => {
 });
 
 app.get('/api/auth/logout', (req, res) => {
-  req.session.destroy();
-  res.json({ success: true });
+  req.session.destroy(() => {
+    res.clearCookie('connect.sid');
+    res.json({ success: true });
+  });
 });
 
 app.post('/api/auth/google', async (req, res) => {
@@ -469,7 +474,13 @@ app.post('/api/auth/google', async (req, res) => {
     req.session.email = email;
     req.session.isOwner = false;
     req.session.googleAuth = true;
-    res.json({ success: true });
+    req.session.save((err) => {
+      if (err) {
+        console.error('Google auth session save error:', err);
+        return res.status(500).json({ success: false, message: 'Session error, please try again' });
+      }
+      res.json({ success: true });
+    });
   } catch (e) {
     console.error('Google auth error:', e.message);
     res.status(500).json({ success: false, message: 'Authentication failed. Please try again.' });
