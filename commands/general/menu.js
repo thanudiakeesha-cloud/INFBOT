@@ -149,22 +149,22 @@ function buildMainMenu({ botName, ownerName, senderNum, uptimeStr, ramMB, prefix
       : t('greeting_evening',   lang);
 
   let tx = '';
-  tx += `┏━━━━━━━━━━━━━━━━━━━━┓\n`;
+  tx += `┏━━━━━━━━━━━━━━━━━┓\n`;
   tx += `┃  ♾️  *${botName}*\n`;
   tx += `┃  _WhatsApp Multi-Bot Manager_\n`;
-  tx += `┗━━━━━━━━━━━━━━━━━━━━┛\n\n`;
+  tx += `┗━━━━━━━━━━━━━━━━━┛\n\n`;
 
   tx += `${greeting}, @${senderNum}! 👋\n\n`;
 
-  tx += `┌───── 📊 *${t('menu_bot_status', lang)}* ─────\n`;
+  tx += `┌── 📊 *${t('menu_bot_status', lang)}* ──\n`;
   tx += `│ 👑 *${t('owner', lang)}  :* ${ownerName}\n`;
   tx += `│ ⌨️  *${t('prefix', lang)} :* \`${prefix}\`\n`;
   tx += `│ ⏱️  *${t('uptime', lang)} :* ${uptimeStr}\n`;
   tx += `│ 💾 *${t('ram', lang)}    :* ${bar}\n`;
   tx += `│ 📦 *${t('menu_total', lang)}  :* ${totalCmds} ${t('menu_cmds', lang)}\n`;
-  tx += `└───────────────────────────\n\n`;
+  tx += `└────────────────────────\n\n`;
 
-  tx += `┌────── 📋 *${t('categories', lang)}* ─────\n`;
+  tx += `┌─── 📋 *${t('categories', lang)}* ──\n`;
   for (const [, cat] of Object.entries(CATEGORIES)) {
     const n    = cat.cmds.length;
     const dots = '●'.repeat(Math.min(n, 10)) + '○'.repeat(Math.max(0, 10 - n));
@@ -173,7 +173,7 @@ function buildMainMenu({ botName, ownerName, senderNum, uptimeStr, ramMB, prefix
     tx += `│  ${cat.icon}  *${label}*\n`;
     tx += `│     ${dots}  ${n} ${t('menu_cmds', lang)}\n`;
   }
-  tx += `└───────────────────────────\n\n`;
+  tx += `└────────────────────────\n\n`;
   tx += `> ${t('menu_tap', lang)}\n`;
   tx += `> ${t('menu_type_help', lang).replace('{prefix}', prefix)}`;
 
@@ -186,9 +186,9 @@ function buildSubmenu(catKey, prefix, lang) {
 
   const label = t(cat.labelKey, lang);
 
-  let tx = `┏━━━━━━━━━━━━━━━━━━━━┓\n`;
+  let tx = `┏━━━━━━━━━━━━━━━━━┓\n`;
   tx += `┃  ${cat.icon}  *${label}*\n`;
-  tx += `┗━━━━━━━━━━━━━━━━━━━━┛\n\n`;
+  tx += `┗━━━━━━━━━━━━━━━━━┛\n\n`;
 
   cat.cmds.forEach((cmd, i) => {
     const num  = String(i + 1).padStart(2, '0');
