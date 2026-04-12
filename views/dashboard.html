@@ -376,7 +376,7 @@ function toast(msg, type = 'info', dur = 3500) {
 /* ──────── SESSIONS ──────── */
 async function loadSessions(showError = true) {
   try {
-    const res = await fetch('/api/sessions');
+    const res = await fetch('/api/sessions', { credentials: 'include' });
     if (res.redirected || res.status === 401 || res.status === 403) {
       window.location.href = '/login';
       return;
@@ -433,7 +433,7 @@ function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 async function removeSession(id) {
   if (!confirm('Remove this bot session? It will disconnect immediately.')) return;
   try {
-    const res = await fetch('/api/session/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: id }) });
+    const res = await fetch('/api/session/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ sessionId: id }) });
     const d = await res.json();
     if (d.success) { toast('Bot removed', 'success'); loadSessions(); }
     else toast(d.message || 'Failed to remove', 'error');
@@ -456,6 +456,7 @@ async function getPairCode() {
     const res = await fetch('/api/pair', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ number: num, botName, ownerName, ownerNumber: num, referralCode: refCode || undefined })
     });
     const d = await res.json();
@@ -484,7 +485,7 @@ async function startQR() {
 
   try {
     const url = `/api/qr?botName=${encodeURIComponent(botName)}&ownerName=${encodeURIComponent(ownerName)}${refCode ? '&referralCode=' + encodeURIComponent(refCode) : ''}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { credentials: 'include' });
     const d = await res.json();
     if (d.success && d.qr) {
       document.getElementById('qrWrap').innerHTML = `<img src="${d.qr}" alt="QR Code" style="max-width:200px;border-radius:10px"><p style="font-size:.75rem;color:var(--muted);margin-top:8px">Scan with WhatsApp</p>`;
@@ -523,6 +524,7 @@ async function doBroadcast() {
   try {
     const res = await fetch('/api/owner/broadcast', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ message, target })
     });
     const d = await res.json();
@@ -553,6 +555,7 @@ async function doChannelReact() {
   try {
     const res = await fetch('/api/owner/channel-react', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ channelUrl, messageId, emoji })
     });
     const d = await res.json();
@@ -574,7 +577,7 @@ async function doChannelReact() {
 /* ──────── AUTH ──────── */
 let _loginRoute = '/login';
 async function logout() {
-  await fetch('/api/auth/logout');
+  await fetch('/api/auth/logout', { credentials: 'include' });
   window.location.href = _loginRoute;
 }
 
@@ -584,7 +587,7 @@ async function refresh() { if (currentPage === 'sessions') loadSessions(false); 
 async function init() {
   // Load user info from server (current logged-in user)
   try {
-    const r = await fetch('/api/user-info');
+    const r = await fetch('/api/user-info', { credentials: 'include' });
     if (r.status === 401 || r.status === 403) { window.location.href = _loginRoute; return; }
     const info = await r.json();
     if (info && info.username) {

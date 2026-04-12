@@ -89,11 +89,25 @@ server.listen(PORT, '0.0.0.0', () => {
     const cookieIsSecure = process.env.NODE_ENV === 'production'
       || !!process.env.RAILWAY_ENVIRONMENT
       || !!process.env.RAILWAY_SERVICE_NAME;
+
+    // Use Firebase-backed session store so sessions survive Railway restarts
+    // and are shared across zero-downtime deploy instances.
+    let sessionStore;
+    try {
+      const FirebaseSessionStore = require('./utils/firebaseSessionStore');
+      sessionStore = new FirebaseSessionStore({ ttl: 7 * 24 * 60 * 60 });
+      console.log('🔐 Firebase session store active');
+    } catch (e) {
+      console.warn('⚠️ Firebase session store unavailable — using memory store:', e.message);
+    }
+
     app.use(expressSession({
       secret: process.env.SESSION_SECRET || 'infinity-md-secret-2025',
       resave: false,
       saveUninitialized: false,
       rolling: true,
+      proxy: cookieIsSecure, // trust X-Forwarded-Proto for secure cookies on Railway
+      store: sessionStore,   // persistent store (Firebase) — falls back to memory if null
       cookie: {
         secure: cookieIsSecure,
         httpOnly: true,
