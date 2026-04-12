@@ -1,3 +1,8 @@
+/**
+ * .tiktok — TikTok Search & Download
+ * Races multiple APIs in parallel, streams buffer directly to WhatsApp chat.
+ */
+
 const axios = require('axios');
 const { sendBtn, btn } = require('../../utils/sendBtn');
 
@@ -8,28 +13,35 @@ const HEADERS = {
   'Accept': '*/*',
 };
 
-// Store pending search results per sender (expires after 5 minutes)
+// Pending search results per sender (5 min expiry)
 const pendingSearches = new Map();
 const PENDING_TTL = 5 * 60 * 1000;
 
 function storePending(senderJid, videos) {
   pendingSearches.set(senderJid, { videos, ts: Date.now() });
 }
-
 function getPending(senderJid) {
   const entry = pendingSearches.get(senderJid);
   if (!entry) return null;
-  if (Date.now() - entry.ts > PENDING_TTL) {
-    pendingSearches.delete(senderJid);
-    return null;
-  }
+  if (Date.now() - entry.ts > PENDING_TTL) { pendingSearches.delete(senderJid); return null; }
   return entry.videos;
+}
+
+// Stream video bytes from CDN URL into a buffer
+async function streamToBuffer(url) {
+  const res = await axios.get(url, {
+    responseType: 'arraybuffer',
+    timeout: 60000,
+    headers: HEADERS,
+    maxRedirects: 10,
+  });
+  return Buffer.from(res.data);
 }
 
 function formPost(url, params) {
   const body = new URLSearchParams(params);
   return axios.post(url, body, {
-    timeout: 20000,
+    timeout: 12000,
     headers: {
       ...HEADERS,
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -48,12 +60,11 @@ async function searchTikTok(query) {
     throw new Error('tikwm no results');
   });
 
-  const sinhalaSearch = axios.get(
+  const siputzxSearch = axios.get(
     `https://api.siputzx.my.id/api/s/tiktok?q=${encodeURIComponent(query)}`,
-    { timeout: 20000, headers: HEADERS }
+    { timeout: 12000, headers: HEADERS }
   ).then(r => {
     if (r.data?.status && Array.isArray(r.data?.data) && r.data.data.length) {
-      // Normalise to tikwm-style video list
       const videos = r.data.data.slice(0, 5).map(v => ({
         title: v.title || v.desc || 'TikTok Video',
         play: v.play || v.video || v.url || '',
@@ -65,11 +76,11 @@ async function searchTikTok(query) {
     throw new Error('siputzx no results');
   });
 
-  return Promise.any([tikwmSearch, sinhalaSearch]);
+  return Promise.any([tikwmSearch, siputzxSearch]);
 }
 
 // Race multiple download mirrors for a direct TikTok URL
-async function downloadByUrl(url) {
+async function resolveDownloadUrl(url) {
   const tikwmDl = formPost(`${TIKWM_BASE}/api/`, { url, hd: '1' }).then(r => {
     const v = r.data?.data;
     if (r.data?.code === 0 && v) {
@@ -87,7 +98,7 @@ async function downloadByUrl(url) {
 
   const siputzxDl = axios.get(
     `https://api.siputzx.my.id/api/d/tiktok?url=${encodeURIComponent(url)}`,
-    { timeout: 20000, headers: HEADERS }
+    { timeout: 12000, headers: HEADERS }
   ).then(r => {
     if (r.data?.status && r.data?.data) {
       const d = r.data.data;
@@ -99,6 +110,39 @@ async function downloadByUrl(url) {
   });
 
   return Promise.any([tikwmDl, siputzxDl]);
+}
+
+// Download and send a TikTok video from a resolved URL
+async function sendTikTokVideo(sock, msg, from, react, reply, videoUrl, title, author, duration) {
+  await react('⏳');
+
+  // Stream bytes from CDN
+  let buf;
+  try {
+    buf = await streamToBuffer(videoUrl);
+  } catch (e) {
+    console.error('[TikTok] Buffer download failed:', e.message);
+    await react('❌');
+    return reply('❌ Failed to download TikTok video. Please try again.');
+  }
+
+  // Send buffer directly to WhatsApp chat
+  try {
+    await sock.sendMessage(from, {
+      video: buf,
+      mimetype: 'video/mp4',
+      fileName: `${(title || 'tiktok').replace(/[^\w\s-]/g, '').trim() || 'tiktok'}.mp4`,
+      caption:
+        `🎬 *${(title || 'TikTok Video').substring(0, 100)}*\n` +
+        `👤 ${author || 'Unknown'}${duration ? `  ⏱️ ${duration}s` : ''}\n\n` +
+        `> *INFINITY MD*`,
+    }, { quoted: msg });
+    await react('✅');
+  } catch (e) {
+    console.error('[TikTok] Send error:', e.message);
+    await react('❌');
+    reply('❌ Failed to send video. Please try again.');
+  }
 }
 
 module.exports = {
@@ -113,29 +157,20 @@ module.exports = {
     const sender = msg.key.participant || msg.key.remoteJid;
 
     try {
-      // Handle selection: .tiktok pick <index>
+      // Button pick: .tiktok pick <index>
       if (args[0] === 'pick') {
         const index = parseInt(args[1], 10);
         const videos = getPending(sender);
-        if (!videos || isNaN(index) || index < 0 || index >= videos.length) {
+        if (!videos || isNaN(index) || index < 0 || index >= videos.length)
           return reply('❌ Selection expired or invalid. Please search again with .tiktok <query>');
-        }
+
         const video = videos[index];
         const videoUrl = video.play?.startsWith('http') ? video.play : `${TIKWM_BASE}${video.play}`;
-        const title = (video.title || 'TikTok Video').substring(0, 100);
-        const author = video.author?.nickname || video.music_info?.author || 'Unknown';
-        const duration = video.duration ? `${video.duration}s` : '';
+        const title    = (video.title || 'TikTok Video').substring(0, 100);
+        const author   = video.author?.nickname || video.music_info?.author || 'Unknown';
+        const duration = video.duration || 0;
 
-        await react('⏳');
-        await sock.sendMessage(from, {
-          video: { url: videoUrl },
-          caption:
-            `🎬 *${title}*\n` +
-            `👤 ${author}${duration ? `  ⏱️ ${duration}` : ''}\n\n` +
-            `> *INFINITY MD*`,
-        }, { quoted: msg });
-        await react('✅');
-        return;
+        return sendTikTokVideo(sock, msg, from, react, reply, videoUrl, title, author, duration);
       }
 
       const query = args.join(' ').trim();
@@ -143,18 +178,11 @@ module.exports = {
 
       await react('⏳');
 
-      // Direct TikTok URL download
+      // Direct TikTok URL
       if (query.includes('tiktok.com') || query.includes('vt.tiktok')) {
-        const result = await downloadByUrl(query);
-        await sock.sendMessage(from, {
-          video: { url: result.videoUrl },
-          caption:
-            `🎬 *${result.title.substring(0, 100)}*\n` +
-            `👤 ${result.author}${result.duration ? `  ⏱️ ${result.duration}s` : ''}\n\n` +
-            `> *INFINITY MD*`,
-        }, { quoted: msg });
-        await react('✅');
-        return;
+        const result = await resolveDownloadUrl(query);
+        return sendTikTokVideo(sock, msg, from, react, reply,
+          result.videoUrl, result.title, result.author, result.duration);
       }
 
       // Search flow
@@ -162,10 +190,9 @@ module.exports = {
       const videos = data.data.videos.slice(0, 5);
       storePending(sender, videos);
 
-      const buttons = videos.map((v, i) => {
-        const label = (v.title || `Video ${i + 1}`).substring(0, 50);
-        return btn(`tiktok_pick_${i}`, `${i + 1}. ${label}`);
-      });
+      const buttons = videos.map((v, i) =>
+        btn(`tiktok_pick_${i}`, `${i + 1}. ${(v.title || `Video ${i + 1}`).substring(0, 50)}`)
+      );
 
       await react('✅');
       await sendBtn(sock, from, {
@@ -179,7 +206,7 @@ module.exports = {
       }, { quoted: msg });
 
     } catch (err) {
-      console.error('TikTok error:', err.message);
+      console.error('[TikTok] Error:', err.message);
       await react('❌');
       reply('❌ Failed to fetch TikTok video. Please try again later.');
     }

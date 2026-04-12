@@ -1,159 +1,159 @@
 /**
  * YouTube Search & Download
- * Supports: search query, direct URL (including Shorts)
+ * Races all download APIs in parallel, streams buffer directly to WhatsApp.
  */
 
 const axios = require('axios');
 const yts = require('yt-search');
-const ytdl = require('ytdl-core');
-const APIs = require('../../utils/api');
 const { sendBtn, btn } = require('../../utils/sendBtn');
 
 const YT_REGEX = /(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?(?:.*&)?v=|v\/|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/;
 
-// Store pending search results per sender (expires after 5 minutes)
+const HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Accept': 'video/*, */*',
+};
+
+// Pending search results per sender (5 min expiry)
 const pendingSearches = new Map();
 const PENDING_TTL = 5 * 60 * 1000;
 
 function storePending(senderJid, videos) {
   pendingSearches.set(senderJid, { videos, ts: Date.now() });
 }
-
 function getPending(senderJid) {
   const entry = pendingSearches.get(senderJid);
   if (!entry) return null;
-  if (Date.now() - entry.ts > PENDING_TTL) {
-    pendingSearches.delete(senderJid);
-    return null;
-  }
+  if (Date.now() - entry.ts > PENDING_TTL) { pendingSearches.delete(senderJid); return null; }
   return entry.videos;
 }
 
-async function downloadBuffer(url) {
+// Stream bytes from CDN URL into a buffer
+async function streamToBuffer(url) {
   const res = await axios.get(url, {
     responseType: 'arraybuffer',
-    timeout: 120000,
+    timeout: 90000,
+    headers: HEADERS,
     maxRedirects: 10,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Accept': '*/*'
-    }
   });
   return Buffer.from(res.data);
+}
+
+// Individual API callers — short timeouts, all race in parallel
+async function tryEliteProVideo(url) {
+  const res = await axios.get(
+    `https://eliteprotech-apis.zone.id/ytdown?url=${encodeURIComponent(url)}&format=mp4`,
+    { headers: HEADERS, timeout: 12000 }
+  );
+  if (res?.data?.success && res?.data?.downloadURL)
+    return { download: res.data.downloadURL, title: res.data.title };
+  throw new Error('no dl');
+}
+
+async function tryOkatsuVideo(url) {
+  const res = await axios.get(
+    `https://okatsu-rolezapiiz.vercel.app/downloader/ytmp4?url=${encodeURIComponent(url)}`,
+    { headers: HEADERS, timeout: 12000 }
+  );
+  if (res?.data?.result?.mp4)
+    return { download: res.data.result.mp4, title: res.data.result.title };
+  throw new Error('no dl');
+}
+
+async function tryYupraVideo(url) {
+  const res = await axios.get(
+    `https://api.yupra.my.id/api/downloader/ytmp4?url=${encodeURIComponent(url)}`,
+    { headers: HEADERS, timeout: 12000 }
+  );
+  if (res?.data?.success && res?.data?.data?.download_url)
+    return { download: res.data.data.download_url, title: res.data.data.title, thumbnail: res.data.data.thumbnail };
+  throw new Error('no dl');
+}
+
+async function tryVredenVideo(url) {
+  const res = await axios.get(
+    `https://api.vreden.my.id/api/ytmp4?url=${encodeURIComponent(url)}`,
+    { headers: HEADERS, timeout: 12000 }
+  );
+  const d = res?.data?.result || res?.data?.data;
+  if (d?.download || d?.url || d?.mp4)
+    return { download: d.download || d.url || d.mp4, title: d.title, thumbnail: d.thumbnail };
+  throw new Error('no dl');
+}
+
+async function tryAgatzVideo(url) {
+  const res = await axios.get(
+    `https://api.agatz.xyz/api/ytmp4?url=${encodeURIComponent(url)}`,
+    { headers: HEADERS, timeout: 12000 }
+  );
+  const d = res?.data?.data;
+  if (d?.video || d?.url || d?.download)
+    return { download: d.video || d.url || d.download, title: d.title, thumbnail: d.thumbnail };
+  throw new Error('no dl');
+}
+
+// Race all video download APIs simultaneously
+async function fetchVideoByUrl(url) {
+  return Promise.any([
+    tryEliteProVideo(url),
+    tryOkatsuVideo(url),
+    tryYupraVideo(url),
+    tryVredenVideo(url),
+    tryAgatzVideo(url),
+  ]);
 }
 
 async function downloadVideoByUrl(videoUrl, videoTitle, sock, msg, chatId, react, reply) {
   await react('⏳');
 
-  // Get video thumbnail from URL
   const ytIdMatch = videoUrl.match(YT_REGEX);
   const ytId = ytIdMatch ? ytIdMatch[1] : null;
   const thumb = ytId ? `https://i.ytimg.com/vi/${ytId}/sddefault.jpg` : null;
 
+  // Send thumbnail immediately while fetching download link
   if (thumb) {
-    try {
-      await sock.sendMessage(chatId, {
-        image: { url: thumb },
-        caption: `🎬 *${videoTitle || 'YouTube Video'}*\n⏳ _Downloading..._\n\n> 💫 *INFINITY MD*`
-      }, { quoted: msg });
-    } catch (e) {}
+    sock.sendMessage(chatId, {
+      image: { url: thumb },
+      caption: `🎬 *${videoTitle || 'YouTube Video'}*\n⏳ _Downloading..._\n\n> 💫 *INFINITY MD*`
+    }, { quoted: msg }).catch(() => {});
   }
 
-  let downloadUrl = null;
-  let finalTitle = videoTitle || 'YouTube Video';
-
+  // Get download URL (parallel race)
+  let result = null;
   try {
-    const result = await APIs.getEliteProTechVideoByUrl(videoUrl);
-    downloadUrl = result?.download;
-    finalTitle = result?.title || finalTitle;
-    console.log('[YT] EliteProTech OK:', downloadUrl?.substring(0, 60));
-  } catch (e1) {
-    console.log('[YT] EliteProTech FAIL:', e1.message);
-  }
-
-  if (!downloadUrl) {
-    try {
-      const result = await APIs.getYupraVideoByUrl(videoUrl);
-      downloadUrl = result?.download;
-      finalTitle = result?.title || finalTitle;
-      console.log('[YT] Yupra OK:', downloadUrl?.substring(0, 60));
-    } catch (e2) {
-      console.log('[YT] Yupra FAIL:', e2.message);
-    }
-  }
-
-  if (!downloadUrl) {
-    try {
-      const result = await APIs.getOkatsuVideoByUrl(videoUrl);
-      downloadUrl = result?.download;
-      finalTitle = result?.title || finalTitle;
-      console.log('[YT] Okatsu OK:', downloadUrl?.substring(0, 60));
-    } catch (e3) {
-      console.log('[YT] Okatsu FAIL:', e3.message);
-    }
-  }
-
-  // Fallback 4: ytdl-core — direct CDN URL, no third-party API needed
-  if (!downloadUrl) {
-    console.log('[YT] Trying ytdl-core...');
-    try {
-      const info = await ytdl.getInfo(videoUrl, {
-        requestOptions: { headers: { 'Accept-Language': 'en-US,en;q=0.9' } }
-      });
-      finalTitle = info.videoDetails?.title || finalTitle;
-
-      // Prefer MP4 with both video+audio, best quality ≤720p (avoids huge 1080p files)
-      const formats = ytdl.filterFormats(info.formats, f =>
-        f.container === 'mp4' && f.hasVideo && f.hasAudio
-      );
-      formats.sort((a, b) => (parseInt(b.height) || 0) - (parseInt(a.height) || 0));
-      const best = formats.find(f => (f.height || 0) <= 720) || formats[0];
-
-      if (best?.url) {
-        downloadUrl = best.url;
-        console.log('[YT] ytdl-core OK:', best.qualityLabel, downloadUrl.substring(0, 60));
-      } else {
-        throw new Error('No suitable format found');
-      }
-    } catch (ytErr) {
-      console.log('[YT] ytdl-core FAIL:', ytErr.message);
-    }
-  }
-
-  if (!downloadUrl) {
+    result = await fetchVideoByUrl(videoUrl);
+  } catch (e) {
+    console.error('[YT] All APIs failed:', e.message);
     await react('❌');
-    return reply('❌ Failed to get video download link. All sources failed — please try again later.');
+    return reply('❌ Could not get video download link. Please try again later.');
   }
 
-  const safeTitle = finalTitle.replace(/[^\w\s-]/g, '').trim() || 'video';
+  const finalTitle = result.title || videoTitle || 'YouTube Video';
+  const safeTitle  = finalTitle.replace(/[^\w\s-]/g, '').trim() || 'video';
 
-  // Send via URL directly — avoids buffering large files over the WA connection
+  // Stream bytes from CDN into buffer
+  let buf;
+  try {
+    buf = await streamToBuffer(result.download);
+  } catch (e) {
+    console.error('[YT] Buffer download failed:', e.message);
+    await react('❌');
+    return reply('❌ Failed to download video. File may be too large or the link expired.');
+  }
+
+  // Send buffer directly to WhatsApp chat
   try {
     await sock.sendMessage(chatId, {
-      video: { url: downloadUrl },
+      video: buf,
       mimetype: 'video/mp4',
       fileName: `${safeTitle}.mp4`,
       caption: `🎬 *${finalTitle}*\n\n> 💫 *INFINITY MD*`
     }, { quoted: msg });
     await react('✅');
-  } catch (urlErr) {
-    console.log('[YT] URL send FAIL, trying buffer:', urlErr.message);
-    // Last resort: download to buffer and send
-    try {
-      const videoBuffer = await downloadBuffer(downloadUrl);
-      console.log('[YT] Buffer size:', Math.round(videoBuffer.length / 1024 / 1024) + ' MB');
-      await sock.sendMessage(chatId, {
-        video: videoBuffer,
-        mimetype: 'video/mp4',
-        fileName: `${safeTitle}.mp4`,
-        caption: `🎬 *${finalTitle}*\n\n> 💫 *INFINITY MD*`
-      }, { quoted: msg });
-      await react('✅');
-    } catch (bufErr) {
-      console.log('[YT] Buffer send FAIL:', bufErr.message);
-      await react('❌');
-      return reply('❌ Failed to send video. File may be too large or the link expired.');
-    }
+  } catch (e) {
+    console.error('[YT] Send error:', e.message);
+    await react('❌');
+    reply('❌ Failed to send video. Please try again.');
   }
 }
 
@@ -170,28 +170,24 @@ module.exports = {
     const sender = msg.key.participant || msg.key.remoteJid;
 
     try {
-      // Handle button pick selection: .yt pick <index>
+      // Button pick: .yt pick <index>
       if (args[0] === 'pick') {
         const index = parseInt(args[1], 10);
         const videos = getPending(sender);
-        if (!videos || isNaN(index) || index < 0 || index >= videos.length) {
+        if (!videos || isNaN(index) || index < 0 || index >= videos.length)
           return reply('❌ Selection expired or invalid. Search again with .yt <query>');
-        }
-        const video = videos[index];
-        return downloadVideoByUrl(video.url, video.title, sock, msg, chatId, react, reply);
+        return downloadVideoByUrl(videos[index].url, videos[index].title, sock, msg, chatId, react, reply);
       }
 
       const query = args.join(' ').trim();
       if (!query) return reply('❌ Please provide a search query or YouTube link.\n\nUsage: .yt <search query>');
 
-      // Detect if input is a direct YouTube URL (including Shorts)
-      if (YT_REGEX.test(query)) {
+      // Direct YouTube URL
+      if (YT_REGEX.test(query))
         return downloadVideoByUrl(query, '', sock, msg, chatId, react, reply);
-      }
 
-      // Otherwise do a search
+      // Search
       await react('⏳');
-
       const { videos } = await yts(query);
       if (!videos || videos.length === 0) {
         await react('❌');
@@ -201,13 +197,11 @@ module.exports = {
       const results = videos.slice(0, 5);
       storePending(sender, results);
 
-      const buttons = results.map((v, i) => {
-        const label = (v.title || `Video ${i + 1}`).substring(0, 50);
-        return btn(`yt_pick_${i}`, `${i + 1}. ${label}`);
-      });
+      const buttons = results.map((v, i) =>
+        btn(`yt_pick_${i}`, `${i + 1}. ${(v.title || `Video ${i + 1}`).substring(0, 50)}`)
+      );
 
       await react('✅');
-
       await sendBtn(sock, from, {
         title: '🎬 YouTube Search Results',
         text:
