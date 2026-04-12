@@ -277,8 +277,8 @@
       wrap.classList.add('visible');
       // Force reflow so transition reset takes effect
       bar.getBoundingClientRect();
-      // Animate to 92% over 7 s (holds just short of 100 until we know the result)
-      bar.style.transition='width 7s cubic-bezier(0.25,0.1,0.25,1)';
+      // Animate to 92% over 15 s (holds just short of 100 until we know the result)
+      bar.style.transition='width 15s cubic-bezier(0.25,0.1,0.25,1)';
       bar.style.width='92%';
     }
     function finishProgress(success){
