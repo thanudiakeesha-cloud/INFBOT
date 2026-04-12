@@ -1938,8 +1938,14 @@ function startSelfPing() {
   const PING_INTERVAL = parseInt(process.env.SELF_PING_INTERVAL_MS || String(4 * 60 * 1000), 10);
   setInterval(() => {
     try {
-      const selfUrl = process.env.REPLIT_DEV_DOMAIN
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}/health`
+      // Support Replit, Railway, and generic PUBLIC_URL env vars
+      const publicUrl = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : process.env.RAILWAY_PUBLIC_DOMAIN
+          ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+          : process.env.PUBLIC_URL || null;
+      const selfUrl = publicUrl
+        ? `${publicUrl}/health`
         : `http://localhost:${PORT}/health`;
       const mod = selfUrl.startsWith('https') ? require('https') : http;
       const req = mod.get(selfUrl, { timeout: 10000 }, (res) => {

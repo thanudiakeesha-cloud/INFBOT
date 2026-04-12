@@ -56,6 +56,29 @@ async function ytSearchByUrl(url) {
   return r || null;
 }
 
+/* ─── ytdl-core direct download (most reliable when it works) ─── */
+async function tryYtdlCore(ytUrl) {
+  const ytdl = require('ytdl-core');
+  const info = await ytdl.getInfo(ytUrl, { requestOptions: { headers: HEADERS } });
+  const formats = info.formats.filter(f => f.hasAudio && !f.hasVideo && f.url);
+  formats.sort((a, b) => (b.audioBitrate || 0) - (a.audioBitrate || 0));
+  if (!formats.length) throw new Error('no audio format');
+  return formats[0].url;
+}
+
+/* ─── Download audio buffer via ytdl-core stream ─── */
+async function streamToBufferYtdl(ytUrl) {
+  const ytdl = require('ytdl-core');
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    const stream = ytdl(ytUrl, { quality: 'highestaudio', filter: 'audioonly', requestOptions: { headers: HEADERS } });
+    stream.on('data', chunk => chunks.push(chunk));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+    setTimeout(() => reject(new Error('ytdl stream timeout')), 90000);
+  });
+}
+
 /* ─── Individual download API callers ─── */
 async function trySiputzx(url) {
   const r = await axios.get(`https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(url)}`,
@@ -119,6 +142,7 @@ async function tryNyxs(url) {
 /* ─── Race all APIs by URL ─── */
 async function fetchDownloadUrl(ytUrl) {
   return Promise.any([
+    tryYtdlCore(ytUrl),
     trySiputzx(ytUrl),
     tryVreden(ytUrl),
     tryAgatz(ytUrl),
@@ -248,9 +272,19 @@ module.exports = {
     try {
       buf = await streamToBuffer(downloadUrl);
     } catch (e) {
-      console.error('[Song] Download error:', e.message);
-      await react('❌');
-      return reply('❌ Failed to download audio. Please try again.');
+      console.error('[Song] URL download error, trying ytdl stream:', e.message);
+      // Final fallback: stream directly via ytdl-core if we have a YouTube URL
+      if (ytUrlForApis) {
+        try {
+          buf = await streamToBufferYtdl(ytUrlForApis);
+        } catch (e2) {
+          console.error('[Song] ytdl stream error:', e2.message);
+        }
+      }
+      if (!buf) {
+        await react('❌');
+        return reply('❌ Failed to download audio. Please try again.');
+      }
     }
 
     const safeTitle = infoTitle.replace(/[^\w\s-]/g, '').trim() || 'audio';

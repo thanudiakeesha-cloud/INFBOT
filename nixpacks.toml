@@ -1,2 +1,22 @@
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = [
+  "nodejs_20",
+  "ffmpeg",
+  "pkg-config",
+  "cairo",
+  "pango",
+  "libpng",
+  "libjpeg",
+  "giflib",
+  "librsvg",
+  "pixman",
+  "python3",
+  "gcc",
+  "gnumake"
+]
+
+[phases.install]
+cmds = ["npm install --legacy-peer-deps"]
+
+[start]
+cmd = "node index.js"
