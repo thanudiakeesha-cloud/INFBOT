@@ -49,6 +49,39 @@ async function getWAVersion() {
   }
 }
 
+function assertWhatsAppReady() {
+  const missing = [];
+  if (!makeWASocket) missing.push('socket');
+  if (!useMultiFileAuthState) missing.push('auth');
+  if (!makeCacheableSignalKeyStore) missing.push('keys');
+  if (!Browsers) missing.push('browser');
+  if (!pino) missing.push('logger');
+  if (missing.length) {
+    throw new Error(`WhatsApp service is not ready (${missing.join(', ')})`);
+  }
+}
+
+function tempBaileysLogger(level = 'fatal') {
+  if (!pino) return logger || { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, trace: () => {}, child: () => logger };
+  return pino({ level }).child({ level });
+}
+
+function tempBrowser() {
+  if (Browsers?.ubuntu) return Browsers.ubuntu('Chrome');
+  if (Browsers?.windows) return Browsers.windows('Chrome');
+  return ['Infinity MD', 'Chrome', '1.0.0'];
+}
+
+function endTempSocket(sock) {
+  if (!sock) return;
+  try { sock.ev?.removeAllListeners(); } catch (_) {}
+  try { sock.end?.(); } catch (_) {}
+}
+
+function safeRemoveDir(dir) {
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+}
+
 server = http.createServer((req, res) => {
   if (!app) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -788,32 +821,11 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
   fs.mkdirSync(pairDir, { recursive: true });
 
   try {
-    const { state, saveCreds } = await useMultiFileAuthState(pairDir);
-    const version = await getWAVersion();
-
-    const pairSock = makeWASocket({
-      version,
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }).child({ level: 'fatal' })),
-      },
-      printQRInTerminal: false,
-      logger: pino({ level: 'fatal' }).child({ level: 'fatal' }),
-      browser: Browsers.windows('Chrome'),
-      markOnlineOnConnect: false,
-      generateHighQualityLinkPreview: false,
-      defaultQueryTimeoutMs: 60000,
-      connectTimeoutMs: 60000,
-      keepAliveIntervalMs: 30000,
-    });
-
-    pairSessions.set(pairId, pairSock);
-
-    pairSock.ev.on('creds.update', saveCreds);
-
+    assertWhatsAppReady();
     let pairDeployed = false;
+    let currentPairSock = null;
 
-    pairSock.ev.on('connection.update', async (update) => {
+    const attachPairHandlers = (sock) => sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect } = update;
 
       if (connection === 'open') {
@@ -857,9 +869,9 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
         }
 
         setTimeout(() => {
-          try { pairSock.end(); } catch (_) {}
+          endTempSocket(sock);
           pairSessions.delete(pairId);
-          fs.rmSync(pairDir, { recursive: true, force: true });
+          safeRemoveDir(pairDir);
         }, 5000);
       }
 
@@ -872,119 +884,73 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
         if (isLoggedOut) {
           console.log(`❌ Pair session ${pairId} logged out, cleaning up`);
           pairSessions.delete(pairId);
-          try { fs.rmSync(pairDir, { recursive: true, force: true }); } catch (_) {}
+          safeRemoveDir(pairDir);
         } else {
-          console.log(`🔄 Pair session ${pairId} disconnected (status: ${statusCode}), retrying...`);
-          try {
-            try { pairSock.ev.removeAllListeners(); pairSock.end(); } catch (_) {}
-            const { state: newState, saveCreds: newSaveCreds } = await useMultiFileAuthState(pairDir);
-            const newVersion = await getWAVersion();
-
-            const retrySock = makeWASocket({
-              version: newVersion,
-              auth: {
-                creds: newState.creds,
-                keys: makeCacheableSignalKeyStore(newState.keys, pino({ level: 'fatal' }).child({ level: 'fatal' })),
-              },
-              printQRInTerminal: false,
-              logger: pino({ level: 'fatal' }).child({ level: 'fatal' }),
-              browser: Browsers.windows('Chrome'),
-              markOnlineOnConnect: false,
-              generateHighQualityLinkPreview: false,
-              defaultQueryTimeoutMs: 60000,
-              connectTimeoutMs: 60000,
-              keepAliveIntervalMs: 30000,
-            });
-
-            retrySock.ev.on('creds.update', newSaveCreds);
-            retrySock.ev.on('connection.update', async (retryUpdate) => {
-              const { connection: rc, lastDisconnect: rld } = retryUpdate;
-              if (rc === 'open') {
-                pairDeployed = true;
-                console.log(`✅ Pair session ${pairId} connected on retry!`);
-                try {
-                  const credsData = fs.readFileSync(path.join(pairDir, 'creds.json'), 'utf8');
-                  const sessionName = `session_${Date.now()}`;
-                  const sessionFolder = path.join(__dirname, 'session', sessionName);
-                  fs.mkdirSync(sessionFolder, { recursive: true });
-                  const files = fs.readdirSync(pairDir);
-                  for (const f of files) {
-                    if (fs.statSync(path.join(pairDir, f)).isFile()) {
-                      fs.copyFileSync(path.join(pairDir, f), path.join(sessionFolder, f));
-                    }
-                  }
-                  const sessionId = `paired_${num}_${Date.now()}`;
-                  const sessionData = {
-                    userId: req.session.username,
-                    folder: sessionName,
-                    name: botName || 'Infinity MD',
-                    ownerName: ownerName || config.ownerName[0],
-                    ownerNumber: ownerNumber || num,
-                    addedAt: Date.now(),
-                    creds: credsData
-                  };
-                  await database.saveSession(sessionId, sessionData);
-                  await connectSession(sessionId, sessionData);
-                  console.log(`✅ Pair session auto-deployed as ${sessionId}`);
-                } catch (err) {
-                  console.error('Error deploying pair retry session:', err);
-                }
-                setTimeout(() => {
-                  try { retrySock.end(); } catch (_) {}
-                  pairSessions.delete(pairId);
-                  fs.rmSync(pairDir, { recursive: true, force: true });
-                }, 5000);
-              }
-              if (rc === 'close' && !pairDeployed) {
-                const rCode = (rld?.error instanceof Boom) ? rld.error.output?.statusCode : rld?.error?.output?.statusCode;
-                console.log(`❌ Pair session ${pairId} retry also closed (status: ${rCode}), cleaning up`);
-                pairSessions.delete(pairId);
-                try { fs.rmSync(pairDir, { recursive: true, force: true }); } catch (_) {}
-              }
-            });
-
-            pairSessions.set(pairId, retrySock);
-          } catch (retryErr) {
-            console.error(`❌ Pair session ${pairId} retry failed:`, retryErr.message);
-            pairSessions.delete(pairId);
-            try { fs.rmSync(pairDir, { recursive: true, force: true }); } catch (_) {}
-          }
+          console.log(`⚠️ Pair session ${pairId} socket closed before pairing completed (status: ${statusCode})`);
         }
       }
     });
 
-    if (!pairSock.authState.creds.registered) {
-      await baileysDelay(3000);
+    let lastPairError;
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        let code = await pairSock.requestPairingCode(num);
+        if (currentPairSock) endTempSocket(currentPairSock);
+        const { state, saveCreds } = await useMultiFileAuthState(pairDir);
+        const version = await getWAVersion();
+        currentPairSock = makeWASocket({
+          version,
+          auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, tempBaileysLogger()),
+          },
+          printQRInTerminal: false,
+          logger: tempBaileysLogger(),
+          browser: tempBrowser(),
+          markOnlineOnConnect: false,
+          generateHighQualityLinkPreview: false,
+          defaultQueryTimeoutMs: 90000,
+          connectTimeoutMs: 90000,
+          keepAliveIntervalMs: 30000,
+        });
+        pairSessions.set(pairId, currentPairSock);
+        currentPairSock.ev.on('creds.update', saveCreds);
+        attachPairHandlers(currentPairSock);
+
+        if (currentPairSock.authState.creds.registered) {
+          pairSessions.delete(pairId);
+          safeRemoveDir(pairDir);
+          return res.status(400).json({ success: false, message: 'This number already has an active session.' });
+        }
+
+        await baileysDelay(2500 + (attempt * 1500));
+        let code = await currentPairSock.requestPairingCode(num);
         code = code?.match(/.{1,4}/g)?.join('-') || code;
-        console.log(`🔑 Pair code for ${num}: ${code}`);
+        console.log(`🔑 Pair code for ${num} generated on attempt ${attempt}`);
 
         setTimeout(() => {
           if (pairSessions.has(pairId)) {
             console.log(`⏰ Pair session ${pairId} timed out, cleaning up`);
-            try { pairSessions.get(pairId).end(); } catch (_) {}
+            endTempSocket(pairSessions.get(pairId));
             pairSessions.delete(pairId);
-            fs.rmSync(pairDir, { recursive: true, force: true });
+            safeRemoveDir(pairDir);
           }
         }, 120000);
 
         return res.json({ success: true, code, pairId });
       } catch (err) {
-        console.error('Error requesting pair code:', err);
-        pairSessions.delete(pairId);
-        fs.rmSync(pairDir, { recursive: true, force: true });
-        return res.status(503).json({ success: false, message: 'Failed to generate pair code. Check the phone number and try again.' });
+        lastPairError = err;
+        console.error(`Error requesting pair code (attempt ${attempt}/3):`, err?.message || err);
+        if (attempt < 3) await baileysDelay(2000 * attempt);
       }
-    } else {
-      pairSessions.delete(pairId);
-      fs.rmSync(pairDir, { recursive: true, force: true });
-      return res.status(400).json({ success: false, message: 'This number already has an active session.' });
     }
+    endTempSocket(currentPairSock);
+    pairSessions.delete(pairId);
+    safeRemoveDir(pairDir);
+    return res.status(503).json({ success: false, message: `Failed to generate pair code after retries. ${lastPairError?.message || 'Check the phone number and try again.'}` });
   } catch (err) {
     console.error('Pair session error:', err);
-    fs.rmSync(pairDir, { recursive: true, force: true });
-    return res.status(503).json({ success: false, message: 'Service unavailable' });
+    safeRemoveDir(pairDir);
+    return res.status(503).json({ success: false, message: err?.message || 'WhatsApp service unavailable' });
   }
 });
 
@@ -996,21 +962,22 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
   let responseSent = false;
 
   try {
+    assertWhatsAppReady();
     const { state, saveCreds } = await useMultiFileAuthState(qrDir);
     const version = await getWAVersion();
 
     const qrSock = makeWASocket({
       version,
-      logger: pino({ level: 'silent' }),
-      browser: Browsers.windows('Chrome'),
+      logger: tempBaileysLogger('silent'),
+      browser: tempBrowser(),
       auth: {
         creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }).child({ level: 'fatal' })),
+        keys: makeCacheableSignalKeyStore(state.keys, tempBaileysLogger()),
       },
       markOnlineOnConnect: false,
       generateHighQualityLinkPreview: false,
-      defaultQueryTimeoutMs: 60000,
-      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 90000,
+      connectTimeoutMs: 90000,
       keepAliveIntervalMs: 30000,
     });
 
@@ -1090,9 +1057,9 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
         }
 
         setTimeout(() => {
-          try { qrSock.end(); } catch (_) {}
+          endTempSocket(qrSock);
           pairSessions.delete(qrId);
-          fs.rmSync(qrDir, { recursive: true, force: true });
+          safeRemoveDir(qrDir);
         }, 5000);
       }
 
@@ -1105,32 +1072,47 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
         if (isLoggedOut) {
           console.log(`❌ QR session ${qrId} logged out, cleaning up`);
           pairSessions.delete(qrId);
-          try { fs.rmSync(qrDir, { recursive: true, force: true }); } catch (_) {}
+          safeRemoveDir(qrDir);
         } else {
           console.log(`🔄 QR session ${qrId} disconnected (status: ${statusCode}), retrying...`);
           try {
-            try { qrSock.ev.removeAllListeners(); qrSock.end(); } catch (_) {}
+            endTempSocket(qrSock);
             const { state: newState, saveCreds: newSaveCreds } = await useMultiFileAuthState(qrDir);
             const newVersion = await getWAVersion();
 
             const retrySock = makeWASocket({
               version: newVersion,
-              logger: pino({ level: 'silent' }),
-              browser: Browsers.windows('Chrome'),
+              logger: tempBaileysLogger('silent'),
+              browser: tempBrowser(),
               auth: {
                 creds: newState.creds,
-                keys: makeCacheableSignalKeyStore(newState.keys, pino({ level: 'fatal' }).child({ level: 'fatal' })),
+                keys: makeCacheableSignalKeyStore(newState.keys, tempBaileysLogger()),
               },
               markOnlineOnConnect: false,
               generateHighQualityLinkPreview: false,
-              defaultQueryTimeoutMs: 60000,
-              connectTimeoutMs: 60000,
+              defaultQueryTimeoutMs: 90000,
+              connectTimeoutMs: 90000,
               keepAliveIntervalMs: 30000,
             });
 
             retrySock.ev.on('creds.update', newSaveCreds);
             retrySock.ev.on('connection.update', async (retryUpdate) => {
-              const { connection: rc, lastDisconnect: rld } = retryUpdate;
+              const { connection: rc, lastDisconnect: rld, qr: retryQr } = retryUpdate;
+              if (retryQr && !responseSent) {
+                responseSent = true;
+                try {
+                  const qrDataURL = await QRCode.toDataURL(retryQr, {
+                    errorCorrectionLevel: 'M',
+                    type: 'image/png',
+                    quality: 0.92,
+                    margin: 1,
+                    color: { dark: '#06b6d4', light: '#0f172a' }
+                  });
+                  res.json({ success: true, qr: qrDataURL, qrId });
+                } catch (_) {
+                  res.status(500).json({ success: false, message: 'Failed to generate QR code' });
+                }
+              }
               if (rc === 'open') {
                 qrDeployed = true;
                 console.log(`✅ QR session ${qrId} connected on retry!`);
@@ -1166,16 +1148,16 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
                   console.error('Error deploying QR retry session:', err);
                 }
                 setTimeout(() => {
-                  try { retrySock.end(); } catch (_) {}
+                  endTempSocket(retrySock);
                   pairSessions.delete(qrId);
-                  fs.rmSync(qrDir, { recursive: true, force: true });
+                  safeRemoveDir(qrDir);
                 }, 5000);
               }
               if (rc === 'close' && !qrDeployed) {
                 const rCode = (rld?.error instanceof Boom) ? rld.error.output?.statusCode : rld?.error?.output?.statusCode;
                 console.log(`❌ QR session ${qrId} retry also closed (status: ${rCode}), cleaning up`);
                 pairSessions.delete(qrId);
-                try { fs.rmSync(qrDir, { recursive: true, force: true }); } catch (_) {}
+                safeRemoveDir(qrDir);
               }
             });
 
@@ -1183,7 +1165,7 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
           } catch (retryErr) {
             console.error(`❌ QR session ${qrId} retry failed:`, retryErr.message);
             pairSessions.delete(qrId);
-            try { fs.rmSync(qrDir, { recursive: true, force: true }); } catch (_) {}
+            safeRemoveDir(qrDir);
           }
         }
       }
@@ -1195,9 +1177,9 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
         res.status(408).json({ success: false, message: 'QR generation timed out. Try again.' });
       }
       if (!qrDeployed) {
-        try { const s = pairSessions.get(qrId); if (s) s.end(); } catch (_) {}
+        endTempSocket(pairSessions.get(qrId));
         pairSessions.delete(qrId);
-        try { fs.rmSync(qrDir, { recursive: true, force: true }); } catch (_) {}
+        safeRemoveDir(qrDir);
       }
     }, 60000);
 
@@ -1205,9 +1187,9 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
     console.error('QR session error:', err);
     if (!responseSent) {
       responseSent = true;
-      res.status(503).json({ success: false, message: 'Service unavailable' });
+      res.status(503).json({ success: false, message: err?.message || 'WhatsApp service unavailable' });
     }
-    fs.rmSync(qrDir, { recursive: true, force: true });
+    safeRemoveDir(qrDir);
   }
 });
 
