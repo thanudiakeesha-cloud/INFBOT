@@ -746,7 +746,6 @@ app.post('/api/session/add', isAuthenticated, async (req, res) => {
 const pairSessions = new Map();
 
 app.post('/api/pair', isAuthenticated, async (req, res) => {
-  if (!makeWASocket) return res.status(503).json({ success: false, message: 'WhatsApp module still loading — please wait a moment and try again.' });
   const { number, botName, ownerName, ownerNumber, referralCode } = req.body;
   if (!number) return res.status(400).json({ success: false, message: 'Phone number is required' });
 
@@ -990,7 +989,6 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
 });
 
 app.get('/api/qr', isAuthenticated, async (req, res) => {
-  if (!makeWASocket) return res.status(503).json({ success: false, message: 'WhatsApp module still loading — please wait a moment and try again.' });
   const qrId = `qr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
   const qrDir = path.join(__dirname, 'session', qrId);
   fs.mkdirSync(qrDir, { recursive: true });
