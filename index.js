@@ -71,30 +71,31 @@ server.listen(PORT, '0.0.0.0', () => {
     const express = require('express');
     app = express();
 
-    app.set('trust proxy', 1);
+    // Trust ALL proxy hops (Railway, Replit, Nginx all add multiple hops)
+    app.set('trust proxy', true);
     app.use((req, res, next) => {
       res.setHeader('X-Frame-Options', 'ALLOWALL');
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       next();
     });
     app.use(express.json());
-    const sessionDir = path.join(__dirname, 'database', 'sessions_store');
-    if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
-    const FileStore = require('session-file-store')(require('express-session'));
-    app.use(require('express-session')({
-      store: new FileStore({
-        path: sessionDir,
-        ttl: 86400 * 7,       // 7-day file TTL
-        reapInterval: 3600,   // clean up expired files once per hour
-        retries: 5,
-        logFn: () => {}
-      }),
+
+    // Use in-memory session store — no file I/O race condition on login redirect.
+    // File stores on Railway/ephemeral containers cause "login refreshes" because
+    // the session file may not be flushed before the browser's next request arrives.
+    const expressSession = require('express-session');
+    // Secure cookies only when running behind HTTPS proxy (production).
+    // In local dev (plain HTTP) secure:true would silently drop the cookie.
+    const cookieIsSecure = process.env.NODE_ENV === 'production'
+      || !!process.env.RAILWAY_ENVIRONMENT
+      || !!process.env.RAILWAY_SERVICE_NAME;
+    app.use(expressSession({
       secret: process.env.SESSION_SECRET || 'infinity-md-secret-2025',
-      resave: true,            // touch session on every request → prevents expiry for active users
+      resave: false,
       saveUninitialized: false,
-      rolling: true,           // reset cookie maxAge on every response → keeps login alive
+      rolling: true,
       cookie: {
-        secure: true,          // trust proxy is set; Replit always uses HTTPS
+        secure: cookieIsSecure,
         httpOnly: true,
         sameSite: 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days

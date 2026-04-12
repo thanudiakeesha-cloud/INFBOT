@@ -250,21 +250,26 @@
       btn.disabled=true;
       document.getElementById('btnText').textContent='Signing in…';
       document.getElementById('btnSpinner').style.display='block';
+      let redirecting=false;
       try{
         const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({username:u,password:p})});
         const data=await res.json();
         if(data.success){
+          redirecting=true;
           document.getElementById('btnText').textContent='Redirecting…';
-          window.location.href='/dashboard';
+          // Small delay so the browser can commit the session cookie before the next request
+          setTimeout(()=>{ window.location.replace('/dashboard'); }, 120);
         }else{
           errEl.textContent=data.message||'Invalid username or password';
           errEl.style.display='block';
         }
       }catch(e){errEl.textContent='Connection error. Please try again.';errEl.style.display='block'}
       finally{
-        btn.disabled=false;
-        document.getElementById('btnText').textContent='Sign In';
-        document.getElementById('btnSpinner').style.display='none';
+        if(!redirecting){
+          btn.disabled=false;
+          document.getElementById('btnText').textContent='Sign In';
+          document.getElementById('btnSpinner').style.display='none';
+        }
       }
     }
   </script>
