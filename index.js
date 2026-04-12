@@ -36,6 +36,18 @@ let pino, Boom, makeWASocket, useMultiFileAuthState, DisconnectReason,
     fetchLatestBaileysVersion, makeCacheableSignalKeyStore, Browsers,
     jidNormalizedUser, baileysDelay, QRCode, pn, logger;
 let config, handler, database, auth, competition;
+let cachedWAVersion = null;
+
+async function getWAVersion() {
+  if (cachedWAVersion) return cachedWAVersion;
+  try {
+    const result = await fetchLatestBaileysVersion();
+    cachedWAVersion = result.version;
+    return cachedWAVersion;
+  } catch (_) {
+    return [2, 3000, 1015531055];
+  }
+}
 
 server = http.createServer((req, res) => {
   if (!app) {
@@ -215,6 +227,8 @@ server.listen(PORT, '0.0.0.0', () => {
     // ALWAYS register routes — dashboard/login must work even if bot modules failed
     registerRoutes();
     serverReady = true;
+    // Pre-fetch WhatsApp version once so QR/pair routes don't need to fetch on demand
+    if (fetchLatestBaileysVersion) getWAVersion().catch(() => {});
     initSessions();
   }, 0);
 });
@@ -247,7 +261,7 @@ async function connectSession(id, sessionData) {
   }
 
   const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
-  const { version } = await fetchLatestBaileysVersion();
+  const version = await getWAVersion();
 
   const newSock = makeWASocket({
     version,
@@ -732,6 +746,7 @@ app.post('/api/session/add', isAuthenticated, async (req, res) => {
 const pairSessions = new Map();
 
 app.post('/api/pair', isAuthenticated, async (req, res) => {
+  if (!makeWASocket) return res.status(503).json({ success: false, message: 'WhatsApp module still loading — please wait a moment and try again.' });
   const { number, botName, ownerName, ownerNumber, referralCode } = req.body;
   if (!number) return res.status(400).json({ success: false, message: 'Phone number is required' });
 
@@ -775,7 +790,7 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
 
   try {
     const { state, saveCreds } = await useMultiFileAuthState(pairDir);
-    const { version } = await fetchLatestBaileysVersion();
+    const version = await getWAVersion();
 
     const pairSock = makeWASocket({
       version,
@@ -864,7 +879,7 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
           try {
             try { pairSock.ev.removeAllListeners(); pairSock.end(); } catch (_) {}
             const { state: newState, saveCreds: newSaveCreds } = await useMultiFileAuthState(pairDir);
-            const { version: newVersion } = await fetchLatestBaileysVersion();
+            const newVersion = await getWAVersion();
 
             const retrySock = makeWASocket({
               version: newVersion,
@@ -975,6 +990,7 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
 });
 
 app.get('/api/qr', isAuthenticated, async (req, res) => {
+  if (!makeWASocket) return res.status(503).json({ success: false, message: 'WhatsApp module still loading — please wait a moment and try again.' });
   const qrId = `qr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
   const qrDir = path.join(__dirname, 'session', qrId);
   fs.mkdirSync(qrDir, { recursive: true });
@@ -983,7 +999,7 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
 
   try {
     const { state, saveCreds } = await useMultiFileAuthState(qrDir);
-    const { version } = await fetchLatestBaileysVersion();
+    const version = await getWAVersion();
 
     const qrSock = makeWASocket({
       version,
@@ -1097,7 +1113,7 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
           try {
             try { qrSock.ev.removeAllListeners(); qrSock.end(); } catch (_) {}
             const { state: newState, saveCreds: newSaveCreds } = await useMultiFileAuthState(qrDir);
-            const { version: newVersion } = await fetchLatestBaileysVersion();
+            const newVersion = await getWAVersion();
 
             const retrySock = makeWASocket({
               version: newVersion,
