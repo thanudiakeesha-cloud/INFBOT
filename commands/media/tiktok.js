@@ -21,12 +21,57 @@ function getPending(senderJid) {
   return entry.videos;
 }
 
+async function searchTikTok(query) {
+  const params = new URLSearchParams();
+  params.append('keywords', query);
+  params.append('count', '5');
+  params.append('cursor', '0');
+  params.append('HD', '1');
+  params.append('web', '1');
+
+  const { data } = await axios.post(
+    `${TIKWM_BASE}/api/feed/search`,
+    params,
+    {
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://tikwm.com/',
+        'Origin': 'https://tikwm.com'
+      }
+    }
+  );
+  return data;
+}
+
+async function downloadTikTokByUrl(url) {
+  const params = new URLSearchParams();
+  params.append('url', url);
+  params.append('hd', '1');
+
+  const { data } = await axios.post(
+    `${TIKWM_BASE}/api/`,
+    params,
+    {
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://tikwm.com/',
+        'Origin': 'https://tikwm.com'
+      }
+    }
+  );
+  return data;
+}
+
 module.exports = {
   name: 'tiktok',
   aliases: ['tt', 'ttsearch'],
   category: 'media',
   description: 'Search TikTok and send video',
-  usage: '.tiktok <search query>',
+  usage: '.tiktok <search query or TikTok URL>',
 
   async execute(sock, msg, args, extra) {
     const { from, reply, react } = extra;
@@ -58,16 +103,38 @@ module.exports = {
         return;
       }
 
-      // Normal search flow
       const query = args.join(' ').trim();
-      if (!query) return reply('❌ Please provide a search term.\nUsage: .tiktok <search query>');
+      if (!query) return reply('❌ Please provide a search term or TikTok URL.\nUsage: .tiktok <search query>');
 
       await react('⏳');
 
-      const { data } = await axios.get(
-        `${TIKWM_BASE}/api/feed/search?keywords=${encodeURIComponent(query)}&count=5&cursor=0&HD=1&web=1`,
-        { timeout: 30000, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }
-      );
+      // If a direct TikTok URL is given, download it directly
+      if (query.includes('tiktok.com') || query.includes('vt.tiktok')) {
+        const data = await downloadTikTokByUrl(query);
+        if (data.code === 0 && data.data) {
+          const v = data.data;
+          const videoUrl = v.hdplay || v.play;
+          const resolvedUrl = videoUrl?.startsWith('http') ? videoUrl : `${TIKWM_BASE}${videoUrl}`;
+          const title = (v.title || 'TikTok Video').substring(0, 100);
+          const author = v.author?.nickname || 'Unknown';
+          const duration = v.duration ? `${v.duration}s` : '';
+
+          await sock.sendMessage(from, {
+            video: { url: resolvedUrl },
+            caption:
+              `🎬 *${title}*\n` +
+              `👤 ${author}${duration ? `  ⏱️ ${duration}` : ''}\n\n` +
+              `> *INFINITY MD*`
+          }, { quoted: msg });
+          await react('✅');
+          return;
+        }
+        await react('❌');
+        return reply('❌ Failed to download TikTok video. Please try again later.');
+      }
+
+      // Search flow
+      const data = await searchTikTok(query);
 
       if (data.code !== 0 || !data.data?.videos?.length) {
         await react('❌');
@@ -77,7 +144,6 @@ module.exports = {
       const videos = data.data.videos.slice(0, 5);
       storePending(sender, videos);
 
-      // Build selection buttons (max 5)
       const buttons = videos.map((v, i) => {
         const label = (v.title || `Video ${i + 1}`).substring(0, 50);
         return btn(`tiktok_pick_${i}`, `${i + 1}. ${label}`);
