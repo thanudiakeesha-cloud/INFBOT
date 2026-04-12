@@ -1,10 +1,14 @@
 /**
  * .song — YouTube audio downloader
- * Races multiple APIs in parallel, caches results for 90 minutes
+ * Races multiple APIs in parallel, converts to valid MP3 via ffmpeg, caches results
  */
 
-const axios = require('axios');
-const yts   = require('yt-search');
+const axios  = require('axios');
+const yts    = require('yt-search');
+const fs     = require('fs');
+const path   = require('path');
+const os     = require('os');
+const { execFile } = require('child_process');
 
 const YT_REGEX = /(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?(?:.*&)?v=|v\/|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/;
 
@@ -13,10 +17,10 @@ const HEADERS = {
   'Accept': 'application/json, */*',
 };
 
-// In-memory result cache
+// In-memory result cache (stores final MP3 buffer)
 const cache    = new Map();
 const CACHE_TTL = 90 * 60 * 1000;
-const MAX_CACHE = 200;
+const MAX_CACHE = 100;
 
 function cacheKey(q) { return q.toLowerCase().trim(); }
 
@@ -32,7 +36,44 @@ function setCache(q, value) {
   cache.set(cacheKey(q), { ...value, ts: Date.now() });
 }
 
-// API callers — each with independent timeout
+// Convert any audio buffer to valid MP3 via ffmpeg
+function toMp3Buffer(inputBuf) {
+  return new Promise((resolve, reject) => {
+    const tmpIn  = path.join(os.tmpdir(), `song_in_${Date.now()}`);
+    const tmpOut = path.join(os.tmpdir(), `song_out_${Date.now()}.mp3`);
+    fs.writeFileSync(tmpIn, inputBuf);
+    execFile('ffmpeg', [
+      '-y', '-i', tmpIn,
+      '-vn',                  // no video
+      '-ar', '44100',         // sample rate
+      '-ac', '2',             // stereo
+      '-b:a', '128k',         // bitrate
+      '-f', 'mp3', tmpOut,
+    ], { timeout: 60000 }, (err) => {
+      try { fs.unlinkSync(tmpIn); } catch (_) {}
+      if (err) {
+        try { fs.unlinkSync(tmpOut); } catch (_) {}
+        return reject(err);
+      }
+      const buf = fs.readFileSync(tmpOut);
+      try { fs.unlinkSync(tmpOut); } catch (_) {}
+      resolve(buf);
+    });
+  });
+}
+
+// Download audio from a URL to buffer
+async function downloadAudio(url) {
+  const res = await axios.get(url, {
+    responseType: 'arraybuffer',
+    timeout: 60000,
+    headers: { ...HEADERS, Accept: 'audio/*, */*' },
+    maxRedirects: 10,
+  });
+  return Buffer.from(res.data);
+}
+
+// API callers
 async function trySiputzx(url) {
   const res = await axios.get(
     `https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(url)}`,
@@ -120,7 +161,6 @@ async function tryNyxs(url) {
   throw new Error('no dl');
 }
 
-// Race all URL-based APIs in parallel
 async function fetchByUrl(url) {
   return Promise.any([
     trySiputzx(url),
@@ -133,7 +173,6 @@ async function fetchByUrl(url) {
   ]);
 }
 
-// For plain text queries: try query-based API + YouTube search simultaneously
 async function fetchByQuery(query) {
   const [izumi, ytsRes] = await Promise.allSettled([
     tryIzumiQuery(query),
@@ -172,12 +211,12 @@ module.exports = {
 
     await react('⏳');
 
-    // Cache hit: send immediately
+    // Cache hit: send immediately (cached entries have a valid mp3 buffer)
     const cached = getCached(query);
     if (cached) {
       try {
         await sock.sendMessage(chatId, {
-          audio: { url: cached.download },
+          audio: cached.mp3buf,
           mimetype: 'audio/mpeg',
           fileName: `${(cached.title || 'audio').replace(/[^\w\s-]/g, '').trim()}.mp3`,
           ptt: false,
@@ -189,7 +228,7 @@ module.exports = {
       }
     }
 
-    // Fetch from APIs
+    // Fetch download URL from APIs
     let result = null;
     const isUrl = YT_REGEX.test(query);
 
@@ -211,9 +250,7 @@ module.exports = {
     const duration  = result.duration  || '';
     const safeTitle = title.replace(/[^\w\s-]/g, '').trim() || 'audio';
 
-    setCache(query, result);
-
-    // Send thumbnail info card first
+    // Send thumbnail info card
     if (thumb) {
       try {
         await sock.sendMessage(chatId, {
@@ -223,31 +260,31 @@ module.exports = {
       } catch (_) {}
     }
 
-    // Send audio via URL (fastest)
+    // Download audio and convert to valid MP3 via ffmpeg
+    let mp3buf = null;
     try {
-      await sock.sendMessage(chatId, {
-        audio: { url: result.download },
-        mimetype: 'audio/mpeg',
-        fileName: `${safeTitle}.mp3`,
-        ptt: false,
-      }, { quoted: msg });
-      await react('✅');
-      return;
-    } catch (_) {}
+      const rawBuf = await downloadAudio(result.download);
+      mp3buf = await toMp3Buffer(rawBuf);
+    } catch (convErr) {
+      console.error('Song ffmpeg convert error:', convErr.message);
+      await react('❌');
+      return reply('❌ Failed to process audio. Please try again.');
+    }
 
-    // Buffer fallback (if URL send fails)
+    // Send the converted MP3 buffer
     try {
-      const buf = Buffer.from(
-        (await axios.get(result.download, { responseType: 'arraybuffer', timeout: 60000, headers: HEADERS })).data
-      );
       await sock.sendMessage(chatId, {
-        audio: buf,
+        audio: mp3buf,
         mimetype: 'audio/mpeg',
         fileName: `${safeTitle}.mp3`,
         ptt: false,
       }, { quoted: msg });
       await react('✅');
+
+      // Cache for next time
+      setCache(query, { mp3buf, title, thumbnail: thumb, duration });
     } catch (e) {
+      console.error('Song send error:', e.message);
       await react('❌');
       reply('❌ Failed to send audio. Please try again.');
     }
