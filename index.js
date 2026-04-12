@@ -137,21 +137,30 @@ server.listen(PORT, '0.0.0.0', () => {
 </urlset>`);
     });
 
-    pino = require('pino');
-    ({ Boom } = require('@hapi/boom'));
-    ({
-      default: makeWASocket,
-      useMultiFileAuthState,
-      DisconnectReason,
-      fetchLatestBaileysVersion,
-      makeCacheableSignalKeyStore,
-      Browsers,
-      jidNormalizedUser,
-      delay: baileysDelay,
-    } = require('@whiskeysockets/baileys'));
-    QRCode = require('qrcode');
-    pn = require('awesome-phonenumber');
-    logger = pino({ level: 'silent' });
+    // Load WhatsApp/bot modules — wrapped in try-catch so a missing native
+    // dependency on Railway never prevents routes from being registered.
+    try {
+      pino = require('pino');
+      ({ Boom } = require('@hapi/boom'));
+      ({
+        default: makeWASocket,
+        useMultiFileAuthState,
+        DisconnectReason,
+        fetchLatestBaileysVersion,
+        makeCacheableSignalKeyStore,
+        Browsers,
+        jidNormalizedUser,
+        delay: baileysDelay,
+      } = require('@whiskeysockets/baileys'));
+      QRCode = require('qrcode');
+      pn = require('awesome-phonenumber');
+      logger = pino({ level: 'silent' });
+      console.log('✅ WhatsApp/bot core modules loaded');
+    } catch (e) {
+      console.error('❌ Bot core module loading error (WhatsApp unavailable):', e.message);
+      // Provide a silent fallback logger so nothing crashes later when logger is used
+      logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, trace: () => {}, child: () => logger };
+    }
 
     if (!fs.existsSync(path.join(__dirname, 'session'))) {
       fs.mkdirSync(path.join(__dirname, 'session'), { recursive: true });
@@ -189,6 +198,7 @@ server.listen(PORT, '0.0.0.0', () => {
       }
     }
 
+    // ALWAYS register routes — dashboard/login must work even if bot modules failed
     registerRoutes();
     serverReady = true;
     initSessions();
