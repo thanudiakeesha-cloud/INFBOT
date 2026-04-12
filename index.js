@@ -227,6 +227,10 @@ async function connectSession(id, sessionData) {
     browser: [sessionData.name || 'Infinity MD', 'Chrome', '1.0.0'],
     syncFullHistory: false,
     markOnlineOnConnect: true,
+    connectTimeoutMs: 60000,
+    keepAliveIntervalMs: 25000,
+    retryRequestDelayMs: 2000,
+    generateHighQualityLinkPreview: false,
   });
 
   newSock._customConfig = {
@@ -270,7 +274,11 @@ async function connectSession(id, sessionData) {
       const isFirstConnect = !sessionData._firstConnectDone;
       activeSessions.set(id, newSock);
       sessionData._retryCount = 0;
-      sessionData._440Count = 0;  // reset on every successful open so the 5-strike limit is per-run, not cumulative
+      sessionData._connectedAt = Date.now();
+      // Only reset 440 counter if this isn't a rapid reconnect (must be stable >90s to clear count)
+      if (!sessionData._440Count || (Date.now() - (sessionData._last440At || 0)) > 90000) {
+        sessionData._440Count = 0;
+      }
       sessionData._firstConnectDone = true;
       console.log(`✅ Session ${id} connected!`);
 
@@ -340,6 +348,7 @@ async function connectSession(id, sessionData) {
         // Track consecutive 440 (connection replaced) counts separately
         if (!sessionData._440Count) sessionData._440Count = 0;
         sessionData._440Count++;
+        sessionData._last440At = Date.now();
 
         // Always remove the stale (closed) socket immediately so broadcast/react
         // don't try to use a disconnected connection during the backoff window.
@@ -348,15 +357,15 @@ async function connectSession(id, sessionData) {
         if (process.env.DEV_MODE === 'true') {
           // In dev/testing mode: production took over — stop here.
           console.log(`⏸️ Session ${id} paused — another instance (production) is active.`);
-        } else if (sessionData._440Count > 5) {
-          // After 5 consecutive 440s this session is being permanently displaced
-          // (likely a duplicate session for the same number). Stop reconnecting
-          // to break the infinite fight loop.
-          console.log(`⛔ Session ${id} stopped after ${sessionData._440Count} connection-replaced errors — possible duplicate session. Remove the duplicate bot from the dashboard.`);
+        } else if (sessionData._440Count > 8) {
+          // Too many consecutive 440s — wait 5 minutes then try fresh
+          sessionData._440Count = 0;
+          console.log(`⚠️ Session ${id} stuck in 440 loop — cooling down for 5 minutes before retry...`);
+          setTimeout(() => connectSession(id, sessionData), 5 * 60 * 1000);
         } else {
-          // Use longer backoff for 440 errors to let the other instance stabilise
-          const delay440 = Math.min(15000 * sessionData._440Count, 120000);
-          console.log(`🔄 Reconnecting session ${id} (Status: 440, attempt ${sessionData._440Count}/5, delay ${Math.round(delay440/1000)}s)...`);
+          // Exponential backoff for 440 errors to let the other instance stabilise
+          const delay440 = Math.min(20000 * sessionData._440Count, 120000);
+          console.log(`🔄 Reconnecting session ${id} (Status: 440, attempt ${sessionData._440Count}/8, delay ${Math.round(delay440/1000)}s)...`);
           setTimeout(() => connectSession(id, sessionData), delay440);
         }
       } else {

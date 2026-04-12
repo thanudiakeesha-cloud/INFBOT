@@ -1,7 +1,6 @@
 /**
- * .song — YouTube audio downloader (instant cache + parallel race)
- * Cache hit  → audio sent in < 1 second
- * Cache miss → all APIs race in parallel, result cached for next time
+ * .song — YouTube audio downloader
+ * Races multiple APIs in parallel, caches results for 90 minutes
  */
 
 const axios = require('axios');
@@ -14,9 +13,9 @@ const HEADERS = {
   'Accept': 'application/json, */*',
 };
 
-// ── In-memory result cache ────────────────────────────────────────────────────
+// In-memory result cache
 const cache    = new Map();
-const CACHE_TTL = 90 * 60 * 1000; // 90 minutes (YT CDN links stay alive ~2h)
+const CACHE_TTL = 90 * 60 * 1000;
 const MAX_CACHE = 200;
 
 function cacheKey(q) { return q.toLowerCase().trim(); }
@@ -29,18 +28,51 @@ function getCached(q) {
 }
 
 function setCache(q, value) {
-  if (cache.size >= MAX_CACHE) {
-    cache.delete(cache.keys().next().value); // evict oldest
-  }
+  if (cache.size >= MAX_CACHE) cache.delete(cache.keys().next().value);
   cache.set(cacheKey(q), { ...value, ts: Date.now() });
 }
 
-// ── API callers (each has its own short timeout — no retries) ─────────────────
+// API callers — each with independent timeout
+async function trySiputzx(url) {
+  const res = await axios.get(
+    `https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(url)}`,
+    { headers: HEADERS, timeout: 25000 }
+  );
+  const d = res?.data?.data;
+  if (res?.data?.status && (d?.download_url || d?.url)) {
+    return { download: d.download_url || d.url, title: d.title, thumbnail: d.thumbnail };
+  }
+  throw new Error('no dl');
+}
+
+async function tryVreden(url) {
+  const res = await axios.get(
+    `https://api.vreden.my.id/api/ytmp3?url=${encodeURIComponent(url)}`,
+    { headers: HEADERS, timeout: 25000 }
+  );
+  const d = res?.data?.result || res?.data?.data;
+  if (d?.download || d?.url || d?.mp3) {
+    return { download: d.download || d.url || d.mp3, title: d.title, thumbnail: d.thumbnail };
+  }
+  throw new Error('no dl');
+}
+
+async function tryAgatz(url) {
+  const res = await axios.get(
+    `https://api.agatz.xyz/api/ytmp3?url=${encodeURIComponent(url)}`,
+    { headers: HEADERS, timeout: 25000 }
+  );
+  const d = res?.data?.data;
+  if (d?.audio || d?.url || d?.download) {
+    return { download: d.audio || d.url || d.download, title: d.title, thumbnail: d.thumbnail };
+  }
+  throw new Error('no dl');
+}
 
 async function tryIzumiUrl(url) {
   const res = await axios.get(
     `https://izumiiiiiiii.dpdns.org/downloader/youtube?url=${encodeURIComponent(url)}&format=mp3`,
-    { headers: HEADERS, timeout: 20000 }
+    { headers: HEADERS, timeout: 25000 }
   );
   const d = res?.data?.result;
   if (d?.download) return { download: d.download, title: d.title, thumbnail: d.thumbnail };
@@ -50,29 +82,17 @@ async function tryIzumiUrl(url) {
 async function tryIzumiQuery(query) {
   const res = await axios.get(
     `https://izumiiiiiiii.dpdns.org/downloader/youtube-play?query=${encodeURIComponent(query)}`,
-    { headers: HEADERS, timeout: 20000 }
+    { headers: HEADERS, timeout: 25000 }
   );
   const d = res?.data?.result;
   if (d?.download) return { download: d.download, title: d.title, thumbnail: d.thumbnail };
   throw new Error('no dl');
 }
 
-async function tryYupra(url) {
-  const res = await axios.get(
-    `https://api.yupra.my.id/api/downloader/ytmp3?url=${encodeURIComponent(url)}`,
-    { headers: HEADERS, timeout: 20000 }
-  );
-  const d = res?.data?.data;
-  if (res?.data?.success && d?.download_url) {
-    return { download: d.download_url, title: d.title, thumbnail: d.thumbnail };
-  }
-  throw new Error('no dl');
-}
-
 async function tryOkatsu(url) {
   const res = await axios.get(
     `https://okatsu-rolezapiiz.vercel.app/downloader/ytmp3?url=${encodeURIComponent(url)}`,
-    { headers: HEADERS, timeout: 20000 }
+    { headers: HEADERS, timeout: 25000 }
   );
   if (res?.data?.dl) return { download: res.data.dl, title: res.data.title, thumbnail: res.data.thumb };
   throw new Error('no dl');
@@ -81,7 +101,7 @@ async function tryOkatsu(url) {
 async function tryElitePro(url) {
   const res = await axios.get(
     `https://eliteprotech-apis.zone.id/ytdown?url=${encodeURIComponent(url)}&format=mp3`,
-    { headers: HEADERS, timeout: 20000 }
+    { headers: HEADERS, timeout: 25000 }
   );
   if (res?.data?.success && res?.data?.downloadURL) {
     return { download: res.data.downloadURL, title: res.data.title, thumbnail: null };
@@ -89,19 +109,32 @@ async function tryElitePro(url) {
   throw new Error('no dl');
 }
 
-// ── Race: for a known YouTube URL ─────────────────────────────────────────────
+async function tryNyxs(url) {
+  const res = await axios.get(
+    `https://nyxs.pw/dl/ytmp3?url=${encodeURIComponent(url)}`,
+    { headers: HEADERS, timeout: 25000 }
+  );
+  const d = res?.data?.result || res?.data?.data || res?.data;
+  const dl = d?.download || d?.url || d?.link || d?.audio;
+  if (dl) return { download: dl, title: d.title, thumbnail: d.thumbnail };
+  throw new Error('no dl');
+}
+
+// Race all URL-based APIs in parallel
 async function fetchByUrl(url) {
   return Promise.any([
+    trySiputzx(url),
+    tryVreden(url),
+    tryAgatz(url),
     tryIzumiUrl(url),
-    tryYupra(url),
     tryOkatsu(url),
     tryElitePro(url),
+    tryNyxs(url),
   ]);
 }
 
-// ── Race: for a plain text query ──────────────────────────────────────────────
+// For plain text queries: try query-based API + YouTube search simultaneously
 async function fetchByQuery(query) {
-  // Izumi query and yt-search run simultaneously
   const [izumi, ytsRes] = await Promise.allSettled([
     tryIzumiQuery(query),
     yts(query).then(r => r.videos?.[0] || null),
@@ -121,8 +154,6 @@ async function fetchByQuery(query) {
   throw new Error('all song APIs failed');
 }
 
-// ── Command export ────────────────────────────────────────────────────────────
-
 module.exports = {
   name: 'song',
   aliases: ['music', 'mp3', 'audio'],
@@ -141,7 +172,7 @@ module.exports = {
 
     await react('⏳');
 
-    // ── Cache hit: send immediately ──────────────────────────────────────────
+    // Cache hit: send immediately
     const cached = getCached(query);
     if (cached) {
       try {
@@ -154,11 +185,11 @@ module.exports = {
         await react('✅');
         return;
       } catch (_) {
-        cache.delete(cacheKey(query)); // stale URL — remove and fall through
+        cache.delete(cacheKey(query));
       }
     }
 
-    // ── Cache miss: fetch from APIs ──────────────────────────────────────────
+    // Fetch from APIs
     let result = null;
     const isUrl = YT_REGEX.test(query);
 
@@ -180,10 +211,9 @@ module.exports = {
     const duration  = result.duration  || '';
     const safeTitle = title.replace(/[^\w\s-]/g, '').trim() || 'audio';
 
-    // Cache for next time
     setCache(query, result);
 
-    // Send thumbnail info card
+    // Send thumbnail info card first
     if (thumb) {
       try {
         await sock.sendMessage(chatId, {
@@ -193,7 +223,7 @@ module.exports = {
       } catch (_) {}
     }
 
-    // Send audio
+    // Send audio via URL (fastest)
     try {
       await sock.sendMessage(chatId, {
         audio: { url: result.download },
@@ -202,23 +232,24 @@ module.exports = {
         ptt: false,
       }, { quoted: msg });
       await react('✅');
-    } catch (_) {
-      // Buffer fallback
-      try {
-        const buf = Buffer.from(
-          (await axios.get(result.download, { responseType: 'arraybuffer', timeout: 120000, headers: HEADERS })).data
-        );
-        await sock.sendMessage(chatId, {
-          audio: buf,
-          mimetype: 'audio/mpeg',
-          fileName: `${safeTitle}.mp3`,
-          ptt: false,
-        }, { quoted: msg });
-        await react('✅');
-      } catch (e) {
-        await react('❌');
-        reply('❌ Failed to send audio. Please try again.');
-      }
+      return;
+    } catch (_) {}
+
+    // Buffer fallback (if URL send fails)
+    try {
+      const buf = Buffer.from(
+        (await axios.get(result.download, { responseType: 'arraybuffer', timeout: 60000, headers: HEADERS })).data
+      );
+      await sock.sendMessage(chatId, {
+        audio: buf,
+        mimetype: 'audio/mpeg',
+        fileName: `${safeTitle}.mp3`,
+        ptt: false,
+      }, { quoted: msg });
+      await react('✅');
+    } catch (e) {
+      await react('❌');
+      reply('❌ Failed to send audio. Please try again.');
     }
   },
 };
