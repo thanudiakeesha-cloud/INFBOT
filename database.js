@@ -45,7 +45,7 @@ let userSettingsCache = {};
 let warningsCache = {};
 
 // ─── Key Sanitization ─────────────────────────────────────────────────────────
-const { sanitizeKey, desanitizeKey, fbSet, fbGet, fbUpdate, fbRemove } = fb;
+const { sanitizeKey, desanitizeKey, fbSet, fbGet, fbUpdate, fbRemove, fbListen } = fb;
 
 // ─── Firebase Write (non-blocking, writes to both Firebase + SQLite) ───────────
 function firebaseWrite(path, value) {
@@ -56,6 +56,129 @@ function firebaseUpdate(path, value) {
 }
 function firebaseRemove(path) {
   fbRemove(path).catch(() => {});
+}
+
+// ─── Live Firebase Listeners (real-time cache sync) ───────────────────────────
+let _listenersAttached = false;
+
+function attachLiveListeners() {
+  if (_listenersAttached) return;
+  _listenersAttached = true;
+
+  // global_settings
+  fbListen('global_settings', (data) => {
+    if (!data || typeof data !== 'object') return;
+    Object.assign(globalSettingsCache, data);
+    try {
+      const stmt = db.prepare(`INSERT OR REPLACE INTO global_settings (key, value) VALUES (?, ?)`);
+      for (const [k, v] of Object.entries(data)) stmt.run(k, JSON.stringify(v));
+    } catch {}
+  });
+
+  // sessions
+  fbListen('sessions', (data) => {
+    if (!data || typeof data !== 'object') return;
+    const updated = {};
+    for (const [sKey, sData] of Object.entries(data)) {
+      const id = desanitizeKey(sKey);
+      updated[id] = {
+        ...sData,
+        settings: typeof sData.settings === 'string' ? JSON.parse(sData.settings) : (sData.settings || {})
+      };
+    }
+    // Merge: update existing keys and add new ones; remove keys deleted in Firebase
+    for (const id of Object.keys(sessionsCache)) {
+      if (!updated[id]) delete sessionsCache[id];
+    }
+    Object.assign(sessionsCache, updated);
+    // Sync to SQLite
+    try {
+      const stmt = db.prepare(`INSERT OR REPLACE INTO sessions (id, userId, folder, name, ownerName, ownerNumber, settings, creds, addedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      for (const [id, d] of Object.entries(updated)) {
+        stmt.run(id, d.userId, d.folder, d.name, d.ownerName, d.ownerNumber, JSON.stringify(d.settings || {}), d.creds || null, d.addedAt || Date.now());
+      }
+    } catch {}
+  });
+
+  // dashboard_users
+  fbListen('dashboard_users', (data) => {
+    if (!data || typeof data !== 'object') return;
+    // Merge — add/update; remove deleted keys
+    for (const k of Object.keys(dashboardUsersCache)) {
+      if (!data[k]) delete dashboardUsersCache[k];
+    }
+    Object.assign(dashboardUsersCache, data);
+    try {
+      const stmt = db.prepare(`INSERT OR REPLACE INTO dashboard_users (username, password, data) VALUES (?, ?, ?)`);
+      for (const [username, d] of Object.entries(data)) {
+        stmt.run(username, d.password, JSON.stringify(d.data || {}));
+      }
+    } catch {}
+  });
+
+  // moderators
+  fbListen('moderators', (data) => {
+    if (!data || typeof data !== 'object') {
+      moderatorsCache = [];
+      return;
+    }
+    moderatorsCache = Object.keys(data).map(k => desanitizeKey(k));
+  });
+
+  // group_settings
+  fbListen('group_settings', (data) => {
+    if (!data || typeof data !== 'object') return;
+    // Rebuild the full cache from Firebase to stay in sync
+    const rebuilt = {};
+    for (const [gKey, settings] of Object.entries(data)) {
+      const groupId = desanitizeKey(gKey);
+      rebuilt[groupId] = typeof settings === 'string' ? JSON.parse(settings) : settings;
+    }
+    // Replace cache entirely (Firebase is the source of truth)
+    for (const k of Object.keys(groupSettingsCache)) delete groupSettingsCache[k];
+    Object.assign(groupSettingsCache, rebuilt);
+    try {
+      const stmt = db.prepare(`INSERT OR REPLACE INTO group_settings (groupId, settings) VALUES (?, ?)`);
+      for (const [groupId, s] of Object.entries(rebuilt)) stmt.run(groupId, JSON.stringify(s));
+    } catch {}
+  });
+
+  // user_settings
+  fbListen('user_settings', (data) => {
+    if (!data || typeof data !== 'object') return;
+    for (const k of Object.keys(userSettingsCache)) {
+      if (!data[k]) delete userSettingsCache[k];
+    }
+    for (const [username, settings] of Object.entries(data)) {
+      userSettingsCache[username] = typeof settings === 'string' ? JSON.parse(settings) : settings;
+    }
+    try {
+      const stmt = db.prepare(`INSERT OR REPLACE INTO user_settings (username, settings) VALUES (?, ?)`);
+      for (const [username, s] of Object.entries(userSettingsCache)) stmt.run(username, JSON.stringify(s));
+    } catch {}
+  });
+
+  // warnings
+  fbListen('warnings', (data) => {
+    if (!data || typeof data !== 'object') {
+      for (const k of Object.keys(warningsCache)) delete warningsCache[k];
+      return;
+    }
+    const rebuilt = {};
+    for (const [gKey, userWarns] of Object.entries(data)) {
+      const groupId = desanitizeKey(gKey);
+      rebuilt[groupId] = {};
+      if (userWarns && typeof userWarns === 'object') {
+        for (const [uKey, count] of Object.entries(userWarns)) {
+          rebuilt[groupId][desanitizeKey(uKey)] = count;
+        }
+      }
+    }
+    for (const k of Object.keys(warningsCache)) delete warningsCache[k];
+    Object.assign(warningsCache, rebuilt);
+  });
+
+  console.log('🔴 Firebase real-time listeners attached (live sync active)');
 }
 
 // ─── Bootstrap: Load from Firebase, migrate from SQLite if needed ──────────────
@@ -270,6 +393,10 @@ async function bootstrapFromFirebase() {
     }
 
     console.log('✅ Global settings loaded into cache');
+
+    // ── Attach live Firebase listeners (real-time sync) ────────────────────────
+    attachLiveListeners();
+
     _ready = true;
     _readyResolve(true);
   } catch (e) {

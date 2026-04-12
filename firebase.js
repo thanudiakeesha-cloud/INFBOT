@@ -98,6 +98,25 @@ async function fbRemove(path) {
   }
 }
 
+/**
+ * Attach a real-time listener to a Firebase path.
+ * Calls `callback(value)` immediately with current data, then on every change.
+ * Returns the unsubscribe function.
+ */
+function fbListen(path, callback) {
+  try {
+    const unsubscribe = onValue(ref(database, path), (snapshot) => {
+      callback(snapshot.exists() ? snapshot.val() : null);
+    }, (err) => {
+      console.error(`❌ Firebase listener error [${path}]:`, err.message);
+    });
+    return unsubscribe;
+  } catch (e) {
+    console.error(`❌ Firebase fbListen setup error [${path}]:`, e.message);
+    return () => {};
+  }
+}
+
 const initialized = initFirebase();
 
 module.exports = {
@@ -109,5 +128,6 @@ module.exports = {
   fbSet,
   fbGet,
   fbUpdate,
-  fbRemove
+  fbRemove,
+  fbListen
 };

@@ -13,6 +13,7 @@ let app, server, serverReady = false;
 
 const activeSessions = new Map();
 const pendingNotifications = new Map(); // sessionId → [{ jid, text }, ...]
+const reconnectingSet = new Set(); // tracks sessions currently scheduled for reconnect
 const sessionsDbPath = path.join(__dirname, 'database', 'sessions.json');
 
 function queueNotification(sessionId, jid, text) {
@@ -40,6 +41,12 @@ server = http.createServer((req, res) => {
   if (!app) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('OK');
+    return;
+  }
+  // Fast health check before Express middleware chain
+  if (req.url === '/health' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), sessions: activeSessions.size }));
     return;
   }
   app(req, res);
@@ -358,15 +365,28 @@ async function connectSession(id, sessionData) {
           // In dev/testing mode: production took over — stop here.
           console.log(`⏸️ Session ${id} paused — another instance (production) is active.`);
         } else if (sessionData._440Count > 8) {
-          // Too many consecutive 440s — wait 5 minutes then try fresh
-          sessionData._440Count = 0;
-          console.log(`⚠️ Session ${id} stuck in 440 loop — cooling down for 5 minutes before retry...`);
-          setTimeout(() => connectSession(id, sessionData), 5 * 60 * 1000);
+          // Too many consecutive 440s — cool down with a progressive delay (max 2 min), then keep retrying
+          const cooldown = Math.min(30000 * Math.floor(sessionData._440Count / 8), 120000);
+          sessionData._440Count = Math.floor(sessionData._440Count / 2); // halve count so next loop is shorter
+          console.log(`⚠️ Session ${id} stuck in 440 loop — cooling down ${Math.round(cooldown/1000)}s before retry...`);
+          reconnectingSet.add(id);
+          setTimeout(() => {
+            reconnectingSet.delete(id);
+            if (!activeSessions.has(id)) connectSession(id, sessionData).catch(e =>
+              console.error(`440 cooldown reconnect failed for ${id}:`, e.message)
+            );
+          }, cooldown);
         } else {
           // Exponential backoff for 440 errors to let the other instance stabilise
           const delay440 = Math.min(20000 * sessionData._440Count, 120000);
           console.log(`🔄 Reconnecting session ${id} (Status: 440, attempt ${sessionData._440Count}/8, delay ${Math.round(delay440/1000)}s)...`);
-          setTimeout(() => connectSession(id, sessionData), delay440);
+          reconnectingSet.add(id);
+          setTimeout(() => {
+            reconnectingSet.delete(id);
+            if (!activeSessions.has(id)) connectSession(id, sessionData).catch(e =>
+              console.error(`440 reconnect failed for ${id}:`, e.message)
+            );
+          }, delay440);
         }
       } else {
         // Reset 440 counter on any non-440 disconnect
@@ -375,7 +395,13 @@ async function connectSession(id, sessionData) {
         sessionData._retryCount++;
         const delay = Math.min(5000 * Math.pow(1.5, sessionData._retryCount - 1), 120000);
         console.log(`🔄 Reconnecting session ${id} (Status: ${statusCode}, attempt ${sessionData._retryCount}, delay ${Math.round(delay/1000)}s)...`);
-        setTimeout(() => connectSession(id, sessionData), delay);
+        reconnectingSet.add(id);
+        setTimeout(() => {
+          reconnectingSet.delete(id);
+          if (!activeSessions.has(id)) connectSession(id, sessionData).catch(e =>
+            console.error(`Reconnect failed for ${id}:`, e.message)
+          );
+        }, delay);
       }
     }
   });
@@ -1899,7 +1925,59 @@ function initSessions() {
   // This prevents cascading 440 (Connection Replaced) errors on redeploy.
   const STARTUP_DELAY = parseInt(process.env.SESSION_STARTUP_DELAY_MS || '8000', 10);
   console.log(`⏳ Waiting ${STARTUP_DELAY / 1000}s before connecting sessions (letting old instance close)...`);
-  setTimeout(() => initAllSessions(), STARTUP_DELAY);
+  setTimeout(() => {
+    initAllSessions();
+    startSelfPing();
+    startSessionHealthMonitor();
+  }, STARTUP_DELAY);
+}
+
+// ── Self-Ping: keeps the process awake on platforms that sleep idle apps ──────
+function startSelfPing() {
+  const PING_INTERVAL = parseInt(process.env.SELF_PING_INTERVAL_MS || String(4 * 60 * 1000), 10);
+  setInterval(() => {
+    try {
+      const selfUrl = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}/health`
+        : `http://localhost:${PORT}/health`;
+      const mod = selfUrl.startsWith('https') ? require('https') : http;
+      const req = mod.get(selfUrl, { timeout: 10000 }, (res) => {
+        res.resume();
+      });
+      req.on('error', () => {});
+      req.end();
+    } catch (_) {}
+  }, PING_INTERVAL);
+  console.log('💓 Self-ping keepalive started');
+}
+
+// ── Session Health Monitor: reconnects sessions that silently dropped ─────────
+async function startSessionHealthMonitor() {
+  const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // every 5 minutes
+  setInterval(async () => {
+    try {
+      const sessions = await database.getAllSessions();
+      for (const id of Object.keys(sessions)) {
+        if (activeSessions.has(id)) continue; // already online
+        if (reconnectingSet.has(id)) continue; // already scheduled for reconnect
+        // Session exists in DB but is not in activeSessions — it silently dropped
+        console.log(`🔍 Health monitor: session ${id} is offline — scheduling reconnect...`);
+        reconnectingSet.add(id);
+        setTimeout(() => {
+          reconnectingSet.delete(id);
+          if (!activeSessions.has(id)) {
+            console.log(`♻️ Health monitor reconnecting: ${id}`);
+            connectSession(id, sessions[id]).catch(e =>
+              console.error(`Health monitor reconnect failed for ${id}:`, e.message)
+            );
+          }
+        }, 5000 + Math.random() * 5000); // stagger by 5–10s to avoid thundering herd
+      }
+    } catch (e) {
+      console.error('Session health monitor error:', e.message);
+    }
+  }, HEALTH_CHECK_INTERVAL);
+  console.log('🏥 Session health monitor started (checks every 5 min)');
 }
 
 function clearReconnectTimer() {
