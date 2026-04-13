@@ -69,10 +69,17 @@ module.exports = {
 
     } catch (err) {
       console.error('Song plugin error:', err.message);
+      const isConnErr = err.message?.includes('Connection Closed') || err.message?.includes('Connection Reset') || err.output?.statusCode === 428;
+      if (isConnErr) {
+        console.warn('Song: socket closed during download — skipping reply.');
+        return;
+      }
       const reason = err.response?.status === 408
         ? 'Download timed out. Try again.'
         : err.message;
-      await sock.sendMessage(chatId, { text: `❌ Failed: ${reason}` }, { quoted: msg });
+      try {
+        await sock.sendMessage(chatId, { text: `❌ Failed: ${reason}` }, { quoted: msg });
+      } catch (_) {}
     }
   }
 };

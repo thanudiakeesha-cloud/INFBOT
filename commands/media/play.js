@@ -78,12 +78,19 @@ module.exports = {
 
     } catch (err) {
       console.error('Play error:', err.message);
+      const isConnErr = err.message?.includes('Connection Closed') || err.message?.includes('Connection Reset') || err.output?.statusCode === 428;
+      if (isConnErr) {
+        console.warn('Play: socket closed during download — skipping reply.');
+        return;
+      }
       const reason = err.response?.status === 408
         ? 'Download timed out. Try again in a moment.'
         : err.response?.status === 429
           ? 'Rate limited. Wait a minute.'
           : err.message;
-      await sock.sendMessage(chatId, { text: `❌ *Failed:* ${reason}` }, { quoted: msg });
+      try {
+        await sock.sendMessage(chatId, { text: `❌ *Failed:* ${reason}` }, { quoted: msg });
+      } catch (_) {}
     }
   }
 };

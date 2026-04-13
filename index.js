@@ -484,17 +484,10 @@ async function connectSession(id, sessionData) {
         // Auto-delete the session so it does not fight to reconnect.
         activeSessions.delete(id);
         reconnectingSet.delete(id);
-        console.log(`🗑️ Session ${id} was replaced by another connection — auto-deleting session to prevent reconnect loop.`);
-        try {
-          await database.deleteSession(id);
-          // Also wipe the local auth folder so stale keys don't linger
-          const sessionFolder = path.join(__dirname, 'session', sessionData.folder || '');
-          if (sessionData.folder && fs.existsSync(sessionFolder)) {
-            fs.rmSync(sessionFolder, { recursive: true, force: true });
-          }
-        } catch (e) {
-          console.error(`Failed to delete session ${id} after 440:`, e.message);
-        }
+        // 440 = another server/device is already holding this session.
+        // Do NOT delete from DB and do NOT reconnect — let the other instance
+        // keep the session alive. This instance simply steps aside.
+        console.log(`⏸️ Session ${id} is active on another instance — this instance will not reconnect (session kept in database).`);
       } else {
         // Any other disconnect: retry forever with exponential backoff (max 60s).
         // The bot will keep trying until the server shuts down.
