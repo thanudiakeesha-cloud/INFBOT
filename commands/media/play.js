@@ -1,80 +1,89 @@
 const yts = require('yt-search');
 const axios = require('axios');
 
+const DL_API = 'https://api.qasimdev.dpdns.org/api/loaderto/download';
+const API_KEY = 'xbps-install-Syu';
+
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+const downloadWithRetry = async (url, retries = 3) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const { data } = await axios.get(DL_API, {
+        params: { apiKey: API_KEY, format: 'mp3', url },
+        timeout: 90000
+      });
+      if (data?.data?.downloadUrl) return data.data;
+      throw new Error('No download URL');
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      console.log(`Download attempt ${i + 1} failed, retrying in 5s...`);
+      await wait(5000);
+    }
+  }
+  throw new Error('All download attempts failed');
+};
+
 module.exports = {
   name: 'play',
-  aliases: ['playsong', 'p'],
+  aliases: ['plays', 'music'],
   category: 'media',
-  description: 'Play a song by searching its name',
+  description: 'Search and download a song as MP3 from YouTube',
   usage: '.play <song name>',
 
   async execute(sock, msg, args, extra) {
     const chatId = msg.key.remoteJid;
+    const query = args.join(' ').trim();
+
+    if (!query)
+      return sock.sendMessage(chatId, {
+        text: '*Which song do you want to play?*\nUsage: .play <song name>'
+      }, { quoted: msg });
 
     try {
-      const query = args.join(' ').trim();
-      if (!query) {
-        return await sock.sendMessage(chatId, {
-          text: '❌ Please provide a song name.\n\nUsage: .play <song name>'
-        }, { quoted: msg });
-      }
-
-      await sock.sendMessage(chatId, {
-        react: { text: '⏳', key: msg.key }
-      });
+      await sock.sendMessage(chatId, { text: '🔍 *Searching...*' }, { quoted: msg });
 
       const { videos } = await yts(query);
-      if (!videos || videos.length === 0) {
-        return await sock.sendMessage(chatId, {
-          text: '❌ No results found for: ' + query
-        }, { quoted: msg });
-      }
+      if (!videos?.length)
+        return sock.sendMessage(chatId, { text: '❌ *No results found!*' }, { quoted: msg });
 
       const video = videos[0];
 
       await sock.sendMessage(chatId, {
-        image: { url: video.thumbnail },
-        caption: `🎵 *${video.title}*\n👤 ${video.author.name}\n⏱ ${video.timestamp}\n👁 ${video.views}\n🔗 ${video.url}\n\n_Downloading audio..._\n\n> 💫 *INFINITY MD*`
+        text: `✅ *Found:* ${video.title}\n⏱️ ${video.timestamp}\n👤 ${video.author.name}\n\n⏳ *Downloading... (this may take up to 30s)*`
       }, { quoted: msg });
 
-      const apiUrl = `https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(video.url)}`;
-      const response = await axios.get(apiUrl, { timeout: 60000 });
+      const songData = await downloadWithRetry(video.url);
 
-      if (!response.data || !response.data.data || !response.data.data.dl) {
-        const fallbackApi = `https://api.qasimdev.dpdns.org/api/youtube/download?apiKey=qasim-dev&url=${encodeURIComponent(video.url)}&format=mp3`;
-        const fallbackRes = await axios.get(fallbackApi, { timeout: 60000 });
+      let thumbnailBuffer;
+      try {
+        const img = await axios.get(songData.thumbnail, { responseType: 'arraybuffer', timeout: 15000 });
+        thumbnailBuffer = Buffer.from(img.data);
+      } catch { /* no thumbnail */ }
 
-        if (!fallbackRes.data?.success || !fallbackRes.data?.data?.download) {
-          return await sock.sendMessage(chatId, {
-            text: '❌ Failed to download audio.'
-          }, { quoted: msg });
+      await sock.sendMessage(chatId, {
+        audio: { url: songData.downloadUrl },
+        mimetype: 'audio/mpeg',
+        fileName: `${songData.title}.mp3`,
+        contextInfo: {
+          externalAdReply: {
+            title: songData.title,
+            body: `${video.author.name} • ${video.timestamp}`,
+            thumbnail: thumbnailBuffer,
+            mediaType: 2,
+            sourceUrl: video.url
+          }
         }
-
-        await sock.sendMessage(chatId, {
-          audio: { url: fallbackRes.data.data.download },
-          mimetype: 'audio/mpeg',
-          fileName: `${video.title.replace(/[^\w\s-]/g, '')}.mp3`
-        }, { quoted: msg });
-      } else {
-        await sock.sendMessage(chatId, {
-          audio: { url: response.data.data.dl },
-          mimetype: 'audio/mpeg',
-          fileName: `${video.title.replace(/[^\w\s-]/g, '')}.mp3`
-        }, { quoted: msg });
-      }
-
-      await sock.sendMessage(chatId, {
-        react: { text: '✅', key: msg.key }
-      });
-
-    } catch (error) {
-      console.error('[PLAY] Error:', error?.message || error);
-      await sock.sendMessage(chatId, {
-        react: { text: '❌', key: msg.key }
-      });
-      await sock.sendMessage(chatId, {
-        text: '❌ Failed to play song: ' + (error?.message || 'Unknown error')
       }, { quoted: msg });
+
+    } catch (err) {
+      console.error('Play error:', err.message);
+      const reason = err.response?.status === 408
+        ? 'Download timed out. Try again in a moment.'
+        : err.response?.status === 429
+          ? 'Rate limited. Wait a minute.'
+          : err.message;
+      await sock.sendMessage(chatId, { text: `❌ *Failed:* ${reason}` }, { quoted: msg });
     }
   }
 };
