@@ -525,6 +525,14 @@ module.exports = {
   // ── Sessions ──
   getAllSessions: async () => ({ ...sessionsCache }),
 
+  // Merge partial fields into an existing session (does NOT overwrite unmentioned fields)
+  patchSession: async (id, patch) => {
+    if (!sessionsCache[id]) return false;
+    Object.assign(sessionsCache[id], patch);
+    firebaseUpdate(`sessions/${sanitizeKey(id)}`, patch);
+    return true;
+  },
+
   saveSession: async (id, data) => {
     const existing = sessionsCache[id] || {};
     const sessionData = {
@@ -535,7 +543,10 @@ module.exports = {
       ownerNumber: data.ownerNumber || existing.ownerNumber || null,
       settings: data.settings || existing.settings || {},
       creds: data.creds || existing.creds || null,
-      addedAt: data.addedAt || existing.addedAt || Date.now()
+      addedAt: data.addedAt || existing.addedAt || Date.now(),
+      // preserve flags set by runtime
+      firstConnectDone: data.firstConnectDone !== undefined ? data.firstConnectDone : (existing.firstConnectDone || false),
+      paused: data.paused !== undefined ? data.paused : (existing.paused || false)
     };
     sessionsCache[id] = sessionData;
     // Firebase

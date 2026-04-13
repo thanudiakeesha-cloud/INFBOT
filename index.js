@@ -407,14 +407,17 @@ async function connectSession(id, sessionData) {
     }
   });
 
+  const MAX_RETRY_COUNT = 20; // give up after this many consecutive failures
+
   newSock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === 'open') {
-      const isFirstConnect = !sessionData._firstConnectDone;
+      // isFirstConnect uses the PERSISTENT flag from the DB, not an in-memory flag.
+      // This ensures the welcome message is sent only once, even after server restarts.
+      const isFirstConnect = !sessionData.firstConnectDone;
       activeSessions.set(id, newSock);
       sessionData._retryCount = 0;
       sessionData._connectedAt = Date.now();
-      sessionData._firstConnectDone = true;
       console.log(`✅ Session ${id} connected!`);
 
       // Wait 2s for connection to fully stabilise before sending any messages
@@ -450,6 +453,10 @@ async function connectSession(id, sessionData) {
           } catch (e) {
             console.error(`Failed to notify owner for session ${id}:`, e.message);
           }
+
+          // Persist the flag so restarts don't re-send the welcome message
+          sessionData.firstConnectDone = true;
+          database.patchSession(id, { firstConnectDone: true }).catch(() => {});
         }
 
         // Flush any queued settings-update notifications
@@ -480,21 +487,29 @@ async function connectSession(id, sessionData) {
         activeSessions.delete(id);
         console.log(`❌ Session ${id} stopped (${isLoggedOut ? 'Logged out' : 'Deleted'})`);
       } else if (isConnectionReplaced) {
-        // 440 = WhatsApp replaced this connection from another device/instance.
-        // Auto-delete the session so it does not fight to reconnect.
+        // 440 = another server/device is already holding this session — step aside
         activeSessions.delete(id);
         reconnectingSet.delete(id);
-        // 440 = another server/device is already holding this session.
-        // Do NOT delete from DB and do NOT reconnect — let the other instance
-        // keep the session alive. This instance simply steps aside.
         console.log(`⏸️ Session ${id} is active on another instance — this instance will not reconnect (session kept in database).`);
       } else {
-        // Any other disconnect: retry forever with exponential backoff (max 60s).
-        // The bot will keep trying until the server shuts down.
+        // Exponential backoff retry with a hard ceiling to avoid infinite restart loops.
+        // Sessions that never successfully connect (e.g. banned/timed-out accounts) are
+        // automatically paused after MAX_RETRY_COUNT consecutive failures.
         if (!sessionData._retryCount) sessionData._retryCount = 0;
         sessionData._retryCount++;
+
+        if (sessionData._retryCount > MAX_RETRY_COUNT) {
+          activeSessions.delete(id);
+          reconnectingSet.delete(id);
+          console.warn(`⛔ Session ${id} exceeded ${MAX_RETRY_COUNT} reconnect attempts (last status: ${statusCode}) — auto-pausing. Delete the session from the dashboard if it is no longer valid.`);
+          // Mark paused in DB so health monitor won't keep trying
+          sessionData.paused = true;
+          database.patchSession(id, { paused: true }).catch(() => {});
+          return;
+        }
+
         const delay = Math.min(5000 * Math.pow(1.5, sessionData._retryCount - 1), 60000);
-        console.log(`🔄 Reconnecting session ${id} (Status: ${statusCode}, attempt ${sessionData._retryCount}, delay ${Math.round(delay/1000)}s)...`);
+        console.log(`🔄 Reconnecting session ${id} (Status: ${statusCode}, attempt ${sessionData._retryCount}/${MAX_RETRY_COUNT}, delay ${Math.round(delay/1000)}s)...`);
         reconnectingSet.add(id);
         setTimeout(() => {
           reconnectingSet.delete(id);
@@ -794,7 +809,8 @@ app.get('/api/sessions', isAuthenticated, async (req, res) => {
         ownerNumber: sessions[id].ownerNumber || config.ownerNumber[0],
         prefix: (sessions[id].settings && sessions[id].settings.prefix) || '.',
         settings: sessions[id].settings || {},
-        status: activeSessions.has(id) ? 'Online' : 'Offline',
+        status: activeSessions.has(id) ? 'Online' : (sessions[id].paused ? 'Paused' : 'Offline'),
+        paused: sessions[id].paused || false,
         userId: sessions[id].userId
       }));
     res.json(userSessions);
@@ -918,6 +934,12 @@ app.post('/api/session/restart', isAuthenticated, async (req, res) => {
       oldSock.end();
       activeSessions.delete(sessionId);
     }
+
+    // Clear paused flag and retry count so the session gets a fresh start
+    sessionData.paused = false;
+    sessionData._retryCount = 0;
+    reconnectingSet.delete(sessionId);
+    await database.patchSession(sessionId, { paused: false });
 
     await connectSession(sessionId, sessionData);
     res.json({ success: true });
@@ -2105,6 +2127,10 @@ async function initAllSessions() {
     await database.ready();
     const sessions = await database.getAllSessions();
     for (const id in sessions) {
+      if (sessions[id]?.paused) {
+        console.log(`⏭️ Skipping paused session on startup: ${id}`);
+        continue;
+      }
       console.log(`♻️ Auto-reconnecting session: ${id}`);
       await connectSession(id, sessions[id]);
     }
@@ -2172,6 +2198,7 @@ async function startSessionHealthMonitor() {
       for (const id of Object.keys(sessions)) {
         if (activeSessions.has(id)) continue; // already online
         if (reconnectingSet.has(id)) continue; // already scheduled for reconnect
+        if (sessions[id]?.paused) continue;    // auto-paused after too many failures — skip
         // Session exists in DB but is not in activeSessions — it silently dropped
         console.log(`🔍 Health monitor: session ${id} is offline — scheduling reconnect...`);
         reconnectingSet.add(id);
