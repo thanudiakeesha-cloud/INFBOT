@@ -11,6 +11,8 @@ nixPkgs = [
   "librsvg",
   "pixman",
   "python3",
+  "git",
+  "openssh",
   "gcc",
   "gnumake"
 ]

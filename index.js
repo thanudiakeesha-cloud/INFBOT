@@ -37,6 +37,40 @@ let pino, Boom, makeWASocket, useMultiFileAuthState, DisconnectReason,
     jidNormalizedUser, baileysDelay, QRCode, pn, logger;
 let config, handler, database, auth, competition;
 let cachedWAVersion = null;
+let whatsAppLoadError = null;
+
+function fallbackLogger() {
+  return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, trace: () => {}, child: () => logger || fallbackLogger() };
+}
+
+function loadWhatsAppCore() {
+  if (makeWASocket && useMultiFileAuthState && makeCacheableSignalKeyStore && Browsers && pino && QRCode && pn) {
+    whatsAppLoadError = null;
+    return true;
+  }
+  try {
+    pino = require('pino');
+    ({ Boom } = require('@hapi/boom'));
+    const baileys = require('@whiskeysockets/baileys');
+    makeWASocket = baileys.default;
+    useMultiFileAuthState = baileys.useMultiFileAuthState;
+    DisconnectReason = baileys.DisconnectReason;
+    fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion;
+    makeCacheableSignalKeyStore = baileys.makeCacheableSignalKeyStore;
+    Browsers = baileys.Browsers;
+    jidNormalizedUser = baileys.jidNormalizedUser;
+    baileysDelay = baileys.delay;
+    QRCode = require('qrcode');
+    pn = require('awesome-phonenumber');
+    logger = pino({ level: 'silent' });
+    whatsAppLoadError = null;
+    return true;
+  } catch (err) {
+    whatsAppLoadError = err;
+    logger = logger || fallbackLogger();
+    return false;
+  }
+}
 
 async function getWAVersion() {
   if (cachedWAVersion) return cachedWAVersion;
@@ -50,19 +84,23 @@ async function getWAVersion() {
 }
 
 function assertWhatsAppReady() {
+  loadWhatsAppCore();
   const missing = [];
   if (!makeWASocket) missing.push('socket');
   if (!useMultiFileAuthState) missing.push('auth');
   if (!makeCacheableSignalKeyStore) missing.push('keys');
   if (!Browsers) missing.push('browser');
   if (!pino) missing.push('logger');
+  if (!QRCode) missing.push('qr');
+  if (!pn) missing.push('phone');
   if (missing.length) {
-    throw new Error(`WhatsApp service is not ready (${missing.join(', ')})`);
+    const loadDetail = whatsAppLoadError ? `: ${errorMessage(whatsAppLoadError)}` : '';
+    throw new Error(`WhatsApp service is not ready (${missing.join(', ')})${loadDetail}`);
   }
 }
 
 function tempBaileysLogger(level = 'fatal') {
-  if (!pino) return logger || { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, trace: () => {}, child: () => logger };
+  if (!pino) return logger || fallbackLogger();
   return pino({ level }).child({ level });
 }
 
@@ -223,29 +261,15 @@ server.listen(PORT, '0.0.0.0', () => {
 </urlset>`);
     });
 
-    // Load WhatsApp/bot modules — wrapped in try-catch so a missing native
-    // dependency on Railway never prevents routes from being registered.
     try {
-      pino = require('pino');
-      ({ Boom } = require('@hapi/boom'));
-      ({
-        default: makeWASocket,
-        useMultiFileAuthState,
-        DisconnectReason,
-        fetchLatestBaileysVersion,
-        makeCacheableSignalKeyStore,
-        Browsers,
-        jidNormalizedUser,
-        delay: baileysDelay,
-      } = require('@whiskeysockets/baileys'));
-      QRCode = require('qrcode');
-      pn = require('awesome-phonenumber');
-      logger = pino({ level: 'silent' });
+      loadWhatsAppCore();
+      if (!makeWASocket || !useMultiFileAuthState || !makeCacheableSignalKeyStore || !Browsers) {
+        throw whatsAppLoadError || new Error('Baileys exports missing after load');
+      }
       console.log('✅ WhatsApp/bot core modules loaded');
     } catch (e) {
       console.error('❌ Bot core module loading error (WhatsApp unavailable):', e.message);
-      // Provide a silent fallback logger so nothing crashes later when logger is used
-      logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, trace: () => {}, child: () => logger };
+      logger = logger || fallbackLogger();
     }
 
     if (!fs.existsSync(path.join(__dirname, 'session'))) {
@@ -560,6 +584,7 @@ app.get('/api/diagnostics/railway', async (req, res) => {
     },
     modules: {
       inMemory: {
+        loadError: whatsAppLoadError ? errorMessage(whatsAppLoadError) : null,
         pino: !!pino,
         boom: !!Boom,
         makeWASocket: !!makeWASocket,
