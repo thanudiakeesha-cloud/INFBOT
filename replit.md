@@ -9,7 +9,14 @@ Infinity MD is a Node.js/Express WhatsApp multi-device bot dashboard. The main s
 - WhatsApp connectivity: Baileys powers active bot sessions, QR login, and pairing-code login.
 - Deployment files: `railway.json`, `nixpacks.toml`, and `Procfile` configure Railway startup.
 
-## Recent Changes
+## Recent Changes (Latest)
+- Redesigned dashboard (`views/dashboard.html`) with a fully modern UI: animated gradient mesh background with floating orbs + grid lines, glassmorphism cards, vibrant gradient stat cards with icons, glowing session status rings (green for Online, amber for Paused), improved sidebar with active indicator bar, modern connect tabs, polished QR/pair-code display, and improved toast notifications.
+- Added `Restart` button on offline/paused session cards to un-pause sessions directly from the dashboard.
+- Fixed welcome message + bot manual re-sending on every reconnect: `firstConnectDone` flag is now persisted to Firebase via `patchSession()` and read from the database on every connect, so the message is sent only once per bot regardless of server restarts.
+- Added max reconnect limit (20 attempts): sessions that fail to reconnect after 20 consecutive tries are auto-marked `paused: true` in Firebase. Health monitor and startup both skip paused sessions. Dashboard shows `Paused` status; Restart button clears the flag.
+- Added `patchSession()` to database module for patching individual fields without overwriting the full session record.
+
+## Previous Changes
 - Hardened `/api/pair` for Railway by retrying temporary Baileys socket creation and pairing-code requests before returning failure.
 - Hardened `/api/qr` retry behavior so a QR produced by a retry socket is returned to the browser instead of timing out or reporting service unavailable.
 - Added shared temporary socket helpers for safer cleanup, browser signature selection, and clearer WhatsApp readiness errors.
