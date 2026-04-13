@@ -440,6 +440,15 @@ async function removeSession(id) {
   } catch (e) { toast('Error removing bot', 'error'); }
 }
 
+async function parseApiError(res, fallback) {
+  try {
+    const data = await res.json();
+    if (data && data.message) return data.message;
+    if (data && data.error) return data.error;
+  } catch (_) {}
+  return `${fallback} (HTTP ${res.status})`;
+}
+
 /* ──────── PAIR CODE ──────── */
 async function getPairCode() {
   const num = document.getElementById('p-number').value.trim().replace(/[^0-9]/g, '');
@@ -466,9 +475,9 @@ async function getPairCode() {
       toast('Pair code generated!', 'success');
       setTimeout(() => loadSessions(false), 15000);
     } else {
-      toast(d.message || 'Failed to get pair code', 'error');
+      toast(d.message || `Failed to get pair code (HTTP ${res.status})`, 'error');
     }
-  } catch (e) { toast('Network error. Try again.', 'error'); }
+  } catch (e) { toast(e.message || 'Network error. Try again.', 'error'); }
   finally { btn.disabled = false; btn.textContent = 'Get Pair Code'; }
 }
 
@@ -486,19 +495,21 @@ async function startQR() {
   try {
     const url = `/api/qr?botName=${encodeURIComponent(botName)}&ownerName=${encodeURIComponent(ownerName)}${refCode ? '&referralCode=' + encodeURIComponent(refCode) : ''}`;
     const res = await fetch(url, { credentials: 'include' });
-    const d = await res.json();
+    const d = await res.json().catch(() => null);
     if (d.success && d.qr) {
       document.getElementById('qrWrap').innerHTML = `<img src="${d.qr}" alt="QR Code" style="max-width:200px;border-radius:10px"><p style="font-size:.75rem;color:var(--muted);margin-top:8px">Scan with WhatsApp</p>`;
       qrSessionId = d.sessionId;
       toast('QR ready — scan now!', 'success');
       setTimeout(() => loadSessions(false), 20000);
     } else {
-      document.getElementById('qrWrap').innerHTML = '<p style="color:var(--red);font-size:.85rem">' + (d.message || 'Failed to generate QR') + '</p>';
-      toast(d.message || 'Failed to generate QR', 'error');
+      const msg = (d && (d.message || d.error)) || `Failed to generate QR (HTTP ${res.status})`;
+      document.getElementById('qrWrap').innerHTML = '<p style="color:var(--red);font-size:.85rem">' + esc(msg) + '</p>';
+      toast(msg, 'error');
     }
   } catch (e) {
-    document.getElementById('qrWrap').innerHTML = '<p style="color:var(--red);font-size:.85rem">Network error. Try again.</p>';
-    toast('Network error', 'error');
+    const msg = e.message || 'Network error. Try again.';
+    document.getElementById('qrWrap').innerHTML = '<p style="color:var(--red);font-size:.85rem">' + esc(msg) + '</p>';
+    toast(msg, 'error');
   }
   finally { btn.disabled = false; btn.textContent = 'Generate QR Code'; }
 }

@@ -13,3 +13,5 @@ Infinity MD is a Node.js/Express WhatsApp multi-device bot dashboard. The main s
 - Hardened `/api/pair` for Railway by retrying temporary Baileys socket creation and pairing-code requests before returning failure.
 - Hardened `/api/qr` retry behavior so a QR produced by a retry socket is returned to the browser instead of timing out or reporting service unavailable.
 - Added shared temporary socket helpers for safer cleanup, browser signature selection, and clearer WhatsApp readiness errors.
+- Added Railway deployment diagnostics at `/api/diagnostics/railway`, with optional deep socket testing via `?deep=1`.
+- Updated the dashboard to show backend QR/pair failure details instead of hiding HTTP status or server messages.

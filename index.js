@@ -82,6 +82,33 @@ function safeRemoveDir(dir) {
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
 }
 
+function errorMessage(err) {
+  return err?.message || String(err || 'Unknown error');
+}
+
+async function withTimeout(label, ms, task) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(task),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function moduleCheck(name, loader) {
+  try {
+    const loaded = loader();
+    return { ok: true, available: !!loaded };
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) };
+  }
+}
+
 server = http.createServer((req, res) => {
   if (!app) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -508,6 +535,147 @@ const isAuthenticated = (req, res, next) => {
   }
   return res.redirect('/login');
 };
+
+app.get('/api/diagnostics/railway', async (req, res) => {
+  const startedAt = Date.now();
+  const deep = req.query.deep === '1' || req.query.deep === 'true';
+  const report = {
+    success: true,
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: {
+      node: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      railway: !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_NAME || process.env.RAILWAY_PUBLIC_DOMAIN),
+      railwayEnvironment: process.env.RAILWAY_ENVIRONMENT || null,
+      railwayService: process.env.RAILWAY_SERVICE_NAME || null,
+      portSet: !!process.env.PORT,
+      nodeEnv: process.env.NODE_ENV || null
+    },
+    server: {
+      ready: serverReady,
+      activeSessions: activeSessions.size,
+      tempSessions: pairSessions.size
+    },
+    modules: {
+      inMemory: {
+        pino: !!pino,
+        boom: !!Boom,
+        makeWASocket: !!makeWASocket,
+        useMultiFileAuthState: !!useMultiFileAuthState,
+        makeCacheableSignalKeyStore: !!makeCacheableSignalKeyStore,
+        browsers: !!Browsers,
+        qrCode: !!QRCode,
+        phoneNumber: !!pn,
+        baileysDelay: !!baileysDelay
+      },
+      require: {
+        baileys: moduleCheck('@whiskeysockets/baileys', () => require('@whiskeysockets/baileys')),
+        qrcode: moduleCheck('qrcode', () => require('qrcode')),
+        pino: moduleCheck('pino', () => require('pino')),
+        phoneNumber: moduleCheck('awesome-phonenumber', () => require('awesome-phonenumber')),
+        betterSqlite3: moduleCheck('better-sqlite3', () => require('better-sqlite3')),
+        firebase: moduleCheck('firebase/database', () => require('firebase/database'))
+      }
+    },
+    firebase: {
+      initialized: false,
+      read: { ok: false }
+    },
+    whatsapp: {
+      ready: false,
+      version: null,
+      authState: { ok: false },
+      qrPairSocket: { checked: deep, ok: null, note: deep ? null : 'Add ?deep=1 to create and immediately close a temporary WhatsApp socket.' }
+    }
+  };
+
+  try {
+    const fb = require('./firebase');
+    report.firebase.initialized = !!fb.initialized;
+    const firebaseRead = await withTimeout('Firebase read', 8000, async () => {
+      const sessions = await database.getAllSessions();
+      return { sessionCount: Object.keys(sessions || {}).length };
+    });
+    report.firebase.read = { ok: true, ...firebaseRead };
+  } catch (err) {
+    report.success = false;
+    report.firebase.read = { ok: false, error: errorMessage(err) };
+  }
+
+  try {
+    assertWhatsAppReady();
+    report.whatsapp.ready = true;
+    report.whatsapp.version = await withTimeout('WhatsApp version fetch', 10000, getWAVersion);
+  } catch (err) {
+    report.success = false;
+    report.whatsapp.ready = false;
+    report.whatsapp.error = errorMessage(err);
+  }
+
+  const diagDir = path.join(__dirname, 'session', `diag_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  try {
+    if (report.whatsapp.ready) {
+      fs.mkdirSync(diagDir, { recursive: true });
+      const { state, saveCreds } = await withTimeout('Auth state creation', 8000, () => useMultiFileAuthState(diagDir));
+      report.whatsapp.authState = {
+        ok: !!(state?.creds && state?.keys && typeof saveCreds === 'function'),
+        registered: !!state?.creds?.registered
+      };
+
+      if (deep) {
+        const socketStartedAt = Date.now();
+        let diagSock;
+        try {
+          diagSock = await withTimeout('Temporary socket creation', 12000, async () => makeWASocket({
+            version: report.whatsapp.version || await getWAVersion(),
+            logger: tempBaileysLogger(),
+            browser: tempBrowser(),
+            auth: {
+              creds: state.creds,
+              keys: makeCacheableSignalKeyStore(state.keys, tempBaileysLogger()),
+            },
+            printQRInTerminal: false,
+            markOnlineOnConnect: false,
+            generateHighQualityLinkPreview: false,
+            defaultQueryTimeoutMs: 20000,
+            connectTimeoutMs: 20000,
+            keepAliveIntervalMs: 15000,
+          }));
+          diagSock.ev.on('creds.update', saveCreds);
+          await baileysDelay(2500);
+          report.whatsapp.qrPairSocket = {
+            checked: true,
+            ok: true,
+            created: true,
+            registered: !!diagSock.authState?.creds?.registered,
+            elapsedMs: Date.now() - socketStartedAt
+          };
+        } finally {
+          endTempSocket(diagSock);
+        }
+      }
+    }
+  } catch (err) {
+    report.success = false;
+    if (!report.whatsapp.authState.ok) {
+      report.whatsapp.authState = { ok: false, error: errorMessage(err) };
+    }
+    if (deep) {
+      report.whatsapp.qrPairSocket = { checked: true, ok: false, error: errorMessage(err) };
+    }
+  } finally {
+    safeRemoveDir(diagDir);
+  }
+
+  report.elapsedMs = Date.now() - startedAt;
+  res.status(report.success ? 200 : 503).json(report);
+});
+
+app.get('/railway-diagnostics', (req, res) => {
+  res.redirect('/api/diagnostics/railway');
+});
 
 app.get('/login', (req, res) => {
   if (req.session && req.session.loggedIn) return res.redirect('/dashboard');
