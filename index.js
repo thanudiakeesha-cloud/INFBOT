@@ -414,10 +414,6 @@ async function connectSession(id, sessionData) {
       activeSessions.set(id, newSock);
       sessionData._retryCount = 0;
       sessionData._connectedAt = Date.now();
-      // Only reset 440 counter if this isn't a rapid reconnect (must be stable >90s to clear count)
-      if (!sessionData._440Count || (Date.now() - (sessionData._last440At || 0)) > 90000) {
-        sessionData._440Count = 0;
-      }
       sessionData._firstConnectDone = true;
       console.log(`✅ Session ${id} connected!`);
 
@@ -484,48 +480,27 @@ async function connectSession(id, sessionData) {
         activeSessions.delete(id);
         console.log(`❌ Session ${id} stopped (${isLoggedOut ? 'Logged out' : 'Deleted'})`);
       } else if (isConnectionReplaced) {
-        // Track consecutive 440 (connection replaced) counts separately
-        if (!sessionData._440Count) sessionData._440Count = 0;
-        sessionData._440Count++;
-        sessionData._last440At = Date.now();
-
-        // Always remove the stale (closed) socket immediately so broadcast/react
-        // don't try to use a disconnected connection during the backoff window.
+        // 440 = WhatsApp replaced this connection from another device/instance.
+        // Auto-delete the session so it does not fight to reconnect.
         activeSessions.delete(id);
-
-        if (process.env.DEV_MODE === 'true') {
-          // In dev/testing mode: production took over — stop here.
-          console.log(`⏸️ Session ${id} paused — another instance (production) is active.`);
-        } else if (sessionData._440Count > 8) {
-          // Too many consecutive 440s — cool down with a progressive delay (max 2 min), then keep retrying
-          const cooldown = Math.min(30000 * Math.floor(sessionData._440Count / 8), 120000);
-          sessionData._440Count = Math.floor(sessionData._440Count / 2); // halve count so next loop is shorter
-          console.log(`⚠️ Session ${id} stuck in 440 loop — cooling down ${Math.round(cooldown/1000)}s before retry...`);
-          reconnectingSet.add(id);
-          setTimeout(() => {
-            reconnectingSet.delete(id);
-            if (!activeSessions.has(id)) connectSession(id, sessionData).catch(e =>
-              console.error(`440 cooldown reconnect failed for ${id}:`, e.message)
-            );
-          }, cooldown);
-        } else {
-          // Exponential backoff for 440 errors to let the other instance stabilise
-          const delay440 = Math.min(20000 * sessionData._440Count, 120000);
-          console.log(`🔄 Reconnecting session ${id} (Status: 440, attempt ${sessionData._440Count}/8, delay ${Math.round(delay440/1000)}s)...`);
-          reconnectingSet.add(id);
-          setTimeout(() => {
-            reconnectingSet.delete(id);
-            if (!activeSessions.has(id)) connectSession(id, sessionData).catch(e =>
-              console.error(`440 reconnect failed for ${id}:`, e.message)
-            );
-          }, delay440);
+        reconnectingSet.delete(id);
+        console.log(`🗑️ Session ${id} was replaced by another connection — auto-deleting session to prevent reconnect loop.`);
+        try {
+          await database.deleteSession(id);
+          // Also wipe the local auth folder so stale keys don't linger
+          const sessionFolder = path.join(__dirname, 'session', sessionData.folder || '');
+          if (sessionData.folder && fs.existsSync(sessionFolder)) {
+            fs.rmSync(sessionFolder, { recursive: true, force: true });
+          }
+        } catch (e) {
+          console.error(`Failed to delete session ${id} after 440:`, e.message);
         }
       } else {
-        // Reset 440 counter on any non-440 disconnect
-        sessionData._440Count = 0;
+        // Any other disconnect: retry forever with exponential backoff (max 60s).
+        // The bot will keep trying until the server shuts down.
         if (!sessionData._retryCount) sessionData._retryCount = 0;
         sessionData._retryCount++;
-        const delay = Math.min(5000 * Math.pow(1.5, sessionData._retryCount - 1), 120000);
+        const delay = Math.min(5000 * Math.pow(1.5, sessionData._retryCount - 1), 60000);
         console.log(`🔄 Reconnecting session ${id} (Status: ${statusCode}, attempt ${sessionData._retryCount}, delay ${Math.round(delay/1000)}s)...`);
         reconnectingSet.add(id);
         setTimeout(() => {
@@ -2161,7 +2136,7 @@ function initSessions() {
   // Delay startup slightly so the previous deployment instance has time
   // to fully shut down before this instance grabs WhatsApp connections.
   // This prevents cascading 440 (Connection Replaced) errors on redeploy.
-  const STARTUP_DELAY = parseInt(process.env.SESSION_STARTUP_DELAY_MS || '8000', 10);
+  const STARTUP_DELAY = parseInt(process.env.SESSION_STARTUP_DELAY_MS || '30000', 10);
   console.log(`⏳ Waiting ${STARTUP_DELAY / 1000}s before connecting sessions (letting old instance close)...`);
   setTimeout(() => {
     initAllSessions();
