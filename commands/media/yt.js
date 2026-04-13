@@ -5,11 +5,13 @@
 
 const axios = require('axios');
 const yts = require('yt-search');
-const ytdl = require('ytdl-core');
+const ytdl = require('@distube/ytdl-core');
 const APIs = require('../../utils/api');
 const { sendBtn, btn } = require('../../utils/sendBtn');
 
 const YT_REGEX = /(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?(?:.*&)?v=|v\/|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/;
+const LOADER_API = 'https://api.qasimdev.dpdns.org/api/loaderto/download';
+const LOADER_KEY = process.env.SONG_DOWNLOAD_API_KEY || 'xbps-install-Syu';
 
 // Store pending search results per sender (expires after 5 minutes)
 const pendingSearches = new Map();
@@ -29,6 +31,28 @@ function getPending(senderJid) {
   return entry.videos;
 }
 
+function normalizeYouTubeUrl(input) {
+  const match = String(input || '').match(YT_REGEX);
+  return match ? `https://www.youtube.com/watch?v=${match[1]}` : input;
+}
+
+function extractVideo(data) {
+  const item = data?.data || data?.result || data;
+  const downloadUrl =
+    item?.downloadUrl ||
+    item?.download ||
+    item?.download_url ||
+    item?.dl ||
+    item?.mp4 ||
+    item?.url;
+  if (!downloadUrl) return null;
+  return {
+    download: downloadUrl,
+    title: item?.title || item?.name,
+    thumbnail: item?.thumbnail || item?.thumb
+  };
+}
+
 async function downloadBuffer(url) {
   const res = await axios.get(url, {
     responseType: 'arraybuffer',
@@ -42,8 +66,54 @@ async function downloadBuffer(url) {
   return Buffer.from(res.data);
 }
 
+async function getLoaderVideoByUrl(videoUrl) {
+  const normalizedUrl = normalizeYouTubeUrl(videoUrl);
+  const formats = ['360', '480', '720', 'mp4'];
+  let lastError;
+
+  for (const format of formats) {
+    try {
+      const res = await axios.get(LOADER_API, {
+        timeout: 90000,
+        params: { apiKey: LOADER_KEY, format, url: normalizedUrl },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json, */*'
+        }
+      });
+      const parsed = extractVideo(res.data);
+      if (parsed?.download) return parsed;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('Loader returned no video download');
+}
+
+async function getYtdlVideoByUrl(videoUrl) {
+  const normalizedUrl = normalizeYouTubeUrl(videoUrl);
+  const info = await ytdl.getInfo(normalizedUrl, {
+    requestOptions: {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    }
+  });
+  const finalTitle = info.videoDetails?.title || 'YouTube Video';
+  const formats = ytdl.filterFormats(info.formats, f =>
+    f.container === 'mp4' && f.hasVideo && f.hasAudio && f.url
+  );
+  formats.sort((a, b) => (parseInt(b.height) || 0) - (parseInt(a.height) || 0));
+  const best = formats.find(f => (f.height || 0) <= 720) || formats[0];
+  if (!best?.url) throw new Error('No suitable ytdl format found');
+  return { download: best.url, title: finalTitle };
+}
+
 async function downloadVideoByUrl(videoUrl, videoTitle, sock, msg, chatId, react, reply) {
   await react('⏳');
+  videoUrl = normalizeYouTubeUrl(videoUrl);
 
   // Get video thumbnail from URL
   const ytIdMatch = videoUrl.match(YT_REGEX);
@@ -63,12 +133,34 @@ async function downloadVideoByUrl(videoUrl, videoTitle, sock, msg, chatId, react
   let finalTitle = videoTitle || 'YouTube Video';
 
   try {
-    const result = await APIs.getEliteProTechVideoByUrl(videoUrl);
+    const result = await getYtdlVideoByUrl(videoUrl);
     downloadUrl = result?.download;
     finalTitle = result?.title || finalTitle;
-    console.log('[YT] EliteProTech OK:', downloadUrl?.substring(0, 60));
+    console.log('[YT] @distube/ytdl-core OK:', downloadUrl?.substring(0, 60));
   } catch (e1) {
-    console.log('[YT] EliteProTech FAIL:', e1.message);
+    console.log('[YT] @distube/ytdl-core FAIL:', e1.message);
+  }
+
+  if (!downloadUrl) {
+    try {
+      const result = await getLoaderVideoByUrl(videoUrl);
+      downloadUrl = result?.download;
+      finalTitle = result?.title || finalTitle;
+      console.log('[YT] Loader OK:', downloadUrl?.substring(0, 60));
+    } catch (e2) {
+      console.log('[YT] Loader FAIL:', e2.message);
+    }
+  }
+
+  if (!downloadUrl) {
+    try {
+      const result = await APIs.getEliteProTechVideoByUrl(videoUrl);
+      downloadUrl = result?.download;
+      finalTitle = result?.title || finalTitle;
+      console.log('[YT] EliteProTech OK:', downloadUrl?.substring(0, 60));
+    } catch (e3) {
+      console.log('[YT] EliteProTech FAIL:', e3.message);
+    }
   }
 
   if (!downloadUrl) {
@@ -77,8 +169,8 @@ async function downloadVideoByUrl(videoUrl, videoTitle, sock, msg, chatId, react
       downloadUrl = result?.download;
       finalTitle = result?.title || finalTitle;
       console.log('[YT] Yupra OK:', downloadUrl?.substring(0, 60));
-    } catch (e2) {
-      console.log('[YT] Yupra FAIL:', e2.message);
+    } catch (e4) {
+      console.log('[YT] Yupra FAIL:', e4.message);
     }
   }
 
@@ -88,35 +180,8 @@ async function downloadVideoByUrl(videoUrl, videoTitle, sock, msg, chatId, react
       downloadUrl = result?.download;
       finalTitle = result?.title || finalTitle;
       console.log('[YT] Okatsu OK:', downloadUrl?.substring(0, 60));
-    } catch (e3) {
-      console.log('[YT] Okatsu FAIL:', e3.message);
-    }
-  }
-
-  // Fallback 4: ytdl-core — direct CDN URL, no third-party API needed
-  if (!downloadUrl) {
-    console.log('[YT] Trying ytdl-core...');
-    try {
-      const info = await ytdl.getInfo(videoUrl, {
-        requestOptions: { headers: { 'Accept-Language': 'en-US,en;q=0.9' } }
-      });
-      finalTitle = info.videoDetails?.title || finalTitle;
-
-      // Prefer MP4 with both video+audio, best quality ≤720p (avoids huge 1080p files)
-      const formats = ytdl.filterFormats(info.formats, f =>
-        f.container === 'mp4' && f.hasVideo && f.hasAudio
-      );
-      formats.sort((a, b) => (parseInt(b.height) || 0) - (parseInt(a.height) || 0));
-      const best = formats.find(f => (f.height || 0) <= 720) || formats[0];
-
-      if (best?.url) {
-        downloadUrl = best.url;
-        console.log('[YT] ytdl-core OK:', best.qualityLabel, downloadUrl.substring(0, 60));
-      } else {
-        throw new Error('No suitable format found');
-      }
-    } catch (ytErr) {
-      console.log('[YT] ytdl-core FAIL:', ytErr.message);
+    } catch (e5) {
+      console.log('[YT] Okatsu FAIL:', e5.message);
     }
   }
 

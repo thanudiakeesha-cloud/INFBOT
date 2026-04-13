@@ -1,14 +1,15 @@
 /**
- * .film3 — SinhalaSub.lk scraper (Puppeteer-based, bypasses Cloudflare)
- * Sends the actual movie file as a document instead of just a link.
+ * .film3   — SinhalaSub.lk scraper (axios-based, no Puppeteer)
+ * .film3tb — Fast TeraBox direct download (resolves share URL → sends file in ~1 min)
  */
 
-const puppeteer = require('puppeteer');
-const cheerio   = require('cheerio');
+const fs   = require('fs');
+const path = require('path');
+const os   = require('os');
+const axios = require('axios');
 const { sendBtn, btn, urlBtn } = require('../../utils/sendBtn');
-const { downloadAndSend } = require('../../utils/filmDownloader');
-
-const BASE_URL = 'https://sinhalasub.lk';
+const { downloadAndSend, resolveTeraBox, isTeraBox } = require('../../utils/filmDownloader');
+const { searchMovies, getMovieDetails, isTeraBoxUrl, cleanTitle } = require('../../utils/sinhalasub');
 
 const searchSessions = new Map();
 const detailSessions = new Map();
@@ -22,252 +23,167 @@ async function react(sock, msg, emoji) {
   try { await sock.sendMessage(msg.key.remoteJid, { react: { text: emoji, key: msg.key } }); } catch (_) {}
 }
 
-function cleanTitle(raw) {
-  return (raw || '')
-    .replace(/\s*–\s*SinhalaSub\.LK.*/i, '')
-    .replace(/\s*\|\s*SinhalaSub\.LK.*/i, '')
-    .replace(/\s*Sinhala Subtitles.*/i, '')
-    .replace(/\s*\|.*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+function formatBytes(b) {
+  if (!b || b <= 0) return '?';
+  if (b >= 1e9) return (b / 1e9).toFixed(2) + ' GB';
+  return (b / 1e6).toFixed(1) + ' MB';
 }
 
-const PUPPETEER_ARGS = [
-  '--no-sandbox',
-  '--disable-setuid-sandbox',
-  '--disable-dev-shm-usage',
-  '--disable-accelerated-2d-canvas',
-  '--no-first-run',
-  '--no-zygote',
-  '--disable-gpu',
-  '--disable-extensions',
-  '--disable-background-networking',
-  '--disable-default-apps',
-  '--disable-sync',
-  '--disable-translate',
-  '--hide-scrollbars',
-  '--mute-audio',
-];
+// ── Fast TeraBox download ─────────────────────────────────────────────────────
+async function sendTeraBoxFast(sock, chatId, msg, shareUrl, movieTitle) {
+  const statusMsg = await sock.sendMessage(chatId, {
+    text: `⏳ *Resolving TeraBox link...*\n\n🎬 *${movieTitle || 'Movie'}*\n\n_This usually takes under a minute..._`,
+  }, { quoted: msg });
 
-/** Launch a headless Chrome, fetch the URL, return page HTML. */
-async function fetchWithBrowser(url, waitFor = null) {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: PUPPETEER_ARGS,
-  });
+  const edit = async (text) => {
+    try { await sock.sendMessage(chatId, { text, edit: statusMsg.key }); } catch (_) {}
+  };
+  const delStatus = async () => {
+    try { await sock.sendMessage(chatId, { delete: statusMsg.key }); } catch (_) {}
+  };
 
+  let tbResult;
   try {
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 900 });
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+    tbResult = await resolveTeraBox(shareUrl);
+  } catch (err) {
+    console.error('[film3tb] resolveTeraBox error:', err.message);
+  }
+
+  if (!tbResult?.url) {
+    await edit(
+      `❌ *Could not resolve TeraBox link.*\n\n` +
+      `_The share link may be expired or the file is private._\n\n` +
+      `🔗 Try opening manually:\n${shareUrl}\n\n> 🎬 _Infinity MD Mini_`
     );
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    });
-
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
-
-    // Wait out any Cloudflare JS challenge (title "Just a moment" → wait for it to pass)
-    for (let i = 0; i < 6; i++) {
-      const title = await page.title();
-      if (title.toLowerCase().includes('just a moment') || title.toLowerCase().includes('checking your')) {
-        await new Promise(r => setTimeout(r, 3000));
-      } else {
-        break;
-      }
-    }
-
-    if (waitFor) {
-      try { await page.waitForSelector(waitFor, { timeout: 10000 }); } catch (_) {}
-    }
-
-    return await page.content();
-  } finally {
-    await browser.close();
-  }
-}
-
-async function searchMovies(query) {
-  const url  = `${BASE_URL}/?s=${encodeURIComponent(query)}`;
-  const html = await fetchWithBrowser(url, '.display-item, .module-item, .ml-item');
-  const $    = cheerio.load(html);
-
-  const results = [];
-  const seen    = new Set();
-
-  $('.display-item, .module-item, .ml-item').each((_, el) => {
-    if (results.length >= 5) return;
-    const $el   = $(el);
-    const $link = $el.find('a[href]').first();
-    let movieUrl = $link.attr('href') || '';
-    if (!movieUrl) return;
-    if (!movieUrl.startsWith('http')) movieUrl = BASE_URL + movieUrl;
-    if (seen.has(movieUrl)) return;
-    seen.add(movieUrl);
-
-    const rawTitle = $link.attr('title')?.trim()
-      || $el.find('.item-desc-title h3, h3').first().text().trim()
-      || $el.find('h2').first().text().trim()
-      || '';
-    const title = cleanTitle(rawTitle);
-    if (!title) return;
-
-    const thumbnail =
-      $el.find('img.thumb, img.mli-thumb').first().attr('src')
-      || $el.find('img').first().attr('data-original')
-      || $el.find('img').first().attr('src')
-      || null;
-
-    const quality = ($el.find('.quality').first().text().trim()
-      + ' ' + $el.find('.qty').first().text().trim()).trim() || null;
-    const year = $el.find('.item-date, time, .year').first().text().trim() || null;
-
-    results.push({
-      title,
-      url: movieUrl,
-      thumbnail: (thumbnail && thumbnail.startsWith('http')) ? thumbnail : null,
-      quality,
-      year,
-    });
-  });
-
-  return results;
-}
-
-async function getMovieDetails(pageUrl) {
-  const html = await fetchWithBrowser(pageUrl, '#links, .entry-content');
-  const $    = cheerio.load(html);
-
-  const rawTitle = $('title').first().text() || '';
-  const title    = cleanTitle(rawTitle) || 'Unknown Title';
-
-  const thumbnail =
-    $('img.wp-post-image, .post-thumbnail img, .item-thumb img, .poster img').first().attr('src')
-    || $('.theiaStickySidebar img, aside img').first().attr('src')
-    || null;
-
-  const description =
-    $('.entry-content > p, .post-content > p, .desc-wrap p, .sinopsis p').first().text().trim() || null;
-
-  const year     = $('span.year, .date, time, [itemprop="datePublished"]').first().text().trim() || null;
-  const language = $('span.language, .lang, [itemprop="inLanguage"]').first().text().trim() || null;
-  const genreLinks = $('a[rel="category tag"], .category a, .genres a, .genre a');
-  const genre    = genreLinks.length > 0
-    ? genreLinks.map((_, el) => $(el).text().trim()).get().filter(Boolean).join(', ')
-    : null;
-
-  const qualities = [];
-
-  $('#links .links-table tbody tr').each((_, row) => {
-    const $row       = $(row);
-    const $a         = $row.find('a[href]').first();
-    const href       = $a.attr('href') || '';
-    const qualityText = $row.find('.quality, td:nth-child(2)').first().text().trim();
-    const sizeText   = $row.find('td:nth-child(3) span, td:nth-child(3)').first().text().trim();
-    const serverName = $a.text().trim();
-
-    if (href && href.startsWith('http')) {
-      const label = qualityText ? `${serverName} — ${qualityText}` : serverName || 'Download';
-      if (!qualities.find(q => q.url === href)) {
-        qualities.push({ label, url: href, size: sizeText || null });
-      }
-    }
-  });
-
-  if (qualities.length === 0) {
-    $(".links-table a[href], .content-links a[href], a[href*='/links/']").each((_, el) => {
-      const $a   = $(el);
-      const href = $a.attr('href') || '';
-      const text = $a.text().trim();
-      if (href && (href.includes('/links/') || href.startsWith('http')) && text) {
-        const absHref = href.startsWith('http') ? href : BASE_URL + href;
-        if (!qualities.find(q => q.url === absHref)) {
-          qualities.push({ label: text, url: absHref, size: null });
-        }
-      }
-    });
+    return;
   }
 
-  return { title, thumbnail, description, year, language, genre, qualities };
-}
+  const { url: dlink, filename, size } = tbResult;
+  const sizeStr  = size ? formatBytes(size) : '?';
+  const safeName = (filename || movieTitle || 'movie').replace(/[^\w\s.\-]/g, '').replace(/\s+/g, '_').slice(0, 60);
+  const ext      = (safeName.match(/\.(mp4|mkv|avi|webm)$/i)?.[1] || 'mp4').toLowerCase();
+  const fileName = safeName.endsWith(`.${ext}`) ? safeName : `${safeName}.${ext}`;
 
-async function resolveDownloadUrl(linkUrl) {
-  if (!linkUrl.includes('sinhalasub.lk/links/') && !linkUrl.includes('sinhalasub.lk/go/')) {
-    return linkUrl;
+  await edit(
+    `📤 *Sending movie...*\n\n` +
+    `🎬 *${movieTitle || filename || 'Movie'}*\n` +
+    `📦 *Size:* ${sizeStr}\n\n` +
+    `_WhatsApp is downloading the file now..._`
+  );
+
+  // Strategy 1: fastDocument — WhatsApp downloads from the dlink directly (fastest)
+  try {
+    await sock.sendMessage(chatId, {
+      document: { url: dlink },
+      fileName,
+      mimetype: 'video/mp4',
+      caption:
+        `🎬 *${movieTitle || filename || 'Movie'}*\n` +
+        `📦 *Size:* ${sizeStr}\n` +
+        `🖥️ *Source:* TeraBox\n\n` +
+        `> ♾️ _Infinity MD Mini_`,
+    }, { quoted: msg });
+
+    await delStatus();
+    await react(sock, msg, '✅');
+    return;
+  } catch (fastErr) {
+    console.warn('[film3tb] fastDocument failed, trying local stream:', fastErr.message);
   }
+
+  // Strategy 2: stream-download locally then send as buffer
+  await edit(
+    `⬇️ *Downloading from TeraBox...*\n\n` +
+    `🎬 *${movieTitle || filename || 'Movie'}*\n` +
+    `📦 *Size:* ${sizeStr}\n\n` +
+    `_Streaming to bot... please wait_`
+  );
+
+  const tmpFile = path.join(os.tmpdir(), `film3tb_${Date.now()}.${ext}`);
 
   try {
-    const html = await fetchWithBrowser(linkUrl, '.wait-done a, a.wait-link');
-    const $    = cheerio.load(html);
-
-    const continueHref =
-      $('.wait-done a:not(.prev-lnk)').first().attr('href')
-      || $('.wait-done a').first().attr('href')
-      || $('a.wait-link').first().attr('href')
-      || null;
-
-    if (continueHref && continueHref.startsWith('http') && !continueHref.includes('sinhalasub.lk')) {
-      return continueHref;
-    }
-
-    const scripts = [];
-    $('script').each((_, el) => { scripts.push($(el).html() || ''); });
-    const allJs = scripts.join('\n');
-
-    const hostPatterns = [
-      /["'`](https?:\/\/(?:www\.)?pixeldrain\.com\/u\/[^"'`\s]+)["'`]/,
-      /["'`](https?:\/\/drive\.google\.com\/[^"'`\s]+)["'`]/,
-      /["'`](https?:\/\/(?:www\.)?mediafire\.com\/[^"'`\s]+)["'`]/,
-      /["'`](https?:\/\/(?:[^"'`\s]*\.)?terabox(?:app)?\.com\/[^"'`\s]+)["'`]/,
-      /["'`](https?:\/\/(?:[^"'`\s]*\.)?4funbox\.com\/[^"'`\s]+)["'`]/,
-      /["'`](https?:\/\/mega\.nz\/[^"'`\s]+)["'`]/,
-      /["'`](https?:\/\/[^"'`\s]+\.(?:mp4|mkv|avi|webm)[^"'`\s]*)["'`]/,
-      /window\.location(?:\.href)?\s*=\s*["'`](https?:\/\/[^"'`\s]+)["'`]/,
-      /(?:url|href|link|redirect)\s*[:=]\s*["'`](https?:\/\/[^"'`\s]+)["'`]/i,
-    ];
-
-    for (const pat of hostPatterns) {
-      const m = allJs.match(pat);
-      if (m && m[1] && !m[1].includes('sinhalasub.lk')) return m[1];
-    }
-
-    let fallback = null;
-    $('a[href]').each((_, el) => {
-      if (fallback) return;
-      const href = $(el).attr('href') || '';
-      if (
-        href.startsWith('http') &&
-        !href.includes('sinhalasub.lk') &&
-        (
-          /terabox|4funbox|momerybox|mediafire|mega\.nz|pixeldrain|drive\.google|1drv\.ms|onedrive/i.test(href) ||
-          /\.(mp4|mkv|avi|webm)(\?|$)/i.test(href)
-        )
-      ) {
-        fallback = href;
-      }
+    const response = await axios({
+      method: 'GET',
+      url: dlink,
+      responseType: 'stream',
+      timeout: 10 * 60 * 1000,
+      maxRedirects: 15,
+      headers: {
+        'User-Agent': UA,
+        'Accept': '*/*',
+        'Referer': 'https://www.terabox.com/',
+      },
     });
 
-    return fallback || linkUrl;
-  } catch (_) {
-    return linkUrl;
+    await new Promise((resolve, reject) => {
+      const ws = fs.createWriteStream(tmpFile);
+      response.data.pipe(ws);
+      ws.on('finish', resolve);
+      ws.on('error', reject);
+      response.data.on('error', reject);
+    });
+
+    const buffer = fs.readFileSync(tmpFile);
+
+    await edit(`📤 *Sending file...*\n\n🎬 *${movieTitle || filename || 'Movie'}*\n📦 *Size:* ${formatBytes(buffer.length)}\n\n_Almost done..._`);
+
+    await sock.sendMessage(chatId, {
+      document: buffer,
+      fileName,
+      mimetype: 'video/mp4',
+      caption:
+        `🎬 *${movieTitle || filename || 'Movie'}*\n` +
+        `📦 *Size:* ${formatBytes(buffer.length)}\n` +
+        `🖥️ *Source:* TeraBox\n\n` +
+        `> ♾️ _Infinity MD Mini_`,
+    }, { quoted: msg });
+
+    await delStatus();
+    await react(sock, msg, '✅');
+  } catch (err) {
+    console.error('[film3tb] stream download error:', err.message);
+    await edit(
+      `⚠️ *Download failed.*\n\n` +
+      `🎬 *${movieTitle || 'Movie'}*\n\n` +
+      `🔗 *Download manually:*\n${dlink}\n\n` +
+      `> 💡 _Paste the link in your browser_\n> 🎬 _Infinity MD Mini_`
+    );
+    await react(sock, msg, '❌');
+  } finally {
+    try { fs.unlinkSync(tmpFile); } catch (_) {}
   }
 }
 
 module.exports = {
   name: 'film3',
-  aliases: ['sinhalasub', 'film3sel', 'film3select', 'film3dl'],
+  aliases: ['sinhalasub', 'film3sel', 'film3select', 'film3dl', 'film3tb'],
   category: 'media',
-  description: 'Search and download movies from SinhalaSub.lk',
-  usage: 'film3 <movie name>',
+  description: 'Search SinhalaSub.lk for movies | Fast TeraBox download with film3tb',
+  usage: 'film3 <movie name>  |  film3tb <terabox share URL>',
 
   async execute(sock, msg, args = [], extra = {}) {
     const chatId  = extra?.from || msg?.key?.remoteJid;
     const prefix  = extra?.prefix || '.';
     const cmdName = String(extra?.commandName || '').toLowerCase().replace(prefix, '');
 
-    // ── Step 3: Download & send movie file ──────────────────────────────────
+    // ── film3tb: Fast TeraBox direct download ────────────────────────────────
+    if (cmdName === 'film3tb') {
+      const shareUrl = args[0] || '';
+      if (!shareUrl || !isTeraBoxUrl(shareUrl)) {
+        return sock.sendMessage(chatId, {
+          text:
+            `🎬 *Fast TeraBox Movie Download*\n\n` +
+            `Usage: \`${prefix}film3tb <terabox share URL>\`\n` +
+            `Example: \`${prefix}film3tb https://www.terabox.com/s/1xxxxxxx\`\n\n` +
+            `_Resolves the TeraBox link and sends the file directly to chat — usually under 1 minute._`,
+        }, { quoted: msg });
+      }
+
+      await react(sock, msg, '🎬');
+      return sendTeraBoxFast(sock, chatId, msg, shareUrl, args.slice(1).join(' ') || null);
+    }
+
+    // ── Step 3: film3dl — Download selected quality ───────────────────────────
     if (cmdName === 'film3dl') {
       const idx     = parseInt(args[0], 10);
       const session = detailSessions.get(chatId);
@@ -280,28 +196,20 @@ module.exports = {
       const entry = session[idx];
       await react(sock, msg, '⬇️');
 
-      let resolvedUrl = entry.url;
-      try { resolvedUrl = await resolveDownloadUrl(entry.url); } catch (_) {}
-
-      const fallbackUrls = [];
-      for (let fi = 0; fi < session.length; fi++) {
-        if (fi === idx) continue;
-        try {
-          fallbackUrls.push(await resolveDownloadUrl(session[fi].url).catch(() => session[fi].url));
-        } catch (_) {
-          fallbackUrls.push(session[fi].url);
-        }
+      // Fast path: if this is a pre-resolved TeraBox dlink, send directly
+      if (entry.resolvedDlink) {
+        return sendTeraBoxFast(sock, chatId, msg, entry.originalTbUrl || entry.url, entry.movieTitle);
       }
 
       return downloadAndSend(sock, chatId, msg, {
         title: entry.movieTitle,
         quality: `${entry.label}${entry.size ? ` — ${entry.size}` : ''}`,
-        downloadUrl: resolvedUrl,
-        fallbackUrls,
+        downloadUrl: entry.url,
+        fastDocument: isTeraBoxUrl(entry.url),
       });
     }
 
-    // ── Step 2: Show movie details & quality options ─────────────────────────
+    // ── Step 2: film3sel — Show movie details & quality list ─────────────────
     if (cmdName === 'film3sel' || cmdName === 'film3select') {
       const idx     = parseInt(args[0], 10);
       const session = searchSessions.get(chatId);
@@ -327,7 +235,8 @@ module.exports = {
       if (!details.qualities.length) {
         await react(sock, msg, '✅');
         return sendBtn(sock, chatId, {
-          text: `🎬 *${details.title}*\n\n❌ No download links found on this page.\n\n🔗 Visit directly:\n${movie.url}\n\n> 🎬 _Infinity MD Mini • SinhalaSub.lk_`,
+          text:
+            `🎬 *${details.title}*\n\n❌ No download links found.\n\n🔗 Visit directly:\n${movie.url}\n\n> 🎬 _Infinity MD Mini • SinhalaSub.lk_`,
           footer: '♾️ Infinity MD Mini • SinhalaSub.lk',
           buttons: [
             urlBtn('🌐 Movie Page', movie.url),
@@ -336,9 +245,34 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      const dlSession = details.qualities.slice(0, 5).map(q => ({
-        label: q.label, url: q.url, size: q.size, movieTitle: details.title,
-      }));
+      // Pre-resolve TeraBox links for speed & show real size
+      const dlSession = [];
+      for (const q of details.qualities.slice(0, 5)) {
+        const entry = {
+          label: q.label,
+          url: q.url,
+          size: q.size,
+          movieTitle: details.title,
+          resolvedDlink: null,
+          originalTbUrl: null,
+        };
+
+        if (isTeraBoxUrl(q.url)) {
+          try {
+            const tb = await resolveTeraBox(q.url);
+            if (tb?.url) {
+              entry.resolvedDlink = tb.url;
+              entry.originalTbUrl = q.url;
+              if (tb.size) entry.size = formatBytes(tb.size);
+              if (tb.filename) entry.label = `⚡ TeraBox — ${tb.filename.slice(0, 30)}`;
+              else entry.label = `⚡ TeraBox — Fast`;
+            }
+          } catch (_) {}
+        }
+
+        dlSession.push(entry);
+      }
+
       setTTL(detailSessions, chatId, dlSession);
 
       let text = `╔══════════════════════╗\n`;
@@ -348,16 +282,21 @@ module.exports = {
       if (details.language) text += `│ 🗣️ *Language:* ${details.language}\n`;
       if (details.genre)    text += `│ 🎭 *Genre:* ${details.genre}\n`;
       if (details.description) {
-        const d = details.description.length > 200 ? details.description.slice(0, 197) + '…' : details.description;
+        const d = details.description.length > 200
+          ? details.description.slice(0, 197) + '…'
+          : details.description;
         text += `│\n│ 📖 *Story:*\n│ ${d}\n`;
       }
       text += `\n📥 *Choose download quality:*\n\n`;
       dlSession.forEach((q, i) => {
-        text += `│ *${i + 1}.* ${q.label}${q.size ? ` — ${q.size}` : ''}\n`;
+        const tag = q.resolvedDlink ? ' ⚡' : '';
+        text += `│ *${i + 1}.* ${q.label}${q.size ? ` — ${q.size}` : ''}${tag}\n`;
       });
-      text += `\n> 💡 _Bot will download & send the full file_\n> 🎬 _Infinity MD Mini_`;
+      text += `\n> ⚡ _TeraBox links send in ~1 minute_\n> 🎬 _Infinity MD Mini_`;
 
-      const dlBtns = dlSession.map((q, i) => btn(`film3dl_${i}`, `⬇️ ${q.label.slice(0, 20)}`));
+      const dlBtns = dlSession.map((q, i) =>
+        btn(`film3dl_${i}`, `${q.resolvedDlink ? '⚡' : '⬇️'} ${q.label.slice(0, 20)}`)
+      );
       dlBtns.push(btn('film3', '🔍 New Search'));
 
       const payload = { text, footer: '♾️ Infinity MD Mini • SinhalaSub.lk', buttons: dlBtns };
@@ -365,19 +304,29 @@ module.exports = {
       return sendBtn(sock, chatId, payload, { quoted: msg });
     }
 
-    // ── Step 1: Search ─────────────────────────────────────────────────────
+    // ── Step 1: Search SinhalaSub.lk ─────────────────────────────────────────
     if (!args.length) {
       return sock.sendMessage(chatId, {
-        text: `🎬 *SinhalaSub.lk Film Search*\n\nUsage: \`${prefix}film3 <movie name>\`\nExample: \`${prefix}film3 Avengers\`\n\n_Searches SinhalaSub.lk for movies with Sinhala subtitles._`,
+        text:
+          `🎬 *SinhalaSub.lk Film Search*\n\n` +
+          `• Search: \`${prefix}film3 <movie name>\`\n` +
+          `• TeraBox fast DL: \`${prefix}film3tb <terabox URL>\`\n\n` +
+          `_Example: \`${prefix}film3 Avengers\`_\n` +
+          `_Example: \`${prefix}film3tb https://www.terabox.com/s/1xxx\`_`,
       }, { quoted: msg });
+    }
+
+    // If the first arg looks like a TeraBox URL, auto-route to fast download
+    if (isTeraBoxUrl(args[0])) {
+      await react(sock, msg, '🎬');
+      return sendTeraBoxFast(sock, chatId, msg, args[0], args.slice(1).join(' ') || null);
     }
 
     const query = args.join(' ');
     await react(sock, msg, '🔍');
 
-    // Warn user it may take a moment (browser launch is slow)
     const waitMsg = await sock.sendMessage(chatId, {
-      text: `⏳ _Searching SinhalaSub.lk for *"${query}"*..._\n_Please wait a moment..._`,
+      text: `🔍 _Searching SinhalaSub.lk for *"${query}"*..._`,
     }, { quoted: msg });
     const delWait = async () => {
       try { await sock.sendMessage(chatId, { delete: waitMsg.key }); } catch (_) {}
@@ -390,8 +339,19 @@ module.exports = {
       console.error('[film3] search error:', err.message);
       await delWait();
       await react(sock, msg, '❌');
+      if (err.cfBlocked) {
+        return sock.sendMessage(chatId, {
+          text:
+            `🛡️ *SinhalaSub.lk is currently blocking automated requests (Cloudflare).*\n\n` +
+            `Try these alternatives:\n` +
+            `• \`${prefix}film ${query}\` — searches Cinesubz.net\n` +
+            `• \`${prefix}film1 ${query}\` — searches SriHub.store\n` +
+            `• \`${prefix}film3tb <terabox URL>\` — if you have a TeraBox share link\n\n` +
+            `> 🎬 _Infinity MD Mini_`,
+        }, { quoted: msg });
+      }
       return sock.sendMessage(chatId, {
-        text: `❌ Search failed. Please try again in a moment.\n\n_If this keeps failing, try \`${prefix}film\` instead._`,
+        text: `❌ Search failed. Please try again in a moment.\n\n_Try \`${prefix}film ${query}\` as an alternative._`,
       }, { quoted: msg });
     }
 

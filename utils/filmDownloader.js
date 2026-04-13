@@ -199,7 +199,7 @@ async function resolveTeraBox(shareUrl) {
 
     const dlink = dlRes.data?.dlink;
     if (dlink && dlink.startsWith('http')) {
-      return { url: dlink, filename, size: fileSize };
+      return { url: dlink, filename, size: fileSize, cookies };
     }
   } catch (err) {
     console.error('[terabox] download API error:', err.message);
@@ -430,7 +430,7 @@ async function resolveToDownloadable(url) {
  * auto-selects the first server that can deliver the file,
  * downloads it and sends as a WhatsApp document.
  */
-async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl, fallbackUrls = [] }) {
+async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl, fallbackUrls = [], fastDocument = false }) {
   const safeTitle = title.replace(/[^\w\s]/g, '').replace(/\s+/g, '_').slice(0, 50);
 
   const statusMsg = await sock.sendMessage(chatId, {
@@ -448,8 +448,10 @@ async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl,
   const tryDownload = async (dlUrl, hostLabel) => {
     const info = await followRedirects(dlUrl);
     const fileSize = info.contentLength; // 0 if unknown/HTML page
-    const fileExt  = ext(info.contentType, dlUrl);
+    const finalUrl = info.finalUrl || dlUrl;
+    const fileExt  = ext(info.contentType, finalUrl);
     const fileName = `${safeTitle}.${fileExt}`;
+    const mimeType = info.contentType.includes('video') ? info.contentType.split(';')[0].trim() : 'video/mp4';
 
     // Only block if we're confident this is a real video file that's too large
     if (fileSize > MAX_SIZE) {
@@ -460,6 +462,29 @@ async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl,
         `> 💡 _Paste this link in your browser to download_`
       );
       return 'too_large';
+    }
+
+    if (fastDocument) {
+      await edit(
+        `📤 *Sending movie as document...*\n\n` +
+        `🎬 *${title}*\n📊 *Quality:* ${quality}\n` +
+        `📦 *Size:* ${fileSize ? formatBytes(fileSize) : 'Unknown'}\n\n` +
+        `_Please wait..._`
+      );
+
+      await sock.sendMessage(chatId, {
+        document: { url: finalUrl },
+        fileName,
+        mimetype: mimeType,
+        caption:
+          `🎬 *${title}*\n` +
+          `📊 *Quality:* ${quality}\n` +
+          `📦 *Size:* ${fileSize ? formatBytes(fileSize) : 'Unknown'}\n` +
+          `🖥️ *Server:* ${hostLabel}\n\n> ♾️ _Infinity MD Mini_`,
+      }, { quoted: msg });
+
+      await delStatus();
+      return 'ok';
     }
 
     const tmpFile = path.join(os.tmpdir(), `film_${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`);
@@ -558,8 +583,6 @@ async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl,
       try { fs.unlinkSync(tmpFile); } catch (_) {}
     }
 
-    const mimeType = info.contentType.includes('video') ? info.contentType.split(';')[0].trim() : 'video/mp4';
-
     await edit(
       `📤 *Sending file...*\n\n🎬 *${title}*\n📊 *Quality:* ${quality}\n` +
       `📦 *Size:* ${formatBytes(buffer.length)}\n\n_Almost done..._`
@@ -629,4 +652,4 @@ async function downloadAndSend(sock, chatId, msg, { title, quality, downloadUrl,
   );
 }
 
-module.exports = { downloadAndSend, scrapeLinks, resolveToDownloadable };
+module.exports = { downloadAndSend, scrapeLinks, resolveToDownloadable, resolveTeraBox, isTeraBox };
