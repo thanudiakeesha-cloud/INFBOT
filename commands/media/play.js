@@ -1,32 +1,47 @@
 const yts = require('yt-search');
+const ytdl = require('@distube/ytdl-core');
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('ffmpeg-static');
+const { PassThrough } = require('stream');
 const axios = require('axios');
 
-const DL_API = 'https://api.qasimdev.dpdns.org/api/loaderto/download';
-const API_KEY = 'xbps-install-Syu';
+ffmpeg.setFfmpegPath(ffmpegPath);
 
-const wait = (ms) => new Promise(r => setTimeout(r, ms));
+const YT_REGEX = /(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?(?:.*&)?v=|v\/|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/;
 
-const downloadWithRetry = async (url, retries = 3) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const { data } = await axios.get(DL_API, {
-        params: { apiKey: API_KEY, format: 'mp3', url },
-        timeout: 90000
-      });
-      if (data?.data?.downloadUrl) return data.data;
-      throw new Error('No download URL');
-    } catch (err) {
-      if (i === retries - 1) throw err;
-      console.log(`Download attempt ${i + 1} failed, retrying in 5s...`);
-      await wait(5000);
-    }
-  }
-  throw new Error('All download attempts failed');
-};
+async function getAudioBuffer(videoUrl) {
+  return new Promise((resolve, reject) => {
+    const audioStream = ytdl(videoUrl, {
+      quality: 'highestaudio',
+      filter: 'audioonly',
+      requestOptions: {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      }
+    });
+
+    const passThrough = new PassThrough();
+    const chunks = [];
+
+    ffmpeg(audioStream)
+      .setFfmpegPath(ffmpegPath)
+      .audioCodec('libmp3lame')
+      .audioBitrate(128)
+      .format('mp3')
+      .on('error', reject)
+      .pipe(passThrough, { end: true });
+
+    passThrough.on('data', chunk => chunks.push(chunk));
+    passThrough.on('end', () => resolve(Buffer.concat(chunks)));
+    passThrough.on('error', reject);
+
+    const timeout = setTimeout(() => reject(new Error('Conversion timeout')), 90000);
+    passThrough.on('end', () => clearTimeout(timeout));
+  });
+}
 
 module.exports = {
   name: 'play',
-  aliases: ['plays', 'music'],
+  aliases: ['plays'],
   category: 'media',
   description: 'Search and download a song as MP3 from YouTube',
   usage: '.play <song name>',
@@ -43,53 +58,62 @@ module.exports = {
     try {
       await sock.sendMessage(chatId, { text: '🔍 *Searching...*' }, { quoted: msg });
 
-      const { videos } = await yts(query);
-      if (!videos?.length)
-        return sock.sendMessage(chatId, { text: '❌ *No results found!*' }, { quoted: msg });
-
-      const video = videos[0];
+      let video;
+      if (YT_REGEX.test(query)) {
+        const info = await ytdl.getInfo(query);
+        const ytId = query.match(YT_REGEX)?.[1];
+        video = {
+          url: query,
+          title: info.videoDetails.title,
+          timestamp: new Date(parseInt(info.videoDetails.lengthSeconds) * 1000).toISOString().substr(11, 8).replace(/^00:/, ''),
+          author: { name: info.videoDetails.author?.name || '' },
+          thumbnail: ytId ? `https://i.ytimg.com/vi/${ytId}/sddefault.jpg` : null
+        };
+      } else {
+        const { videos } = await yts(query);
+        if (!videos?.length)
+          return sock.sendMessage(chatId, { text: '❌ *No results found!*' }, { quoted: msg });
+        const v = videos[0];
+        video = { url: v.url, title: v.title, timestamp: v.timestamp, author: v.author, thumbnail: v.thumbnail };
+      }
 
       await sock.sendMessage(chatId, {
-        text: `✅ *Found:* ${video.title}\n⏱️ ${video.timestamp}\n👤 ${video.author.name}\n\n⏳ *Downloading... (this may take up to 30s)*`
+        text: `✅ *Found:* ${video.title}\n⏱️ ${video.timestamp}\n👤 ${video.author?.name || ''}\n\n⏳ *Downloading... (10–30s)*`
       }, { quoted: msg });
 
-      const songData = await downloadWithRetry(video.url);
+      const audioBuffer = await getAudioBuffer(video.url);
 
       let thumbnailBuffer;
-      try {
-        const img = await axios.get(songData.thumbnail, { responseType: 'arraybuffer', timeout: 15000 });
-        thumbnailBuffer = Buffer.from(img.data);
-      } catch { /* no thumbnail */ }
+      if (video.thumbnail) {
+        try {
+          const img = await axios.get(video.thumbnail, { responseType: 'arraybuffer', timeout: 10000 });
+          thumbnailBuffer = Buffer.from(img.data);
+        } catch { }
+      }
 
       await sock.sendMessage(chatId, {
-        audio: { url: songData.downloadUrl },
+        audio: audioBuffer,
         mimetype: 'audio/mpeg',
-        fileName: `${songData.title}.mp3`,
-        contextInfo: {
+        fileName: `${(video.title || 'song').replace(/[^\w\s-]/g, '').trim()}.mp3`,
+        contextInfo: thumbnailBuffer ? {
           externalAdReply: {
-            title: songData.title,
-            body: `${video.author.name} • ${video.timestamp}`,
+            title: video.title,
+            body: `${video.author?.name || ''} • ${video.timestamp}`,
             thumbnail: thumbnailBuffer,
             mediaType: 2,
             sourceUrl: video.url
           }
-        }
+        } : undefined
       }, { quoted: msg });
 
     } catch (err) {
       console.error('Play error:', err.message);
       const isConnErr = err.message?.includes('Connection Closed') || err.message?.includes('Connection Reset') || err.output?.statusCode === 428;
-      if (isConnErr) {
-        console.warn('Play: socket closed during download — skipping reply.');
-        return;
-      }
-      const reason = err.response?.status === 408
-        ? 'Download timed out. Try again in a moment.'
-        : err.response?.status === 429
-          ? 'Rate limited. Wait a minute.'
-          : err.message;
+      if (isConnErr) return;
       try {
-        await sock.sendMessage(chatId, { text: `❌ *Failed:* ${reason}` }, { quoted: msg });
+        await sock.sendMessage(chatId, {
+          text: `❌ *Failed:* ${err.message}`
+        }, { quoted: msg });
       } catch (_) {}
     }
   }
