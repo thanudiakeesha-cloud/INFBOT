@@ -87,7 +87,7 @@ module.exports = {
         if (mediaKey) {
           const mediaMsg = content[mediaKey];
           try {
-            const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+            const { downloadContentFromMessage } = require('../../utils/baileys');
             const stream = await downloadContentFromMessage(mediaMsg, mediaKey.replace('Message', ''));
             const chunks = [];
             for await (const chunk of stream) chunks.push(chunk);

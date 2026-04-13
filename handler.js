@@ -6,7 +6,7 @@ const config = require('./config');
 const database = require('./database');
 const { loadCommands } = require('./utils/commandLoader');
 const { addMessage } = require('./utils/groupstats');
-const { jidDecode, jidEncode } = require('@whiskeysockets/baileys');
+const { jidDecode, jidEncode } = require('./utils/baileys');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -514,7 +514,7 @@ const handleMessage = async (sock, msg) => {
           if (mediaType) {
             statusStore.pendingDownloads.add(msgId);
             try {
-              const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+              const { downloadMediaMessage } = require('./utils/baileys');
               const media = content[mediaType];
 
               // Primary download attempt
@@ -694,7 +694,7 @@ const handleMessage = async (sock, msg) => {
           const mediaType = Object.keys(viewOnce).find(k => k !== 'messageContextInfo');
           if (mediaType) {
             const media = viewOnce[mediaType];
-            const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+            const { downloadMediaMessage } = require('./utils/baileys');
             let buffer;
             try {
               buffer = await downloadMediaMessage(

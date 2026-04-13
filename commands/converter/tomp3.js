@@ -1,4 +1,4 @@
-const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { downloadMediaMessage } = require('../../utils/baileys');
 const { toAudio } = require('../../utils/converter');
 
 module.exports = {
