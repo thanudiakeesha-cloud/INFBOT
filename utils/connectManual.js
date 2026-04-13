@@ -1,52 +1,47 @@
 /**
- * Connect Manual — optimized for scannability and professional UI.
- * Bilingual: English + Sinhala.
+ * Connect Manual — Mobile Friendly + Sinhala Optimized + Welcome Message
  */
-
-const SEP = '──────────────────────────';
 
 function buildManual({ botName, botNum, prefix }) {
   const p = prefix || '.';
   const bn = (botName || 'Infinity MD Mini').toUpperCase();
-  const num = botNum ? `+${botNum}` : 'N/A';
+  const num = botNum ? `+${botNum.replace('+', '')}` : 'N/A';
 
   return `
-┏━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃   🚀 *SYSTEM CONNECTED*
-┗━━━━━━━━━━━━━━━━━━━━━━━━┛
+⚡ *${bn} CONNECTION SUCCESS* ⚡
 
-🤖 *BOT:* ${bn}
-📱 *NUM:* ${num}
-⌨️ *PRE:* \` ${p} \`
+╭━━━━〔 🎉 WELCOME 〕━━━━╮
+  👋 Hello! Welcome to *${bn}*
+  🇱🇰 ඔබව සාදරයෙන් පිළිගනිමු!
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
-🇬🇧 *QUICK START*
-${SEP}
-📋 Main Menu : \`${p}menu\`
-🌐 Language  : \`${p}lang\`
+┌───〔 🤖 SYSTEM INFO 〕───┐
+  ✨ *Bot:* ${bn}
+  📱 *Num:* ${num}
+  ⌨️ *Prefix:* [ ${p} ]
+└───────────────────────┘
 
-📥 *MEDIA* : \`${p}song\` \`${p}yt\` \`${p}tiktok\`
-🛡️ *ADMIN* : \`${p}kick\` \`${p}mute\` \`${p}warn\`
-👑 *OWNER* : \`${p}mode\` \`${p}swon\` \`${p}react\`
-🛠️ *TOOLS* : \`${p}ai\` \`${p}sticker\` \`${p}weather\`
+🚀 *QUICK COMMANDS | ඉක්මන් භාවිතය*
+╭───────────────────────╮
+  📋 *Menu* : ${p}menu | ප‍්‍රධාන මෙනුව
+  🌐 *Lang* : ${p}lang | භාෂාව
+╰───────────────────────╯
 
-💡 *Tip:* Reply to any image/video with \`${p}sticker\`
+💎 *TOP FEATURES | විශේෂාංග*
+────────────────────────
+🎵 *Media:* ${p}song, ${p}video, ${p}tiktok
+🛡️ *Admin:* ${p}kick, ${p}mute, ${p}hidetag
+🛠️ *Tools:* ${p}ai, ${p}sticker, ${p}img
+👑 *Owner:* ${p}mode, ${p}setprefix, ${p}restart
+────────────────────────
 
-${SEP}
+💡 *PRO TIP:*
+Reply to an image with *${p}sticker* to create one!
+ඕනෑම පින්තූරයකට *${p}sticker* ලෙස Reply කර ස්ටිකර් සාදන්න.
 
-🇱🇰 *ඉක්මන් මාර්ගෝපදේශය*
-${SEP}
-📋 ප්‍රධාන මෙනුව : \`${p}menu\`
-🌐 භාෂාව මාරු : \`${p}lang\`
-
-📥 *මාධ්‍ය* : \`${p}song\` \`${p}yt\` \`${p}tiktok\`
-🛡️ *පාලක* : \`${p}kick\` \`${p}mute\` \`${p}warn\`
-👑 *හිමිකරු* : \`${p}mode\` \`${p}swon\` \`${p}react\`
-🛠️ *මෙවලම්* : \`${p}ai\` \`${p}sticker\` \`${p}weather\`
-
-💡 *ඉඟිය:* ඕනෑම පින්තූරයකට \`${p}sticker\` ලෙස Reply කරන්න.
-
-> ♾️ *Powered by ${bn}*
-> 🔗 infinitymd.online`.trim();
+♾️ *Powered by ${bn}*
+🌐 _visit: infinitymd.online_
+`.trim();
 }
 
 /**
