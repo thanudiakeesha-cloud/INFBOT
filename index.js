@@ -43,7 +43,7 @@ function fallbackLogger() {
   return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, trace: () => {}, child: () => logger || fallbackLogger() };
 }
 
-function loadWhatsAppCore() {
+async function loadWhatsAppCore() {
   if (makeWASocket && useMultiFileAuthState && makeCacheableSignalKeyStore && Browsers && pino && QRCode && pn) {
     whatsAppLoadError = null;
     return true;
@@ -51,7 +51,7 @@ function loadWhatsAppCore() {
   try {
     pino = require('pino');
     ({ Boom } = require('@hapi/boom'));
-    const baileys = require('@whiskeysockets/baileys');
+    const baileys = await import('@whiskeysockets/baileys');
     makeWASocket = baileys.default;
     useMultiFileAuthState = baileys.useMultiFileAuthState;
     DisconnectReason = baileys.DisconnectReason;
@@ -83,8 +83,8 @@ async function getWAVersion() {
   }
 }
 
-function assertWhatsAppReady() {
-  loadWhatsAppCore();
+async function assertWhatsAppReady() {
+  await loadWhatsAppCore();
   const missing = [];
   if (!makeWASocket) missing.push('socket');
   if (!useMultiFileAuthState) missing.push('auth');
@@ -147,6 +147,15 @@ function moduleCheck(name, loader) {
   }
 }
 
+async function asyncModuleCheck(name, loader) {
+  try {
+    const loaded = await loader();
+    return { ok: true, available: !!loaded };
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) };
+  }
+}
+
 server = http.createServer((req, res) => {
   if (!app) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -177,7 +186,7 @@ server.listen(PORT, '0.0.0.0', () => {
     console.error('⚠️ Unhandled rejection (kept alive):', reason?.message || reason);
   });
 
-  setTimeout(() => {
+  setTimeout(async () => {
     const express = require('express');
     app = express();
 
@@ -262,7 +271,7 @@ server.listen(PORT, '0.0.0.0', () => {
     });
 
     try {
-      loadWhatsAppCore();
+      await loadWhatsAppCore();
       if (!makeWASocket || !useMultiFileAuthState || !makeCacheableSignalKeyStore || !Browsers) {
         throw whatsAppLoadError || new Error('Baileys exports missing after load');
       }
@@ -596,7 +605,7 @@ app.get('/api/diagnostics/railway', async (req, res) => {
         baileysDelay: !!baileysDelay
       },
       require: {
-        baileys: moduleCheck('@whiskeysockets/baileys', () => require('@whiskeysockets/baileys')),
+        baileys: { ok: false, available: false, pending: true },
         qrcode: moduleCheck('qrcode', () => require('qrcode')),
         pino: moduleCheck('pino', () => require('pino')),
         phoneNumber: moduleCheck('awesome-phonenumber', () => require('awesome-phonenumber')),
@@ -617,6 +626,21 @@ app.get('/api/diagnostics/railway', async (req, res) => {
   };
 
   try {
+    report.modules.require.baileys = await asyncModuleCheck('@whiskeysockets/baileys', () => import('@whiskeysockets/baileys'));
+    await loadWhatsAppCore();
+    report.modules.inMemory.loadError = whatsAppLoadError ? errorMessage(whatsAppLoadError) : null;
+    report.modules.inMemory.pino = !!pino;
+    report.modules.inMemory.boom = !!Boom;
+    report.modules.inMemory.makeWASocket = !!makeWASocket;
+    report.modules.inMemory.useMultiFileAuthState = !!useMultiFileAuthState;
+    report.modules.inMemory.makeCacheableSignalKeyStore = !!makeCacheableSignalKeyStore;
+    report.modules.inMemory.browsers = !!Browsers;
+    report.modules.inMemory.qrCode = !!QRCode;
+    report.modules.inMemory.phoneNumber = !!pn;
+    report.modules.inMemory.baileysDelay = !!baileysDelay;
+  } catch (_) {}
+
+  try {
     const fb = require('./firebase');
     report.firebase.initialized = !!fb.initialized;
     const firebaseRead = await withTimeout('Firebase read', 8000, async () => {
@@ -630,7 +654,7 @@ app.get('/api/diagnostics/railway', async (req, res) => {
   }
 
   try {
-    assertWhatsAppReady();
+    await assertWhatsAppReady();
     report.whatsapp.ready = true;
     report.whatsapp.version = await withTimeout('WhatsApp version fetch', 10000, getWAVersion);
   } catch (err) {
@@ -1014,7 +1038,7 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
   fs.mkdirSync(pairDir, { recursive: true });
 
   try {
-    assertWhatsAppReady();
+    await assertWhatsAppReady();
     let pairDeployed = false;
     let currentPairSock = null;
 
@@ -1155,7 +1179,7 @@ app.get('/api/qr', isAuthenticated, async (req, res) => {
   let responseSent = false;
 
   try {
-    assertWhatsAppReady();
+    await assertWhatsAppReady();
     const { state, saveCreds } = await useMultiFileAuthState(qrDir);
     const version = await getWAVersion();
 
