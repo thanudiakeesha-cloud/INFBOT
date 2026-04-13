@@ -1,0 +1,206 @@
+2026-04-13T04:03:17.615538630Z [inf]  ✅ Web server listening on 8080
+2026-04-13T04:03:17.615544363Z [inf]  🔥 Firebase initialized successfully
+2026-04-13T04:03:17.615551444Z [inf]  🔐 Firebase session store active
+2026-04-13T04:03:17.615556856Z [inf]  ✅ WhatsApp/bot core modules loaded
+2026-04-13T04:03:17.615561524Z [inf]  🔥 Loading data from Firebase...
+2026-04-13T04:03:17.615566686Z [inf]  🧹 Starting temp file cleanup system...
+2026-04-13T04:03:17.615571086Z [inf]  ✅ Cleanup system started (runs every 10 minutes)
+2026-04-13T04:03:17.615574941Z [inf]  ✅ All modules loaded successfully
+2026-04-13T04:03:17.615578629Z [inf]  ⏳ Waiting 8s before connecting sessions (letting old instance close)...
+2026-04-13T04:03:17.889139184Z [inf]  Starting Container
+2026-04-13T04:03:18.224159861Z [inf]  📥 Loaded 1 sessions from Firebase
+2026-04-13T04:03:18.617118181Z [inf]  📥 Loaded 9 dashboard users from Firebase
+2026-04-13T04:03:19.297364814Z [inf]  📥 Loaded 86 group settings from Firebase
+2026-04-13T04:03:19.656204902Z [inf]  ✅ Global settings loaded into cache
+2026-04-13T04:03:19.656212305Z [inf]  🔴 Firebase real-time listeners attached (live sync active)
+2026-04-13T04:03:25.265556995Z [inf]  💓 Self-ping keepalive started
+2026-04-13T04:03:25.265562005Z [inf]  🏥 Session health monitor started (checks every 5 min)
+2026-04-13T04:03:25.265565798Z [inf]  ♻️ Auto-reconnecting session: BOTBOY
+2026-04-13T04:03:32.028555839Z [inf]  Starting Container
+2026-04-13T04:03:32.758122074Z [inf]  ✅ Web server listening on 8080
+2026-04-13T04:03:32.758125960Z [inf]  🔥 Firebase initialized successfully
+2026-04-13T04:03:32.758130840Z [inf]  🔐 Firebase session store active
+2026-04-13T04:03:32.758134704Z [inf]  ✅ WhatsApp/bot core modules loaded
+2026-04-13T04:03:32.758138713Z [inf]  🔥 Loading data from Firebase...
+2026-04-13T04:03:32.758142560Z [inf]  🧹 Starting temp file cleanup system...
+2026-04-13T04:03:32.758146295Z [inf]  ✅ Cleanup system started (runs every 10 minutes)
+2026-04-13T04:03:32.758150123Z [inf]  ✅ All modules loaded successfully
+2026-04-13T04:03:32.758154315Z [inf]  ⏳ Waiting 8s before connecting sessions (letting old instance close)...
+2026-04-13T04:03:33.429154501Z [inf]  📥 Loaded 1 sessions from Firebase
+2026-04-13T04:03:33.777538329Z [inf]  📥 Loaded 9 dashboard users from Firebase
+2026-04-13T04:03:34.436830714Z [inf]  📥 Loaded 86 group settings from Firebase
+2026-04-13T04:03:34.906137853Z [inf]  ✅ Global settings loaded into cache
+2026-04-13T04:03:34.909905786Z [inf]  🔴 Firebase real-time listeners attached (live sync active)
+2026-04-13T04:03:40.435213669Z [inf]  💓 Self-ping keepalive started
+2026-04-13T04:03:40.435220670Z [inf]  🏥 Session health monitor started (checks every 5 min)
+2026-04-13T04:03:40.435225181Z [inf]  ♻️ Auto-reconnecting session: BOTBOY
+2026-04-13T04:03:48.891762320Z [err]  ❌ Firebase set error [sessions_web/V0FQUTJ5ZzZMWk5sQWhNdlNhajZGaDVIRU13ZUF0bjg]: set failed: value argument contains a function in property 'sessions_web.V0FQUTJ5ZzZMWk5sQWhNdlNhajZGaDVIRU13ZUF0bjg.session.cookie.serialize' with contents = function(name, val){
+2026-04-13T04:03:48.891767732Z [err]      return cookie.serialize(name, val, this.data);
+2026-04-13T04:03:48.891772516Z [err]    }
+2026-04-13T04:04:25.267954276Z [err]  ❌ Firebase set error [sessions_web/V0FQUTJ5ZzZMWk5sQWhNdlNhajZGaDVIRU13ZUF0bjg]: set failed: value argument contains a function in property 'sessions_web.V0FQUTJ5ZzZMWk5sQWhNdlNhajZGaDVIRU13ZUF0bjg.session.cookie.serialize' with contents = function(name, val){
+2026-04-13T04:04:25.267958706Z [err]      return cookie.serialize(name, val, this.data);
+2026-04-13T04:04:25.267962925Z [err]    }
+2026-04-13T04:04:25.267966885Z [inf]  🔑 Pair code for 94770612011 generated on attempt 1
+2026-04-13T04:05:35.397119627Z [inf]  ⚠️ Pair session pair_1776053056676_tn56yp socket closed before pairing completed (status: 515)
+2026-04-13T04:06:15.278121308Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 1, delay 5s)...
+2026-04-13T04:06:20.750030098Z [inf]  ⏰ Pair session pair_1776053056676_tn56yp timed out, cleaning up
+2026-04-13T04:06:28.646444991Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 1, delay 5s)...
+2026-04-13T04:08:31.279848352Z [inf]  🔍 Health monitor: session BOTBOY is offline — scheduling reconnect...
+2026-04-13T04:08:31.279854696Z [inf]  ♻️ Health monitor reconnecting: BOTBOY
+2026-04-13T04:08:49.003375451Z [inf]  🔍 Health monitor: session BOTBOY is offline — scheduling reconnect...
+2026-04-13T04:08:49.003388919Z [inf]  ♻️ Health monitor reconnecting: BOTBOY
+2026-04-13T04:09:01.430582936Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 2, delay 8s)...
+2026-04-13T04:09:08.753819647Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 2, delay 8s)...
+2026-04-13T04:11:12.407262882Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 3, delay 11s)...
+2026-04-13T04:11:28.791325618Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 3, delay 11s)...
+2026-04-13T04:11:42.414116648Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 4, delay 17s)...
+2026-04-13T04:11:58.801101032Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 4, delay 17s)...
+2026-04-13T04:13:32.624681190Z [inf]  🔍 Health monitor: session BOTBOY is offline — scheduling reconnect...
+2026-04-13T04:13:34.666905276Z [inf]  ♻️ Health monitor reconnecting: BOTBOY
+2026-04-13T04:13:48.594459311Z [inf]  🔍 Health monitor: session BOTBOY is offline — scheduling reconnect...
+2026-04-13T04:13:49.634157262Z [inf]  ♻️ Health monitor reconnecting: BOTBOY
+2026-04-13T04:14:04.608608579Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 5, delay 25s)...
+2026-04-13T04:14:29.647112333Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 5, delay 25s)...
+2026-04-13T04:14:44.743801075Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 6, delay 38s)...
+2026-04-13T04:14:47.224934704Z [inf]  🔄 QR session qr_1776053668321_vepwaw disconnected (status: 515), retrying...
+2026-04-13T04:14:49.929074169Z [inf]  ✅ QR session qr_1776053668321_vepwaw connected on retry!
+2026-04-13T04:14:49.934522124Z [inf]  ✅ QR session auto-deployed as qr_94770612011_1776053689924
+2026-04-13T04:14:51.210182859Z [inf]  ✅ Session qr_94770612011_1776053689924 connected!
+2026-04-13T04:14:53.670933877Z [inf]  Closing session: SessionEntry {
+2026-04-13T04:14:53.670945937Z [inf]    _chains: {
+2026-04-13T04:14:53.670952788Z [inf]      'BUQZQhU/AaLeqhXUC5RPunS8XZwy0TT+8gwRrYOE1VZd': { chainKey: [Object], chainType: 2, messageKeys: [Object] },
+2026-04-13T04:14:53.670958254Z [inf]      'BZQB7eWEvqJnHzBJauqeQ1+0G0OoHUqmOCeZZKnpWtFC': { chainKey: [Object], chainType: 1, messageKeys: {} }
+2026-04-13T04:14:53.670964150Z [inf]    },
+2026-04-13T04:14:53.670970723Z [inf]    registrationId: 2119910922,
+2026-04-13T04:14:53.670976429Z [inf]    currentRatchet: {
+2026-04-13T04:14:53.670980998Z [inf]      ephemeralKeyPair: {
+2026-04-13T04:14:53.670985524Z [inf]        pubKey: <Buffer 05 94 01 ed e5 84 be a2 67 1f 30 49 6a ea 9e 43 5f b4 1b 43 a8 1d 4a a6 38 27 99 64 a9 e9 5a d1 42>,
+2026-04-13T04:14:53.670995189Z [inf]        privKey: <Buffer 88 ed 95 21 cd 78 64 67 4b a1 78 f3 31 bb a9 74 44 5a 17 83 ce fe 6b 5a 73 d4 44 24 4b d6 a0 44>
+2026-04-13T04:14:53.671000161Z [inf]      },
+2026-04-13T04:14:53.671004896Z [inf]      lastRemoteEphemeralKey: <Buffer 05 44 19 42 15 3f 01 a2 de aa 15 d4 0b 94 4f ba 74 bc 5d 9c 32 d1 34 fe f2 0c 11 ad 83 84 d5 56 5d>,
+2026-04-13T04:14:53.671009000Z [inf]      previousCounter: 0,
+2026-04-13T04:14:53.671013257Z [inf]      rootKey: <Buffer 59 a9 97 ec 58 7b 1e b2 ef c4 56 3f d1 02 16 ac 98 9a 3e a9 5d 9f 6a 10 72 f7 fe ba 1e 7e 8c 36>
+2026-04-13T04:14:53.671016643Z [inf]    },
+2026-04-13T04:14:53.671020921Z [inf]    indexInfo: {
+2026-04-13T04:14:53.671025126Z [inf]      baseKey: <Buffer 05 ab ec a3 6b f0 81 ad b6 71 70 e0 05 55 ea 9f 38 42 63 c5 5b 57 6f 8f c0 5b 59 f2 88 50 c3 08 00>,
+2026-04-13T04:14:53.671030303Z [inf]      baseKeyType: 2,
+2026-04-13T04:14:53.671033864Z [inf]      closed: -1,
+2026-04-13T04:14:53.671045208Z [inf]      used: 1776053691325,
+2026-04-13T04:14:53.671050053Z [inf]      created: 1776053691325,
+2026-04-13T04:14:53.671053713Z [inf]      remoteIdentityKey: <Buffer 05 ff 66 4e e7 bc d3 43 d3 14 bd e2 3d 7a 35 3a 16 99 fc 99 22 7d 81 38 bf 81 fa a5 7c b9 2b 23 09>
+2026-04-13T04:14:53.672211677Z [inf]    }
+2026-04-13T04:14:53.672219144Z [inf]  }
+2026-04-13T04:14:54.002849153Z [inf]  📲 Owner notified for new session qr_94770612011_1776053689924
+2026-04-13T04:14:54.211638203Z [inf]  Closing session: SessionEntry {
+2026-04-13T04:14:54.211646569Z [inf]    _chains: {
+2026-04-13T04:14:54.211651403Z [inf]      'BbGog2DqNscs1PdAVa+lfsKV0imI4ZfGdGFrIFU3+eMT': { chainKey: [Object], chainType: 1, messageKeys: {} }
+2026-04-13T04:14:54.211656191Z [inf]    },
+2026-04-13T04:14:54.211659826Z [inf]    registrationId: 141,
+2026-04-13T04:14:54.211663674Z [inf]    currentRatchet: {
+2026-04-13T04:14:54.211667064Z [inf]      ephemeralKeyPair: {
+2026-04-13T04:14:54.211670514Z [inf]        pubKey: <Buffer 05 b1 a8 83 60 ea 36 c7 2c d4 f7 40 55 af a5 7e c2 95 d2 29 88 e1 97 c6 74 61 6b 20 55 37 f9 e3 13>,
+2026-04-13T04:14:54.211675128Z [inf]        privKey: <Buffer 88 25 05 08 59 d2 7d f7 6b 53 0c 62 c6 e7 82 b4 ed 8a c5 2d 8b 76 04 9f e0 c2 86 d9 96 cc 9a 65>
+2026-04-13T04:14:54.211678861Z [inf]      },
+2026-04-13T04:14:54.211682508Z [inf]      lastRemoteEphemeralKey: <Buffer 05 5c b0 e6 6c ff 49 da f5 7a fe 08 e8 62 d0 4a c0 8e 19 bd da a0 3e b4 82 08 ac ff fd 29 cc af 52>,
+2026-04-13T04:14:54.211686050Z [inf]      previousCounter: 0,
+2026-04-13T04:14:54.211689733Z [inf]      rootKey: <Buffer 5e a9 0f 49 74 10 29 f4 c7 04 cd aa f9 91 1d 47 9b 23 db e5 7b 03 6f d1 6d 8a 55 18 ba bf 58 e8>
+2026-04-13T04:14:54.211693526Z [inf]    },
+2026-04-13T04:14:54.211696764Z [inf]    indexInfo: {
+2026-04-13T04:14:54.211700574Z [inf]      baseKey: <Buffer 05 7b 1e 4e 34 7e 26 39 96 13 b7 b7 33 8f c4 42 48 98 37 ed e1 ee 79 6c 75 45 65 0b 6c 42 e5 04 61>,
+2026-04-13T04:14:54.211703413Z [inf]      baseKeyType: 1,
+2026-04-13T04:14:54.211706892Z [inf]      closed: -1,
+2026-04-13T04:14:54.211710007Z [inf]      used: 1776053693937,
+2026-04-13T04:14:54.211713277Z [inf]      created: 1776053693937,
+2026-04-13T04:14:54.211716334Z [inf]      remoteIdentityKey: <Buffer 05 0a b1 96 c4 d3 7e 3d c5 c7 bd c9 6f 99 bb a4 6a 5f bb 69 8b e2 b0 ce d7 f3 c1 56 3a 9b c4 00 35>
+2026-04-13T04:14:54.211719620Z [inf]    },
+2026-04-13T04:14:54.212863923Z [inf]    pendingPreKey: {
+2026-04-13T04:14:54.212870721Z [inf]      signedKeyId: 1,
+2026-04-13T04:14:54.212875234Z [inf]      baseKey: <Buffer 05 7b 1e 4e 34 7e 26 39 96 13 b7 b7 33 8f c4 42 48 98 37 ed e1 ee 79 6c 75 45 65 0b 6c 42 e5 04 61>,
+2026-04-13T04:14:54.212879702Z [inf]      preKeyId: 1299
+2026-04-13T04:14:54.212883934Z [inf]    }
+2026-04-13T04:14:54.212887708Z [inf]  }
+2026-04-13T04:14:54.212891443Z [inf]  📖 Bot manual sent for session qr_94770612011_1776053689924
+2026-04-13T04:14:59.639846850Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 6, delay 38s)...
+2026-04-13T04:15:24.259884108Z [inf]  Interactive send: {
+2026-04-13T04:15:24.259888719Z [inf]    type: 'native_flow',
+2026-04-13T04:15:24.259891786Z [inf]    nodes: [ { tag: 'biz', attrs: {} } ],
+2026-04-13T04:15:24.259894996Z [inf]    private: true,
+2026-04-13T04:15:24.259898077Z [inf]    aimode: false
+2026-04-13T04:15:24.259901774Z [inf]  }
+2026-04-13T04:15:44.260168473Z [inf]  Interactive send: {
+2026-04-13T04:15:44.260171988Z [inf]    type: 'native_flow',
+2026-04-13T04:15:44.260175463Z [inf]    nodes: [ { tag: 'biz', attrs: {} } ],
+2026-04-13T04:15:44.260179553Z [inf]    private: true,
+2026-04-13T04:15:44.260183640Z [inf]    aimode: false
+2026-04-13T04:15:44.260187231Z [inf]  }
+2026-04-13T04:16:24.499268214Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 7, delay 57s)...
+2026-04-13T04:16:39.987403081Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 7, delay 57s)...
+2026-04-13T04:17:14.491698774Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 8, delay 85s)...
+2026-04-13T04:17:29.765241677Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 8, delay 85s)...
+2026-04-13T04:18:04.698288456Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 9, delay 120s)...
+2026-04-13T04:18:19.768704258Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 9, delay 120s)...
+2026-04-13T04:18:49.770439021Z [inf]  🔍 Health monitor: session qr_94770612011_1776053689924 is offline — scheduling reconnect...
+2026-04-13T04:18:49.770445180Z [inf]  ♻️ Health monitor reconnecting: qr_94770612011_1776053689924
+2026-04-13T04:18:49.770451303Z [inf]  ✅ Session qr_94770612011_1776053689924 connected!
+2026-04-13T04:18:52.033049594Z [inf]  📲 Owner notified for new session qr_94770612011_1776053689924
+2026-04-13T04:18:52.260575712Z [inf]      baseKey: <Buffer 05 3f 12 a2 51 61 f5 0b 13 13 03 1d 00 55 40 12 a0 cb 34 6b 99 fe 2c 61 3d d3 73 2c b9 c5 e4 62 34>,
+2026-04-13T04:18:52.260579154Z [inf]  Closing session: SessionEntry {
+2026-04-13T04:18:52.260588630Z [inf]      baseKeyType: 1,
+2026-04-13T04:18:52.260591136Z [inf]    _chains: {
+2026-04-13T04:18:52.260598709Z [inf]      'BUl+I2qgQOCPpTZHN0WXK9NTsSE+TNkJSZudsiheQEIB': { chainKey: [Object], chainType: 1, messageKeys: {} }
+2026-04-13T04:18:52.260599087Z [inf]      closed: -1,
+2026-04-13T04:18:52.260606010Z [inf]    },
+2026-04-13T04:18:52.260611645Z [inf]      used: 1776053932005,
+2026-04-13T04:18:52.260614252Z [inf]    registrationId: 141,
+2026-04-13T04:18:52.260620233Z [inf]      created: 1776053932005,
+2026-04-13T04:18:52.260622592Z [inf]    currentRatchet: {
+2026-04-13T04:18:52.260629754Z [inf]      remoteIdentityKey: <Buffer 05 0a b1 96 c4 d3 7e 3d c5 c7 bd c9 6f 99 bb a4 6a 5f bb 69 8b e2 b0 ce d7 f3 c1 56 3a 9b c4 00 35>
+2026-04-13T04:18:52.260630388Z [inf]      ephemeralKeyPair: {
+2026-04-13T04:18:52.260638145Z [inf]        pubKey: <Buffer 05 49 7e 23 6a a0 40 e0 8f a5 36 47 37 45 97 2b d3 53 b1 21 3e 4c d9 09 49 9b 9d b2 28 5e 40 42 01>,
+2026-04-13T04:18:52.260639001Z [inf]    },
+2026-04-13T04:18:52.260645999Z [inf]        privKey: <Buffer 78 96 ac 2b 27 fb 3c 5e 67 cb 9c 4c 0a ea fb 15 9d d8 49 af 36 bc 24 07 39 45 85 6a 1f 99 40 46>
+2026-04-13T04:18:52.260650368Z [inf]      },
+2026-04-13T04:18:52.260655218Z [inf]      lastRemoteEphemeralKey: <Buffer 05 5c b0 e6 6c ff 49 da f5 7a fe 08 e8 62 d0 4a c0 8e 19 bd da a0 3e b4 82 08 ac ff fd 29 cc af 52>,
+2026-04-13T04:18:52.260659523Z [inf]      previousCounter: 0,
+2026-04-13T04:18:52.260663916Z [inf]      rootKey: <Buffer 4a 4c cb 88 bb 53 c8 36 c4 74 bb 24 69 7e e1 a6 00 06 d4 c6 4e 2f 6d bd 21 d9 fc cf 6c 4d 51 8e>
+2026-04-13T04:18:52.260668433Z [inf]    },
+2026-04-13T04:18:52.260672381Z [inf]    indexInfo: {
+2026-04-13T04:18:52.261488400Z [inf]    pendingPreKey: {
+2026-04-13T04:18:52.261498003Z [inf]      signedKeyId: 1,
+2026-04-13T04:18:52.261504184Z [inf]      baseKey: <Buffer 05 3f 12 a2 51 61 f5 0b 13 13 03 1d 00 55 40 12 a0 cb 34 6b 99 fe 2c 61 3d d3 73 2c b9 c5 e4 62 34>,
+2026-04-13T04:18:52.261509756Z [inf]      preKeyId: 1295
+2026-04-13T04:18:52.261515713Z [inf]    }
+2026-04-13T04:18:52.261521597Z [inf]  }
+2026-04-13T04:18:52.276244516Z [inf]  📖 Bot manual sent for session qr_94770612011_1776053689924
+2026-04-13T04:18:54.781269223Z [inf]  🔄 Reconnecting session qr_94770612011_1776053689924 (Status: 440, attempt 1/8, delay 20s)...
+2026-04-13T04:19:12.275683169Z [inf]  🔄 Reconnecting session qr_94770612011_1776053689924 (Status: 440, attempt 1/8, delay 20s)...
+2026-04-13T04:19:14.713868612Z [inf]  ✅ Session qr_94770612011_1776053689924 connected!
+2026-04-13T04:19:32.276654772Z [inf]  ✅ Session qr_94770612011_1776053689924 connected!
+2026-04-13T04:19:34.706585862Z [inf]  🔄 Reconnecting session qr_94770612011_1776053689924 (Status: 440, attempt 2/8, delay 40s)...
+2026-04-13T04:19:39.830680937Z [inf]  🔄 Reconnecting session qr_94770612011_1776053689924 (Status: 440, attempt 2/8, delay 40s)...
+2026-04-13T04:19:41.830838308Z [err]  resolveImageHeader failed: Connection Closed
+2026-04-13T04:19:41.830844515Z [inf]  Interactive send: {
+2026-04-13T04:19:41.830850332Z [inf]    type: 'native_flow',
+2026-04-13T04:19:41.830856425Z [inf]    nodes: [ { tag: 'biz', attrs: {} } ],
+2026-04-13T04:19:41.830862841Z [inf]    private: true,
+2026-04-13T04:19:41.830868663Z [inf]    aimode: false
+2026-04-13T04:19:41.830874389Z [inf]  }
+2026-04-13T04:19:41.837693441Z [err]  Error executing command film3: Error: Connection Closed
+2026-04-13T04:19:41.837700143Z [err]      },
+2026-04-13T04:19:41.837705518Z [err]      at sendRawMessage (file:///app/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js:50:19)
+2026-04-13T04:19:41.837712626Z [err]      headers: {}
+2026-04-13T04:19:41.837720319Z [err]    }
+2026-04-13T04:19:41.837724530Z [err]      at sendNode (file:///app/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js:69:16)
+2026-04-13T04:19:41.837729718Z [err]  }
+2026-04-13T04:19:41.837733353Z [err]      at file:///app/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js:729:19
+2026-04-13T04:19:41.837739363Z [err]      at async file:///app/node_modules/@whiskeysockets/baileys/lib/Utils/auth-utils.js:220:36 {
+2026-04-13T04:19:41.837745190Z [err]    data: null,
+2026-04-13T04:19:41.837752653Z [err]    isBoom: true,
+2026-04-13T04:19:41.837759331Z [err]    isServer: false,
+2026-04-13T04:19:41.837766708Z [err]    output: {
+2026-04-13T04:19:41.837772857Z [err]      statusCode: 428,
+2026-04-13T04:19:41.837778470Z [err]      payload: {
+2026-04-13T04:19:41.837784465Z [err]        statusCode: 428,
+2026-04-13T04:19:41.837790301Z [err]        error: 'Precondition Required',
+2026-04-13T04:19:41.837796411Z [err]        message: 'Connection Closed'
+2026-04-13T04:19:54.708982577Z [inf]  🔄 Reconnecting session BOTBOY (Status: 408, attempt 10, delay 120s)...

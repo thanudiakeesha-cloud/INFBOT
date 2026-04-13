@@ -77,12 +77,23 @@ class FirebaseSessionStore extends Store {
       ? new Date(session.cookie.expires).getTime()
       : Date.now() + this.ttl * 1000;
 
-    const payload = { session, expires };
+    /* Strip functions (e.g. cookie.serialize) — Firebase cannot store them */
+    let safeSession;
+    try {
+      safeSession = JSON.parse(JSON.stringify(session));
+    } catch (e) {
+      safeSession = session;
+    }
+
+    const payload = { session: safeSession, expires };
     this._toCache(sid, session);
 
     fbSet(FB_PREFIX + this._cKey(sid), payload)
       .then(() => callback(null))
-      .catch(err => callback(err));
+      .catch(err => {
+        console.error(`❌ Firebase session set error [${sid}]:`, err.message);
+        callback(null); // don't crash the request over a session save failure
+      });
   }
 
   destroy(sid, callback) {
