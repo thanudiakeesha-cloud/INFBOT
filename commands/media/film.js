@@ -42,6 +42,90 @@ function getDirectPixeldrainUrl(url) {
   return `https://pixeldrain.com/api/file/${match[1]}?download`;
 }
 
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function renderProgressBar(percent) {
+  const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+  const width = 20;
+  const filled = Math.round((safePercent / 100) * width);
+  return `${"█".repeat(filled)}${"░".repeat(width - filled)} ${safePercent}%`;
+}
+
+function renderMovieProgress({ title, quality, size, percent, stage, downloadedBytes, totalBytes, startedAt }) {
+  const downloaded = formatBytes(downloadedBytes);
+  const total = formatBytes(totalBytes);
+  const sizeLine = downloaded && total ? `│ 📦 *Progress:* ${downloaded} / ${total}\n` : "";
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+  return (
+    `╭───〔 📥 *𝐌𝐎𝐕𝐈𝐄 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃* 〕───┈\n` +
+    `│\n` +
+    `│ 🎬 *Movie:* ${title}\n` +
+    `│ 📊 *Quality:* ${quality}\n` +
+    `│ 💾 *Size:* ${size}\n` +
+    sizeLine +
+    `│ ⏱️ *Time:* ${elapsedSeconds}s\n` +
+    `│ ⚙️ *Status:* ${stage}\n` +
+    `│ ${renderProgressBar(percent)}\n` +
+    `│\n` +
+    `╰──────────────────────┈\n` +
+    `_This message updates every second until the film appears in chat._`
+  );
+}
+
+async function sendLiveProgress(sock, chatId, quoted, initialState) {
+  let state = { startedAt: Date.now(), ...initialState };
+  let stopped = false;
+  let editing = false;
+  let lastText = "";
+  const message = await sock.sendMessage(chatId, { text: renderMovieProgress(state) }, { quoted });
+
+  const edit = async (force = false) => {
+    if (stopped || !message?.key) return;
+    if (editing) {
+      if (!force) return;
+      while (editing) await new Promise(resolve => setTimeout(resolve, 100));
+      if (stopped) return;
+    }
+    editing = true;
+    try {
+      const text = renderMovieProgress(state);
+      if (force || text !== lastText) {
+        lastText = text;
+        await sock.sendMessage(chatId, { text, edit: message.key });
+      }
+    } catch (e) {
+      console.error("Movie progress edit error:", e.message);
+    } finally {
+      editing = false;
+    }
+  };
+
+  lastText = renderMovieProgress(state);
+  const timer = setInterval(edit, 1000);
+
+  return {
+    update(nextState) {
+      state = { ...state, ...nextState };
+    },
+    async stop(finalState) {
+      state = { ...state, ...finalState };
+      clearInterval(timer);
+      await edit(true);
+      stopped = true;
+    }
+  };
+}
+
 // ─── Scrapers ─────────────────────────────────────────────────────────────────
 async function searchMovies(query) {
   const url = `${BASE_URL}/?s=${encodeURIComponent(query)}&post_type=movies`;
@@ -264,13 +348,32 @@ cmd({
   const fileName = `${movie.metadata.title.substring(0, 50)} - ${selectedLink.quality}.mp4`
     .replace(/[^\w\s.-]/gi, "");
 
-  await reply(`*⏳ Downloading "${movie.metadata.title}" (${selectedLink.quality} — ${selectedLink.size})...*\n_Please wait, large files take a few minutes._`);
-
   const tempPath = path.join("/tmp", `movie_${Date.now()}.mp4`);
+  const movieTitle = movie.metadata.title || "Selected Movie";
+  const progress = await sendLiveProgress(ranuxPro, from, mek, {
+    title: movieTitle,
+    quality: selectedLink.quality,
+    size: selectedLink.size,
+    percent: 0,
+    stage: "Starting download...",
+    downloadedBytes: 0,
+    totalBytes: 0
+  });
+
+  let uploadTimer = null;
 
   try {
-    // Stream download directly to disk (avoids memory buffering during download)
     const response = await axios({ method: "GET", url: directUrl, responseType: "stream", timeout: 0 });
+    const totalBytes = Number(response.headers["content-length"]) || 0;
+    let downloadedBytes = 0;
+    progress.update({ totalBytes, stage: "Downloading film..." });
+
+    response.data.on("data", chunk => {
+      downloadedBytes += chunk.length;
+      const percent = totalBytes ? Math.min(85, (downloadedBytes / totalBytes) * 85) : Math.min(85, 5 + (downloadedBytes / (1024 * 1024 * 1024)) * 80);
+      progress.update({ percent, downloadedBytes, totalBytes, stage: "Downloading film..." });
+    });
+
     await new Promise((resolve, reject) => {
       const writer = fs.createWriteStream(tempPath);
       response.data.pipe(writer);
@@ -278,9 +381,14 @@ cmd({
       writer.on("error", reject);
     });
 
-    await reply(`*📤 Download complete! Sending to chat now...*`);
+    progress.update({ percent: 90, downloadedBytes, totalBytes, stage: "Download complete. Uploading to chat..." });
 
-    // Read from disk and send as document (UPLOAD_TIMEOUT patched to 30 min above)
+    let uploadPercent = 90;
+    uploadTimer = setInterval(() => {
+      uploadPercent = Math.min(99, uploadPercent + 1);
+      progress.update({ percent: uploadPercent, stage: "Uploading film to chat..." });
+    }, 1000);
+
     const buffer = fs.readFileSync(tempPath);
     await ranuxPro.sendMessage(from, {
       document: buffer,
@@ -288,9 +396,14 @@ cmd({
       fileName,
       caption
     }, { quoted: mek });
+    clearInterval(uploadTimer);
+    uploadTimer = null;
+    await progress.stop({ percent: 100, stage: "Film sent to chat." });
 
   } catch (error) {
     console.error("Movie Send Error:", error.message);
+    if (uploadTimer) clearInterval(uploadTimer);
+    await progress.stop({ stage: "Failed to send film.", percent: 0 });
     reply(`*❌ Failed to send movie:* ${error.message || "An unknown error occurred."}`);
   } finally {
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
