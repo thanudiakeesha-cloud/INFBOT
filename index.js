@@ -1005,22 +1005,24 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
     num = cleaned;
   }
 
-  // Prevent duplicate sessions for the same phone number
+  // Auto-remove any existing session for the same phone number (only one session per number allowed)
   try {
     const existingSessions = await database.getAllSessions();
-    const duplicate = Object.entries(existingSessions).find(([sid, sdata]) => {
-      // Check if session ID contains the number (paired sessions are named paired_<num>_<ts>)
+    const duplicates = Object.entries(existingSessions).filter(([sid, sdata]) => {
       if (sid.includes(`paired_${num}_`) || sid.includes(`_${num}_`)) return true;
-      // Also check ownerNumber match
       const ownerNum = (sdata.ownerNumber || '').replace(/[^0-9]/g, '');
       return ownerNum === num;
     });
-    if (duplicate) {
-      const [dupId] = duplicate;
-      return res.status(400).json({
-        success: false,
-        message: `A bot for number +${num} already exists in the dashboard (${dupId.substring(0, 30)}…). Remove it first before adding a new one.`
-      });
+    for (const [dupId] of duplicates) {
+      try {
+        if (activeSessions.has(dupId)) {
+          const oldSock = activeSessions.get(dupId);
+          try { oldSock.end(); } catch (_) {}
+          activeSessions.delete(dupId);
+        }
+        await database.deleteSession(dupId);
+        console.log(`🗑️ Auto-removed old session ${dupId} for number +${num} (replaced by new pairing)`);
+      } catch (_) {}
     }
   } catch (_) { /* DB read failed — allow pairing to continue */ }
 
@@ -2218,16 +2220,44 @@ function startSelfPing() {
 }
 
 // ── Session Health Monitor: reconnects sessions that silently dropped ─────────
+const sessionOfflineSince = new Map(); // tracks when each session first went offline
+const OFFLINE_AUTO_DELETE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 async function startSessionHealthMonitor() {
   const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // every 5 minutes
   setInterval(async () => {
     try {
       const sessions = await database.getAllSessions();
       for (const id of Object.keys(sessions)) {
-        if (activeSessions.has(id)) continue; // already online
+        if (activeSessions.has(id)) {
+          sessionOfflineSince.delete(id); // back online — clear offline timer
+          continue;
+        }
         if (reconnectingSet.has(id)) continue; // already scheduled for reconnect
-        if (sessions[id]?.paused) continue;    // auto-paused after too many failures — skip
-        // Session exists in DB but is not in activeSessions — it silently dropped
+
+        // Auto-delete paused sessions (exceeded max retry count — will never reconnect)
+        if (sessions[id]?.paused) {
+          console.log(`🗑️ Health monitor: auto-deleting permanently offline (paused) session ${id}`);
+          try { await database.deleteSession(id); } catch (_) {}
+          sessionOfflineSince.delete(id);
+          continue;
+        }
+
+        // Track how long this session has been offline
+        if (!sessionOfflineSince.has(id)) {
+          sessionOfflineSince.set(id, Date.now());
+        }
+        const offlineMs = Date.now() - sessionOfflineSince.get(id);
+
+        // Auto-delete sessions offline for more than 24 hours
+        if (offlineMs > OFFLINE_AUTO_DELETE_MS) {
+          console.log(`🗑️ Health monitor: auto-deleting session ${id} offline for ${Math.round(offlineMs / 3600000)}h`);
+          try { await database.deleteSession(id); } catch (_) {}
+          sessionOfflineSince.delete(id);
+          continue;
+        }
+
+        // Session exists in DB but is not in activeSessions — schedule reconnect
         console.log(`🔍 Health monitor: session ${id} is offline — scheduling reconnect...`);
         reconnectingSet.add(id);
         setTimeout(() => {
