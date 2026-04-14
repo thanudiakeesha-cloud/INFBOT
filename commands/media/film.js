@@ -266,14 +266,14 @@ async function sendSplitMovieParts(sock, chatId, quoted, sourcePath, baseFileNam
       }, 1000);
 
       await sock.sendMessage(chatId, {
-        document: { url: partPath },
-        mimetype: "application/octet-stream",
+        video: { url: partPath },
+        mimetype: "video/mp4",
         fileName: partFileName,
         caption:
           `${baseCaption}\n\n` +
           `📦 *Part:* ${partNumber}/${partCount}\n` +
           `📏 *Part size:* ${formatBytes(end - start + 1)}\n\n` +
-          `_Download all parts and join them in order._`
+          `⚠️ _Each part is a fragment — download all ${partCount} parts and join them to watch the full movie._`
       }, { quoted });
 
       clearInterval(uploadTimer);
@@ -674,7 +674,7 @@ cmd({
       }, 1000);
 
       await ranuxPro.sendMessage(from, {
-        document: { url: tempPath },
+        video: { url: tempPath },
         mimetype: "video/mp4",
         fileName,
         caption
