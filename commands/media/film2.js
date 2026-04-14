@@ -933,6 +933,21 @@ async function getMovieDetails2(movieUrl) {
   return { title, thumbnail, downloadOptions };
 }
 
+// ─── Link Priority (higher = try first) ───────────────────────────────────────
+function getLinkPriority(url) {
+  if (!url) return 0;
+  if (url.includes("pixeldrain.com")) return 10;
+  if (url.includes("mediafire.com")) return 9;
+  if (url.includes("drive.google.com")) return 8;
+  if (/\.(mp4|mkv|avi|mov|webm)(\?|$)/i.test(url)) return 8;
+  if (url.includes("tinyurl.com") || url.includes("bit.ly") || url.includes("rb.gy") || url.includes("t.ly")) return 6;
+  if (url.includes("ouo.io") || url.includes("ouo.press")) return 5;
+  if (url.includes("1fichier.com")) return 4;
+  if (url.includes("mega.nz")) return 3;
+  // JS-heavy hosts — try last
+  return 2;
+}
+
 // ─── Download Engine ──────────────────────────────────────────────────────────
 async function executeMovieDownload2(task) {
   const { sock, from, mek, sender, selectedOption, movie } = task;
@@ -946,7 +961,7 @@ async function executeMovieDownload2(task) {
     size: displaySize,
     downloadPercent: 0,
     uploadPercent: 0,
-    stage: "Resolving download link...",
+    stage: "Auto-selecting best server...",
     downloadedBytes: 0,
     totalBytes: 0,
     speedBytesPerSecond: 0
@@ -956,12 +971,14 @@ async function executeMovieDownload2(task) {
   global.activeMovieDownloads2.add(sender);
 
   try {
-    // Try each link in order — resolve AND download, moving to next if any step fails
+    // Sort links by reliability so the best server is tried first (mirrors film.js logic)
+    const sortedLinks = [...selectedOption.links].sort((a, b) => getLinkPriority(b) - getLinkPriority(a));
+
     let downloadedBytes, totalBytes;
     let downloadSucceeded = false;
     const triedLinks = [];
 
-    for (const rawLink of selectedOption.links) {
+    for (const rawLink of sortedLinks) {
       const label = getHostLabel(rawLink);
       triedLinks.push(rawLink);
 
