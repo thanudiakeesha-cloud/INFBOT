@@ -570,7 +570,7 @@ module.exports = {
 
   deleteSession: async (id) => {
     delete sessionsCache[id];
-    firebaseRemove(`sessions/${sanitizeKey(id)}`);
+    await fb.fbRemove(`sessions/${sanitizeKey(id)}`).catch(() => {});
     try { db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id); } catch {}
     return true;
   },

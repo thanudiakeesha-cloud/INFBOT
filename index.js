@@ -486,7 +486,15 @@ async function connectSession(id, sessionData) {
 
       if (isLoggedOut || isDeleted) {
         activeSessions.delete(id);
-        console.log(`❌ Session ${id} stopped (${isLoggedOut ? 'Logged out' : 'Deleted'})`);
+        reconnectingSet.delete(id);
+        console.log(`❌ Session ${id} stopped (${isLoggedOut ? 'Logged out' : 'Deleted'}) — removing from database`);
+        // Auto-delete from Firebase so it doesn't show as a dead offline bot
+        try { await database.deleteSession(id); } catch (_) {}
+        // Clean up local session folder
+        if (sessionData.folder) {
+          const folderPath = path.join(__dirname, 'session', sessionData.folder);
+          safeRemoveDir(folderPath);
+        }
       } else if (isConnectionReplaced) {
         // 440 = another server/device is already holding this session — step aside
         activeSessions.delete(id);
@@ -902,14 +910,20 @@ app.post('/api/session/delete', isAuthenticated, async (req, res) => {
       sock.ev.removeAllListeners('connection.update');
       sock.ev.removeAllListeners('messages.upsert');
       sock.ev.removeAllListeners('creds.update');
-      sock.end();
+      try { sock.end(); } catch (_) {}
       activeSessions.delete(sessionId);
     }
+    reconnectingSet.delete(sessionId);
 
-    if (sessionData) {
-      await database.deleteSession(sessionId);
+    // Always delete from Firebase + SQLite, even if sessionData lookup failed
+    await database.deleteSession(sessionId);
+
+    // Clean up local session folder
+    if (sessionData?.folder) {
+      safeRemoveDir(path.join(__dirname, 'session', sessionData.folder));
     }
 
+    console.log(`🗑️ Session ${sessionId} deleted from dashboard`);
     res.json({ success: true });
   } catch (error) {
     res.status(500).send(error.message);
@@ -2156,11 +2170,17 @@ async function initAllSessions() {
     // Wait for Firebase to finish loading before starting sessions
     await database.ready();
     const sessions = await database.getAllSessions();
+
+    // Startup cleanup: immediately delete paused/dead sessions
     for (const id in sessions) {
       if (sessions[id]?.paused) {
-        console.log(`⏭️ Skipping paused session on startup: ${id}`);
-        continue;
+        console.log(`🗑️ Startup cleanup: deleting permanently offline session ${id}`);
+        try { await database.deleteSession(id); } catch (_) {}
+        delete sessions[id];
       }
+    }
+
+    for (const id in sessions) {
       console.log(`♻️ Auto-reconnecting session: ${id}`);
       await connectSession(id, sessions[id]);
     }
