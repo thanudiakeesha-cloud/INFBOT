@@ -1093,8 +1093,35 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
           console.log(`❌ Pair session ${pairId} logged out, cleaning up`);
           pairSessions.delete(pairId);
           safeRemoveDir(pairDir);
-        } else {
-          console.log(`⚠️ Pair session ${pairId} socket closed before pairing completed (status: ${statusCode})`);
+        } else if (pairSessions.has(pairId)) {
+          console.log(`🔄 Pair session ${pairId} socket closed (status: ${statusCode}), auto-reconnecting...`);
+          setTimeout(async () => {
+            if (!pairSessions.has(pairId) || pairDeployed) return;
+            try {
+              endTempSocket(sock);
+              const { state: rs, saveCreds: rsc } = await useMultiFileAuthState(pairDir);
+              const rv = await getWAVersion();
+              const retrySock = makeWASocket({
+                version: rv,
+                auth: { creds: rs.creds, keys: makeCacheableSignalKeyStore(rs.keys, tempBaileysLogger()) },
+                printQRInTerminal: false,
+                logger: tempBaileysLogger(),
+                browser: tempBrowser(),
+                markOnlineOnConnect: false,
+                generateHighQualityLinkPreview: false,
+                defaultQueryTimeoutMs: 90000,
+                connectTimeoutMs: 90000,
+                keepAliveIntervalMs: 30000,
+              });
+              pairSessions.set(pairId, retrySock);
+              retrySock.ev.on('creds.update', rsc);
+              attachPairHandlers(retrySock);
+              currentPairSock = retrySock;
+              console.log(`✅ Pair session ${pairId} reconnected, waiting for user to enter code...`);
+            } catch (e) {
+              console.error(`Failed to reconnect pair session ${pairId}:`, e.message);
+            }
+          }, 2000);
         }
       }
     });
