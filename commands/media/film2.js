@@ -8,10 +8,21 @@ global.pendingMovie2 = global.pendingMovie2 || {};
 
 // Config
 const BASE_URL = "https://baiscopedownloads.link";
-const PROXY = "https://api.codetabs.com/v1/proxy?quest=";
 const LOGO_URL = "https://files.catbox.moe/2jt3ln.png";
 
-// Download hosts priority order for display
+// Only codetabs reliably bypasses Cloudflare protection for this site
+const PROXY_POOL = [
+  { build: url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` },
+  { build: url => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}` },
+];
+const proxyCooldown2 = new Array(PROXY_POOL.length).fill(0);
+const PROXY_COOLDOWN_MS = 90 * 1000;
+
+// 5-minute response cache to reduce proxy load
+const proxyCache2 = new Map();
+const PROXY_CACHE_TTL = 5 * 60 * 1000;
+
+// Download host labels for display
 const HOST_LABELS = {
   "usersdrive": "🟢 UsersDrive",
   "dgdrive": "🔵 DGDrive",
@@ -27,17 +38,66 @@ const HOST_LABELS = {
 const QUALITY_ORDER = { "4K": 5, "2160p": 5, "1080p": 4, "720p": 3, "480p": 2 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-async function proxyFetch(url, retries = 3) {
+async function proxyFetch2(url, retries = 3) {
+  // Return cached result if still fresh
+  const cached = proxyCache2.get(url);
+  if (cached && Date.now() < cached.expiry) {
+    return cached.response;
+  }
+
   let lastError;
-  for (let attempt = 1; attempt <= retries; attempt++) {
+  const now = () => Date.now();
+  let realAttempts = 0;
+  let proxySkips = 0;
+
+  while (realAttempts < retries) {
+    // Pick the first proxy not currently in cooldown
+    let proxyIndex = proxyCooldown2.findIndex(until => now() >= until);
+    if (proxyIndex === -1) {
+      proxyIndex = proxyCooldown2.indexOf(Math.min(...proxyCooldown2));
+      const wait = Math.max(0, proxyCooldown2[proxyIndex] - now());
+      console.warn(`[film2] All proxies cooling down — waiting ${Math.ceil(wait / 1000)}s...`);
+      await new Promise(r => setTimeout(r, wait));
+    }
+
+    const proxy = PROXY_POOL[proxyIndex];
     try {
-      return await axios.get(PROXY + encodeURIComponent(url), {
-        timeout: 25000,
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+      const response = await axios.get(proxy.build(url), {
+        timeout: 30000,
+        maxRedirects: 5,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9"
+        },
+        validateStatus: () => true,
+        decompress: true
       });
+
+      if (response.status === 429 || response.status === 403) {
+        proxyCooldown2[proxyIndex] = now() + PROXY_COOLDOWN_MS;
+        console.warn(`[film2] Proxy #${proxyIndex} returned ${response.status} — cooling down ${PROXY_COOLDOWN_MS / 1000}s`);
+        lastError = new Error(`Proxy returned ${response.status} — please try again in a moment.`);
+        proxySkips++;
+        if (proxySkips > PROXY_POOL.length) {
+          realAttempts++;
+          proxySkips = 0;
+        }
+        continue;
+      }
+
+      if (response.status >= 400) {
+        throw new Error(`Proxy returned HTTP ${response.status}`);
+      }
+
+      proxyCache2.set(url, { response, expiry: now() + PROXY_CACHE_TTL });
+      return response;
     } catch (err) {
       lastError = err;
-      if (attempt < retries) await new Promise(r => setTimeout(r, 1500 * attempt));
+      realAttempts++;
+      if (realAttempts < retries) {
+        await new Promise(r => setTimeout(r, 2000 * realAttempts));
+      }
     }
   }
   throw lastError;
@@ -62,7 +122,7 @@ function isExternalDownloadLink(url) {
 
 // ─── Scrapers ─────────────────────────────────────────────────────────────────
 async function searchMovies2(query) {
-  const { data } = await proxyFetch(`${BASE_URL}/?s=${encodeURIComponent(query)}`);
+  const { data } = await proxyFetch2(`${BASE_URL}/?s=${encodeURIComponent(query)}`);
   const $ = cheerio.load(data);
   const results = [];
 
@@ -85,15 +145,13 @@ async function searchMovies2(query) {
 }
 
 async function getMovieDetails2(movieUrl) {
-  const { data } = await proxyFetch(movieUrl);
+  const { data } = await proxyFetch2(movieUrl);
   const $ = cheerio.load(data);
 
-  // Title
   const title = $("h1.elementor-heading-title").first().text().trim()
     || $("h1").first().text().trim()
     || $("title").text().replace(/[–\-].*$/, "").trim();
 
-  // Thumbnail - try several selectors
   const thumbnail =
     $(".elementor-widget-theme-post-featured-image img").first().attr("src")
     || $(".wp-post-image").attr("src")
@@ -101,8 +159,6 @@ async function getMovieDetails2(movieUrl) {
     || $("article img").first().attr("src")
     || "";
 
-  // Parse download section: quality label paragraphs + download link paragraphs
-  // Pattern: paragraph with "| ... | 720p | 2GB |" followed by paragraph(s) with external links
   const downloadOptions = [];
   let currentQuality = null;
   let currentSize = null;
@@ -115,13 +171,11 @@ async function getMovieDetails2(movieUrl) {
     const text = $c(el).text().replace(/\s+/g, " ").trim();
     const elLinks = [];
 
-    // Extract all external links from this element
     $c(el).find("a[href]").each((j, a) => {
       const href = $c(a).attr("href");
       if (isExternalDownloadLink(href)) elLinks.push(href);
     });
 
-    // Check if this element is a quality label
     const qualityMatch = text.match(/(?:720p|1080p|480p|4K|2160p)/i);
     const sizeMatch = text.match(/([\d.]+)\s*(GB|MB)/i);
     const isQualityLabel = qualityMatch && text.includes("|") && text.length < 150;
@@ -131,13 +185,11 @@ async function getMovieDetails2(movieUrl) {
       currentSize = sizeMatch ? `${sizeMatch[1]} ${sizeMatch[2].toUpperCase()}` : "N/A";
     }
 
-    // If we found external links and have a quality context, record them
     if (elLinks.length > 0 && currentQuality) {
       const existing = downloadOptions.find(
         d => d.quality === currentQuality && d.size === currentSize
       );
       if (existing) {
-        // Add new unique links
         for (const link of elLinks) {
           if (!existing.links.includes(link)) existing.links.push(link);
         }
@@ -147,7 +199,6 @@ async function getMovieDetails2(movieUrl) {
     }
   });
 
-  // Sort by quality
   downloadOptions.sort((a, b) => (QUALITY_ORDER[b.quality] || 0) - (QUALITY_ORDER[a.quality] || 0));
 
   return { title, thumbnail, downloadOptions };
@@ -326,8 +377,7 @@ cmd({
   const selected = movie.downloadOptions[index];
   delete global.pendingMovie2[sender];
 
-  // Build a clean link list
-  const linkLines = selected.links.map((url, i) =>
+  const linkLines = selected.links.map(url =>
     `${getHostLabel(url)}\n${url}`
   ).join("\n\n");
 
@@ -358,3 +408,11 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000);
+
+// Periodically clean expired cache entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of proxyCache2.entries()) {
+    if (now >= val.expiry) proxyCache2.delete(key);
+  }
+}, 10 * 60 * 1000);
