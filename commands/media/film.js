@@ -209,7 +209,7 @@ async function downloadMovieToFile(url, tempPath, onProgress) {
     url,
     responseType: "stream",
     timeout: 0,
-    maxRedirects: 5,
+    maxRedirects: 10,
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
     decompress: false,
@@ -219,9 +219,11 @@ async function downloadMovieToFile(url, tempPath, onProgress) {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       "Accept": "*/*",
       "Accept-Encoding": "identity",
-      "Connection": "keep-alive"
+      "Connection": "keep-alive",
+      "Referer": "https://pixeldrain.com",
+      "Origin": "https://pixeldrain.com"
     },
-    validateStatus: status => status >= 200 && status < 300
+    validateStatus: status => status >= 200 && status < 400
   });
 
   const totalBytes = Number(response.headers["content-length"]) || 0;
@@ -229,33 +231,45 @@ async function downloadMovieToFile(url, tempPath, onProgress) {
   let downloadedBytes = 0;
   let lastProgressAt = 0;
 
-  response.data.on("data", chunk => {
-    downloadedBytes += chunk.length;
-    const now = Date.now();
-    if (now - lastProgressAt < 250 && downloadedBytes !== totalBytes) return;
-    lastProgressAt = now;
-    const seconds = Math.max(1, (now - startedAt) / 1000);
-    const percent = totalBytes
-      ? Math.min(85, (downloadedBytes / totalBytes) * 85)
-      : Math.min(85, 5 + (downloadedBytes / (1024 * 1024 * 1024)) * 80);
-    onProgress({
-      downloadPercent: percent,
-      downloadedBytes,
-      totalBytes,
-      speedBytesPerSecond: downloadedBytes / seconds
-    });
+  const { Transform } = require("stream");
+  const progressTransform = new Transform({
+    highWaterMark: DOWNLOAD_HIGH_WATER_MARK,
+    transform(chunk, encoding, callback) {
+      downloadedBytes += chunk.length;
+      const now = Date.now();
+      if (now - lastProgressAt >= 250 || downloadedBytes === totalBytes) {
+        lastProgressAt = now;
+        const seconds = Math.max(1, (now - startedAt) / 1000);
+        const percent = totalBytes
+          ? Math.min(85, (downloadedBytes / totalBytes) * 85)
+          : Math.min(85, 5 + (downloadedBytes / (1024 * 1024 * 1024)) * 80);
+        onProgress({
+          downloadPercent: percent,
+          downloadedBytes,
+          totalBytes,
+          speedBytesPerSecond: downloadedBytes / seconds
+        });
+      }
+      callback(null, chunk);
+    }
   });
 
   await pipeline(
     response.data,
+    progressTransform,
     fs.createWriteStream(tempPath, { highWaterMark: DOWNLOAD_HIGH_WATER_MARK })
   );
 
-  if (totalBytes && downloadedBytes !== totalBytes) {
+  const savedSize = fs.existsSync(tempPath) ? fs.statSync(tempPath).size : 0;
+  if (!savedSize) {
+    throw new Error("Downloaded file is empty. The link may be expired or the file was removed.");
+  }
+
+  if (totalBytes && Math.abs(downloadedBytes - totalBytes) > 1024) {
     throw new Error(`Incomplete download (${formatBytes(downloadedBytes)} of ${formatBytes(totalBytes)})`);
   }
 
-  return { downloadedBytes, totalBytes };
+  return { downloadedBytes: savedSize, totalBytes: totalBytes || savedSize };
 }
 
 async function copyRangeToPart(sourcePath, partPath, start, end) {
@@ -313,8 +327,9 @@ async function sendSplitMovieParts(sock, chatId, quoted, sourcePath, baseFileNam
         });
       }, 1000);
 
+      const partBuffer = fs.readFileSync(partPath);
       await sock.sendMessage(chatId, {
-        document: { url: partPath },
+        document: partBuffer,
         mimetype: "application/octet-stream",
         fileName: partFileName,
         caption:
@@ -715,42 +730,56 @@ cmd({
 
       progress.update({ downloadPercent: 100, uploadPercent: 0, stage: `Splitting into ${partCount} parts...` });
 
-      const partPaths = await splitVideoWithFfmpeg(tempPath, partCount, movie.metadata.title);
-
-      await ranuxPro.sendMessage(from, {
-        text:
-          `╭─────────────────────────╮\n` +
-          `│  🎬 *${movie.metadata.title}*\n` +
-          `│  📦 Sending in *${partCount} parts*\n` +
-          `│  📥 Tap each part to download\n` +
-          `│  ▶️  Opens in your video player\n` +
-          `╰─────────────────────────╯`
-      }, { quoted: mek });
-
-      for (let i = 0; i < partPaths.length; i++) {
-        const partNum = i + 1;
-        let uploadPercent = 0;
-        uploadTimer = setInterval(() => {
-          uploadPercent = Math.min(95, uploadPercent + 3);
-          progress.update({ uploadPercent, stage: `Uploading part ${partNum}/${partCount}...` });
-        }, 1000);
-
-        await ranuxPro.sendMessage(from, {
-          document: { url: partPaths[i] },
-          mimetype: "video/mp4",
-          fileName: `${movie.metadata.title} - Part ${partNum} of ${partCount}.mp4`,
-          caption:
-            `${caption}\n\n` +
-            `📥 *Part ${partNum} of ${partCount}* — tap to download, then play`
-        }, { quoted: mek });
-
-        clearInterval(uploadTimer);
-        uploadTimer = null;
-
-        if (fs.existsSync(partPaths[i])) fs.unlinkSync(partPaths[i]);
+      let partPaths = [];
+      let usedFfmpeg = false;
+      try {
+        partPaths = await splitVideoWithFfmpeg(tempPath, partCount, movie.metadata.title);
+        usedFfmpeg = true;
+      } catch (ffmpegErr) {
+        console.error("ffmpeg split failed, falling back to byte-split:", ffmpegErr.message);
+        usedFfmpeg = false;
       }
 
-      await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: `All ${partCount} parts sent! 🍿` });
+      if (usedFfmpeg && partPaths.length) {
+        await ranuxPro.sendMessage(from, {
+          text:
+            `╭─────────────────────────╮\n` +
+            `│  🎬 *${movie.metadata.title}*\n` +
+            `│  📦 Sending in *${partCount} parts*\n` +
+            `│  📥 Tap each part to download\n` +
+            `│  ▶️  Opens in your video player\n` +
+            `╰─────────────────────────╯`
+        }, { quoted: mek });
+
+        for (let i = 0; i < partPaths.length; i++) {
+          const partNum = i + 1;
+          let uploadPercent = 0;
+          uploadTimer = setInterval(() => {
+            uploadPercent = Math.min(95, uploadPercent + 3);
+            progress.update({ uploadPercent, stage: `Uploading part ${partNum}/${partCount}...` });
+          }, 1000);
+
+          const partBuffer = fs.readFileSync(partPaths[i]);
+          await ranuxPro.sendMessage(from, {
+            document: partBuffer,
+            mimetype: "video/mp4",
+            fileName: `${movie.metadata.title} - Part ${partNum} of ${partCount}.mp4`,
+            caption:
+              `${caption}\n\n` +
+              `📥 *Part ${partNum} of ${partCount}* — tap to download, then play`
+          }, { quoted: mek });
+
+          clearInterval(uploadTimer);
+          uploadTimer = null;
+
+          if (fs.existsSync(partPaths[i])) fs.unlinkSync(partPaths[i]);
+        }
+
+        await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: `All ${partCount} parts sent! 🍿` });
+      } else {
+        await sendSplitMovieParts(ranuxPro, from, mek, tempPath, fileName.replace(".mp4", ""), caption, savedSize, progress, MOVIE_UPLOAD_MAX_BYTES);
+        await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: `All parts sent! 🍿` });
+      }
 
     } else {
       let uploadPercent = 0;
@@ -759,8 +788,9 @@ cmd({
         progress.update({ uploadPercent, stage: "Uploading film to chat..." });
       }, 1000);
 
+      const videoBuffer = fs.readFileSync(tempPath);
       await ranuxPro.sendMessage(from, {
-        video: { url: tempPath },
+        video: videoBuffer,
         mimetype: "video/mp4",
         fileName,
         caption
