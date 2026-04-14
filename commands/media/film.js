@@ -6,6 +6,9 @@ const path = require("path");
 const http = require("http");
 const https = require("https");
 const { pipeline } = require("stream/promises");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
+const execFileAsync = promisify(execFile);
 const { sendBtn, btn } = require("../../utils/sendBtn");
 
 // Patch Baileys upload timeout from 30s → 30 minutes so large files can upload
@@ -164,6 +167,40 @@ function buildDirectLinkMessage({ title, quality, size, link, directUrl, reason 
     `🌐 *Page:* ${link}\n\n` +
     `⬇️ *Direct download:*\n${directUrl}`
   );
+}
+
+async function getVideoDuration(filePath) {
+  const { stdout } = await execFileAsync("ffprobe", [
+    "-v", "quiet",
+    "-print_format", "json",
+    "-show_format",
+    filePath
+  ]);
+  const info = JSON.parse(stdout);
+  return parseFloat(info.format.duration);
+}
+
+async function splitVideoWithFfmpeg(inputPath, partCount, baseTitle) {
+  const duration = await getVideoDuration(inputPath);
+  const partDuration = duration / partCount;
+  const partPaths = [];
+
+  for (let i = 0; i < partCount; i++) {
+    const startTime = i * partDuration;
+    const partPath = `/tmp/movie_part${String(i + 1).padStart(2, "0")}of${String(partCount).padStart(2, "0")}_${Date.now()}.mp4`;
+    const args = [
+      "-ss", String(startTime),
+      "-i", inputPath,
+      "-t", String(partDuration),
+      "-c", "copy",
+      "-avoid_negative_ts", "1",
+      "-y",
+      partPath
+    ];
+    await execFileAsync("ffmpeg", args, { maxBuffer: 10 * 1024 * 1024 });
+    partPaths.push(partPath);
+  }
+  return partPaths;
 }
 
 async function downloadMovieToFile(url, tempPath, onProgress) {
@@ -625,9 +662,11 @@ cmd({
 
   const knownSizeBytes = parseSizeToBytes(selectedLink.size);
   if (knownSizeBytes > MOVIE_UPLOAD_MAX_BYTES) {
+    const estimatedParts = Math.min(3, Math.ceil(knownSizeBytes / MOVIE_UPLOAD_MAX_BYTES));
     await reply(
       `📦 *Large file (${selectedLink.size})*\n` +
-      `Downloading now — this may take a while. The movie will appear in chat when ready. ☕`
+      `Will be split into *${estimatedParts} playable parts* — each plays with one tap!\n` +
+      `Downloading now, please wait... ☕`
     );
   }
 
@@ -671,23 +710,66 @@ cmd({
 
     progress.update({ downloadPercent: 100, uploadPercent: 0, downloadedBytes, totalBytes, stage: "Done! Sending to chat..." });
 
-    let uploadPercent = 0;
-    uploadTimer = setInterval(() => {
-      uploadPercent = Math.min(95, uploadPercent + 2);
-      progress.update({ uploadPercent, stage: "Uploading film to chat..." });
-    }, 1000);
+    if (savedSize > MOVIE_UPLOAD_MAX_BYTES) {
+      const partCount = Math.min(3, Math.ceil(savedSize / MOVIE_UPLOAD_MAX_BYTES));
 
-    await ranuxPro.sendMessage(from, {
-      video: { url: tempPath },
-      mimetype: "video/mp4",
-      fileName,
-      caption
-    }, { quoted: mek });
+      progress.update({ downloadPercent: 100, uploadPercent: 0, stage: `Splitting into ${partCount} parts...` });
 
-    clearInterval(uploadTimer);
-    uploadTimer = null;
+      const partPaths = await splitVideoWithFfmpeg(tempPath, partCount, movie.metadata.title);
 
-    await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "Sent! 🍿" });
+      await ranuxPro.sendMessage(from, {
+        text:
+          `╭─────────────────────────╮\n` +
+          `│  🎬 *${movie.metadata.title}*\n` +
+          `│  📦 Sending in *${partCount} playable parts*\n` +
+          `│  ▶️  Each part plays with one tap!\n` +
+          `╰─────────────────────────╯`
+      }, { quoted: mek });
+
+      for (let i = 0; i < partPaths.length; i++) {
+        const partNum = i + 1;
+        let uploadPercent = 0;
+        uploadTimer = setInterval(() => {
+          uploadPercent = Math.min(95, uploadPercent + 3);
+          progress.update({ uploadPercent, stage: `Uploading part ${partNum}/${partCount}...` });
+        }, 1000);
+
+        await ranuxPro.sendMessage(from, {
+          video: { url: partPaths[i] },
+          mimetype: "video/mp4",
+          fileName: `${movie.metadata.title} - Part ${partNum} of ${partCount}.mp4`,
+          caption:
+            `${caption}\n\n` +
+            `▶️ *Part ${partNum} of ${partCount}*`
+        }, { quoted: mek });
+
+        clearInterval(uploadTimer);
+        uploadTimer = null;
+
+        if (fs.existsSync(partPaths[i])) fs.unlinkSync(partPaths[i]);
+      }
+
+      await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: `All ${partCount} parts sent! 🍿` });
+
+    } else {
+      let uploadPercent = 0;
+      uploadTimer = setInterval(() => {
+        uploadPercent = Math.min(95, uploadPercent + 2);
+        progress.update({ uploadPercent, stage: "Uploading film to chat..." });
+      }, 1000);
+
+      await ranuxPro.sendMessage(from, {
+        video: { url: tempPath },
+        mimetype: "video/mp4",
+        fileName,
+        caption
+      }, { quoted: mek });
+
+      clearInterval(uploadTimer);
+      uploadTimer = null;
+
+      await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "Sent! 🍿" });
+    }
 
   } catch (error) {
     console.error("Movie Send Error:", error.message);
