@@ -3,6 +3,9 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 const fs = require("fs");
 const path = require("path");
+const http = require("http");
+const https = require("https");
+const { pipeline } = require("stream/promises");
 const { sendBtn, btn } = require("../../utils/sendBtn");
 
 // Patch Baileys upload timeout from 30s → 30 minutes so large files can upload
@@ -13,11 +16,16 @@ try {
 
 // Global State
 global.pendingMovie = global.pendingMovie || {};
+global.activeMovieDownloads = global.activeMovieDownloads || new Set();
 
 // Design Elements
 const LOGO_URL = "https://files.catbox.moe/2jt3ln.png";
 const BASE_URL = "https://sinhalasub.lk";
 const PROXY = "https://api.codetabs.com/v1/proxy?quest=";
+const DOWNLOAD_HIGH_WATER_MARK = 2 * 1024 * 1024;
+const MAX_MOVIE_DOWNLOADS = Math.max(1, Number(process.env.MAX_MOVIE_DOWNLOADS) || 1);
+const downloadHttpAgent = new http.Agent({ keepAlive: true, maxSockets: 8 });
+const downloadHttpsAgent = new https.Agent({ keepAlive: true, maxSockets: 8 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function proxyFetch(url) {
@@ -61,10 +69,12 @@ function renderProgressBar(percent) {
   return `${"█".repeat(filled)}${"░".repeat(width - filled)} ${safePercent}%`;
 }
 
-function renderMovieProgress({ title, quality, size, percent, stage, downloadedBytes, totalBytes, startedAt }) {
+function renderMovieProgress({ title, quality, size, percent, stage, downloadedBytes, totalBytes, speedBytesPerSecond, startedAt }) {
   const downloaded = formatBytes(downloadedBytes);
   const total = formatBytes(totalBytes);
   const sizeLine = downloaded && total ? `│ 📦 *Progress:* ${downloaded} / ${total}\n` : "";
+  const speed = formatBytes(speedBytesPerSecond);
+  const speedLine = speed ? `│ 🚀 *Speed:* ${speed}/s\n` : "";
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
   return (
     `╭───〔 📥 *𝐌𝐎𝐕𝐈𝐄 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃* 〕───┈\n` +
@@ -73,6 +83,7 @@ function renderMovieProgress({ title, quality, size, percent, stage, downloadedB
     `│ 📊 *Quality:* ${quality}\n` +
     `│ 💾 *Size:* ${size}\n` +
     sizeLine +
+    speedLine +
     `│ ⏱️ *Time:* ${elapsedSeconds}s\n` +
     `│ ⚙️ *Status:* ${stage}\n` +
     `│ ${renderProgressBar(percent)}\n` +
@@ -80,6 +91,61 @@ function renderMovieProgress({ title, quality, size, percent, stage, downloadedB
     `╰──────────────────────┈\n` +
     `_This message updates every second until the film appears in chat._`
   );
+}
+
+async function downloadMovieToFile(url, tempPath, onProgress) {
+  const response = await axios({
+    method: "GET",
+    url,
+    responseType: "stream",
+    timeout: 0,
+    maxRedirects: 5,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+    decompress: false,
+    httpAgent: downloadHttpAgent,
+    httpsAgent: downloadHttpsAgent,
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Accept": "*/*",
+      "Accept-Encoding": "identity",
+      "Connection": "keep-alive"
+    },
+    validateStatus: status => status >= 200 && status < 300
+  });
+
+  const totalBytes = Number(response.headers["content-length"]) || 0;
+  const startedAt = Date.now();
+  let downloadedBytes = 0;
+  let lastProgressAt = 0;
+
+  response.data.on("data", chunk => {
+    downloadedBytes += chunk.length;
+    const now = Date.now();
+    if (now - lastProgressAt < 250 && downloadedBytes !== totalBytes) return;
+    lastProgressAt = now;
+    const seconds = Math.max(1, (now - startedAt) / 1000);
+    const percent = totalBytes
+      ? Math.min(85, (downloadedBytes / totalBytes) * 85)
+      : Math.min(85, 5 + (downloadedBytes / (1024 * 1024 * 1024)) * 80);
+    onProgress({
+      percent,
+      downloadedBytes,
+      totalBytes,
+      speedBytesPerSecond: downloadedBytes / seconds
+    });
+  });
+
+  await pipeline(
+    response.data,
+    fs.createWriteStream(tempPath, { highWaterMark: DOWNLOAD_HIGH_WATER_MARK })
+  );
+
+  if (totalBytes && downloadedBytes !== totalBytes) {
+    throw new Error(`Incomplete download (${formatBytes(downloadedBytes)} of ${formatBytes(totalBytes)})`);
+  }
+
+  return { downloadedBytes, totalBytes };
 }
 
 async function sendLiveProgress(sock, chatId, quoted, initialState) {
@@ -332,6 +398,10 @@ cmd({
   const selectedLink = movie.downloadLinks[index];
   delete global.pendingMovie[sender];
 
+  if (global.activeMovieDownloads.size >= MAX_MOVIE_DOWNLOADS) {
+    return reply(`*⏳ Another movie download is already running.*\n\nPlease wait until it finishes. This prevents Railway RAM crashes during large uploads.`);
+  }
+
   const directUrl = getDirectPixeldrainUrl(selectedLink.link);
   if (!directUrl) return reply("❌ *Could not generate direct download link.*");
 
@@ -357,28 +427,17 @@ cmd({
     percent: 0,
     stage: "Starting download...",
     downloadedBytes: 0,
-    totalBytes: 0
+    totalBytes: 0,
+    speedBytesPerSecond: 0
   });
 
   let uploadTimer = null;
+  global.activeMovieDownloads.add(sender);
 
   try {
-    const response = await axios({ method: "GET", url: directUrl, responseType: "stream", timeout: 0 });
-    const totalBytes = Number(response.headers["content-length"]) || 0;
-    let downloadedBytes = 0;
-    progress.update({ totalBytes, stage: "Downloading film..." });
-
-    response.data.on("data", chunk => {
-      downloadedBytes += chunk.length;
-      const percent = totalBytes ? Math.min(85, (downloadedBytes / totalBytes) * 85) : Math.min(85, 5 + (downloadedBytes / (1024 * 1024 * 1024)) * 80);
-      progress.update({ percent, downloadedBytes, totalBytes, stage: "Downloading film..." });
-    });
-
-    await new Promise((resolve, reject) => {
-      const writer = fs.createWriteStream(tempPath);
-      response.data.pipe(writer);
-      writer.on("finish", resolve);
-      writer.on("error", reject);
+    progress.update({ stage: "Downloading film..." });
+    const { downloadedBytes, totalBytes } = await downloadMovieToFile(directUrl, tempPath, update => {
+      progress.update({ ...update, stage: "Downloading film..." });
     });
 
     progress.update({ percent: 90, downloadedBytes, totalBytes, stage: "Download complete. Uploading to chat..." });
@@ -405,6 +464,7 @@ cmd({
     await progress.stop({ stage: "Failed to send film.", percent: 0 });
     reply(`*❌ Failed to send movie:* ${error.message || "An unknown error occurred."}`);
   } finally {
+    global.activeMovieDownloads.delete(sender);
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
   }
 });
