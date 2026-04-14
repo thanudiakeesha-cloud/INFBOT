@@ -258,6 +258,29 @@ async function sendLiveProgress2(sock, chatId, quoted, initialState) {
 }
 
 async function downloadMovieToFile2(url, tempPath, onProgress) {
+  // HEAD check first: validate the URL before streaming
+  try {
+    const headRes = await axios.head(url, {
+      timeout: 20000,
+      maxRedirects: 10,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "*/*",
+      },
+      validateStatus: () => true
+    });
+    const headCt = (headRes.headers["content-type"] || "").toLowerCase();
+    if (headRes.status === 404 || headRes.status === 410) {
+      throw new Error(`HTTP_${headRes.status}`);
+    }
+    if (headCt.includes("text/html")) {
+      throw new Error("REQUIRES_PAGE");
+    }
+  } catch (headErr) {
+    if (headErr.message === "REQUIRES_PAGE" || headErr.message.startsWith("HTTP_")) throw headErr;
+    // HEAD itself failed (network error, server doesn't support HEAD) — try GET anyway
+  }
+
   const response = await axios({
     method: "GET",
     url,
@@ -275,7 +298,10 @@ async function downloadMovieToFile2(url, tempPath, onProgress) {
       "Accept-Encoding": "identity",
       "Connection": "keep-alive",
     },
-    validateStatus: status => status >= 200 && status < 400
+    validateStatus: status => {
+      if (status === 404 || status === 410) throw Object.assign(new Error(`HTTP_${status}`), { code: `HTTP_${status}` });
+      return status >= 200 && status < 400;
+    }
   });
 
   const contentType = (response.headers["content-type"] || "").toLowerCase();
@@ -553,12 +579,37 @@ async function resolveWithPuppeteer(pageUrl) {
 
     if (resolvedUrl) return resolvedUrl;
 
-    // Last attempt: look for direct URLs in page HTML
+    // Check page HTML for video sources, JS variables, and data attributes
     const html = await page.content().catch(() => "");
-    const matches = html.match(/https?:\/\/[a-zA-Z0-9._\/-]+\.(mp4|mkv|avi|mov)/gi) || [];
-    if (matches.length) {
-      console.log("[film2][puppeteer] Found in HTML:", matches[0]);
-      return matches[0];
+
+    // Pattern 1: <video src="..."> or <source src="...">
+    const videoSrcMatch = html.match(/<(?:video|source)[^>]+src=["']([^"']+\.(?:mp4|mkv|avi|mov|webm)[^"']*)["']/i);
+    if (videoSrcMatch) {
+      console.log("[film2][puppeteer] Found in <video>/<source> tag:", videoSrcMatch[1].substring(0, 100));
+      return videoSrcMatch[1];
+    }
+
+    // Pattern 2: JS variable assignments like file:"...", src:"...", url:"..."
+    const jsFileMatch = html.match(/(?:file|src|url|download_url|direct_link)\s*[:=]\s*["']([^"']+\.(?:mp4|mkv|avi|mov|webm)[^"']*)["']/i);
+    if (jsFileMatch) {
+      console.log("[film2][puppeteer] Found in JS variable:", jsFileMatch[1].substring(0, 100));
+      return jsFileMatch[1];
+    }
+
+    // Pattern 3: data-url or data-src attributes
+    const dataAttrMatch = html.match(/data-(?:url|src|file)=["']([^"']+\.(?:mp4|mkv|avi|mov|webm)[^"']*)["']/i);
+    if (dataAttrMatch) {
+      console.log("[film2][puppeteer] Found in data attribute:", dataAttrMatch[1].substring(0, 100));
+      return dataAttrMatch[1];
+    }
+
+    // Pattern 4: Any bare https URL ending in video extension
+    const matches = html.match(/https?:\/\/[a-zA-Z0-9._~:/?#[\]@!$&'()*+,;=%-]+\.(?:mp4|mkv|avi|mov|webm)(?:\?[^"'\s<>]*)*/gi) || [];
+    // Filter out known ad domains
+    const filtered = matches.filter(u => !BLOCKED_CDN_DOMAINS.some(d => u.includes(d)));
+    if (filtered.length) {
+      console.log("[film2][puppeteer] Found bare URL in HTML:", filtered[0].substring(0, 100));
+      return filtered[0];
     }
 
     return null; // could not resolve
@@ -571,7 +622,9 @@ async function resolveWithPuppeteer(pageUrl) {
 }
 
 // ─── Try to resolve a direct download URL from various hosts ──────────────────
-async function resolveDirectUrl(url) {
+async function resolveDirectUrl(url, depth = 0) {
+  if (!url || depth > 4) return null;
+
   // Pixeldrain
   const pdMatch = url.match(/pixeldrain\.com\/u\/(\w+)/);
   if (pdMatch) return `https://pixeldrain.com/api/file/${pdMatch[1]}?download`;
@@ -593,18 +646,47 @@ async function resolveDirectUrl(url) {
         || $("a[href*='download.mediafire.com']").first().attr("href");
       if (direct) return direct;
     } catch (_) {}
+    return null;
   }
 
-  // For hosts that require JS execution, use Puppeteer
-  const puppeteerHosts = ["usersdrive", "dgdrive", "filepv", "bysezoxexe", "send.now", "ouo.io", "tinyurl"];
+  // Simple URL shorteners — just follow HTTP redirects
+  const simpleRedirectors = ["tinyurl.com", "bit.ly", "shorturl", "linkshortify"];
+  if (simpleRedirectors.some(h => url.includes(h))) {
+    try {
+      const res = await axios.head(url, {
+        maxRedirects: 10, timeout: 15000,
+        headers: { "User-Agent": "Mozilla/5.0" },
+        validateStatus: () => true
+      });
+      const finalUrl = res.request?.res?.responseUrl || res.config?.url;
+      if (finalUrl && finalUrl !== url) {
+        return resolveDirectUrl(finalUrl, depth + 1);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Hosts that require JS execution — use Puppeteer, then recurse if result is another host
+  const puppeteerHosts = ["usersdrive", "dgdrive", "filepv", "bysezoxexe", "send.now", "ouo.io", "1fichier"];
   if (puppeteerHosts.some(h => url.includes(h))) {
     console.log("[film2] Resolving with Puppeteer:", url.substring(0, 80));
     const resolved = await resolveWithPuppeteer(url);
-    if (resolved) return resolved;
+    if (!resolved) return null;
+    // If Puppeteer landed on another intermediate host, resolve again
+    if (puppeteerHosts.some(h => resolved.includes(h))) {
+      return resolveDirectUrl(resolved, depth + 1);
+    }
+    return resolved;
   }
 
-  // Return as-is and let axios try during download (may work for direct CDN links)
-  return url;
+  // URL looks like a direct CDN/file link — return it as-is
+  const looksLikeDirect = /\.(mp4|mkv|avi|mov|webm)(\?|$)/i.test(url)
+    || url.includes("/download/")
+    || url.includes("/dl/");
+  if (looksLikeDirect) return url;
+
+  // Unknown host — don't attempt download (would get HTML/404)
+  return null;
 }
 
 // ─── Scrapers ─────────────────────────────────────────────────────────────────
@@ -782,26 +864,52 @@ async function executeMovieDownload2(task) {
   global.activeMovieDownloads2.add(sender);
 
   try {
-    // Try each link in order until one works
-    let directUrl = null;
-    let linkError = null;
+    // Try each link in order — resolve AND download, moving to next if any step fails
+    let downloadedBytes, totalBytes;
+    let downloadSucceeded = false;
+    const triedLinks = [];
 
     for (const rawLink of selectedOption.links) {
+      const label = getHostLabel(rawLink);
+      triedLinks.push(rawLink);
+
+      let directUrl = null;
       try {
-        const label = getHostLabel(rawLink);
         progress.update({ stage: `🌐 Resolving ${label}...` });
-        const resolved = await resolveDirectUrl(rawLink);
-        if (resolved) {
-          directUrl = resolved;
-          break;
-        }
-      } catch (e) {
-        linkError = e;
+        directUrl = await resolveDirectUrl(rawLink);
+      } catch (resolveErr) {
+        console.warn(`[film2] Resolve error for ${label}:`, resolveErr.message);
+      }
+
+      if (!directUrl) {
+        console.warn(`[film2] Could not resolve ${label} — trying next link`);
+        continue;
+      }
+
+      try {
+        progress.update({ stage: `⬇️ Downloading via ${label}...` });
+        const result = await downloadMovieToFile2(directUrl, tempPath, update => {
+          progress.update({ ...update, stage: `⬇️ Downloading via ${label}...` });
+        });
+        downloadedBytes = result.downloadedBytes;
+        totalBytes = result.totalBytes;
+        downloadSucceeded = true;
+        break; // success — stop trying other links
+      } catch (dlErr) {
+        const isRetryable = dlErr.message === "REQUIRES_PAGE"
+          || dlErr.message.startsWith("HTTP_")
+          || dlErr.message.includes("404")
+          || dlErr.message.includes("410")
+          || dlErr.message.includes("HTML");
+        console.warn(`[film2] Download failed via ${label} (${dlErr.message}) — ${isRetryable ? "trying next link" : "fatal"}`);
+        if (fs.existsSync(tempPath)) { try { fs.unlinkSync(tempPath); } catch (_) {} }
+        if (!isRetryable) throw dlErr;
+        // Otherwise continue to next link
       }
     }
 
-    if (!directUrl) {
-      // All resolution attempts failed — send links as text fallback
+    if (!downloadSucceeded) {
+      // All links failed — send them as text so user can download manually
       await progress.stop({ stage: "Sending links instead..." });
       const linkLines = selectedOption.links.map(url =>
         `${getHostLabel(url)}\n${url}`
@@ -814,47 +922,15 @@ async function executeMovieDownload2(task) {
         `│  📊 ${selectedOption.quality}  •  ${selectedOption.size}\n` +
         `│\n` +
         `│  *${selectedOption.links.length} server(s) available*\n` +
+        `│  _Auto-download not supported for_\n` +
+        `│  _these hosts — tap a link below_\n` +
         `╰─────────────────────────╯\n\n` +
         linkLines + "\n\n" +
-        `_Tap any link above to open the download page._`;
+        `_Tap any link above to open the download page._\n` +
+        `_If one server is slow, try another one._`;
       await sock.sendMessage(from, { text: fallbackMsg }, { quoted: mek });
       await sock.sendMessage(from, { react: { text: "🔗", key: mek.key } });
       return;
-    }
-
-    progress.update({ stage: "Downloading film..." });
-
-    let downloadedBytes, totalBytes;
-    try {
-      const result = await downloadMovieToFile2(directUrl, tempPath, update => {
-        progress.update({ ...update, stage: "Downloading film..." });
-      });
-      downloadedBytes = result.downloadedBytes;
-      totalBytes = result.totalBytes;
-    } catch (dlErr) {
-      if (dlErr.message === "REQUIRES_PAGE" || dlErr.message.includes("HTML")) {
-        // Fall back: send the link text instead
-        await progress.stop({ stage: "Sending links instead..." });
-        const linkLines = selectedOption.links.map(url =>
-          `${getHostLabel(url)}\n${url}`
-        ).join("\n\n");
-        const fallbackMsg =
-          `╭─────────────────────────╮\n` +
-          `│  🔗 *Download Links*\n` +
-          `│\n` +
-          `│  🎬 ${movieTitle}\n` +
-          `│  📊 ${selectedOption.quality}  •  ${selectedOption.size}\n` +
-          `│\n` +
-          `│  *${selectedOption.links.length} server(s) available*\n` +
-          `╰─────────────────────────╯\n\n` +
-          linkLines + "\n\n" +
-          `_Tap any link above to open the download page._\n` +
-          `_If one server is slow, try another one._`;
-        await sock.sendMessage(from, { text: fallbackMsg }, { quoted: mek });
-        await sock.sendMessage(from, { react: { text: "🔗", key: mek.key } });
-        return;
-      }
-      throw dlErr;
     }
 
     const savedSize = fs.statSync(tempPath).size;
