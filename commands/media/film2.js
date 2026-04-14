@@ -51,10 +51,13 @@ const HOST_LABELS = {
   "usersdrive": "🟢 UsersDrive",
   "dgdrive": "🔵 DGDrive",
   "filepv": "🟣 FilePV",
+  "bysezoxexe": "🟣 FilePV",
   "mega.nz": "🟠 MEGA",
   "mediafire": "🟡 Mediafire",
   "drive.google": "🔵 Google Drive",
-  "tinyurl": "🔗 Mirror Link",
+  "tinyurl": "🔗 TinyURL",
+  "send.now": "📤 Send.now",
+  "ouo.io": "🔗 Mirror Link",
   "1fichier": "🟤 1Fichier",
 };
 
@@ -431,6 +434,142 @@ async function sendSplitMovieParts2(sock, chatId, quoted, sourcePath, baseFileNa
   }
 }
 
+// ─── Puppeteer-based URL resolver ─────────────────────────────────────────────
+const CHROMIUM_PATH = "/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium-browser";
+
+// CDN/direct download patterns — if any intercepted URL matches, it's the file
+const CDN_PATTERNS = [
+  /\.(mp4|mkv|avi|mov|webm)(\?|$)/i,
+  /content-disposition.*attachment/i,
+  /\/storage\/[a-z0-9]+\//i,
+  /\/files\/[a-z0-9]+\//i,
+  /\/dl\/[a-z0-9]+/i,
+  /cdnfile|filecdn|cdn\d+\./i,
+];
+
+const BLOCKED_CDN_DOMAINS = [
+  "googlesyndication", "googletagmanager", "doubleclick", "facebook.net",
+  "twitter.com", "youtube.com", "pubadx", "adnxs", "adsystem"
+];
+
+async function resolveWithPuppeteer(pageUrl) {
+  let browser = null;
+  try {
+    const puppeteer = require("puppeteer-extra");
+    const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+    puppeteer.use(StealthPlugin());
+
+    browser = await puppeteer.launch({
+      executablePath: CHROMIUM_PATH,
+      headless: true,
+      args: [
+        "--no-sandbox", "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage", "--disable-gpu",
+        "--disable-blink-features=AutomationControlled",
+        "--no-first-run", "--no-zygote", "--single-process"
+      ],
+      timeout: 60000
+    });
+
+    const page = await browser.newPage();
+    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+    await page.setViewport({ width: 1280, height: 720 });
+
+    // Intercept network to catch direct file URLs
+    let resolvedUrl = null;
+    const seenUrls = new Set();
+
+    await page.setRequestInterception(true);
+    page.on("request", req => {
+      const u = req.url();
+      // Block ad/tracker domains
+      if (BLOCKED_CDN_DOMAINS.some(d => u.includes(d))) {
+        req.abort();
+        return;
+      }
+      // Sniff requests that look like direct file downloads
+      if (!resolvedUrl && CDN_PATTERNS.some(p => p.test(u)) && !seenUrls.has(u)) {
+        resolvedUrl = u;
+        console.log("[film2][puppeteer] Caught file URL via request sniff:", u.substring(0, 100));
+      }
+      req.continue();
+    });
+
+    page.on("response", async res => {
+      const url = res.url();
+      if (resolvedUrl || seenUrls.has(url)) return;
+      seenUrls.add(url);
+
+      const ct = res.headers()["content-type"] || "";
+      const cl = parseInt(res.headers()["content-length"] || "0", 10);
+      const cd = res.headers()["content-disposition"] || "";
+
+      // A large binary or explicit attachment = the file
+      if (
+        ct.includes("video/") ||
+        ct.includes("application/octet-stream") ||
+        ct.includes("application/force-download") ||
+        cd.includes("attachment") ||
+        (cl > 10 * 1024 * 1024) // >10 MB
+      ) {
+        resolvedUrl = url;
+        console.log("[film2][puppeteer] Caught file URL via response intercept:", url.substring(0, 100));
+      }
+    });
+
+    // Navigate to the download page
+    try {
+      await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    } catch (e) {
+      // timeout is OK — we may already have the URL
+    }
+
+    if (resolvedUrl) return resolvedUrl;
+
+    // Wait a moment for JS to run
+    await new Promise(r => setTimeout(r, 3000));
+    if (resolvedUrl) return resolvedUrl;
+
+    // Try clicking download/free download buttons
+    const buttonSelectors = [
+      "a#dlbutton", "a.download-btn", "input[value*='Free']",
+      "button[class*='download']", "a[class*='download']",
+      "input[name='method_free']", "button:contains('Free')",
+      "a:contains('Download')", "input[type='submit']",
+      "#direct_link", ".download-link"
+    ];
+
+    for (const sel of buttonSelectors) {
+      try {
+        const el = await page.$(sel);
+        if (el) {
+          console.log("[film2][puppeteer] Clicking:", sel);
+          await el.click();
+          await new Promise(r => setTimeout(r, 5000));
+          if (resolvedUrl) break;
+        }
+      } catch (_) {}
+    }
+
+    if (resolvedUrl) return resolvedUrl;
+
+    // Last attempt: look for direct URLs in page HTML
+    const html = await page.content().catch(() => "");
+    const matches = html.match(/https?:\/\/[a-zA-Z0-9._\/-]+\.(mp4|mkv|avi|mov)/gi) || [];
+    if (matches.length) {
+      console.log("[film2][puppeteer] Found in HTML:", matches[0]);
+      return matches[0];
+    }
+
+    return null; // could not resolve
+  } catch (e) {
+    console.error("[film2][puppeteer] Error:", e.message);
+    return null;
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
 // ─── Try to resolve a direct download URL from various hosts ──────────────────
 async function resolveDirectUrl(url) {
   // Pixeldrain
@@ -456,35 +595,15 @@ async function resolveDirectUrl(url) {
     } catch (_) {}
   }
 
-  // UsersDrive / DGDrive / FilePV — try page scrape for direct link
-  const scrapableHosts = ["usersdrive", "dgdrive", "filepv"];
-  if (scrapableHosts.some(h => url.includes(h))) {
-    try {
-      const res = await axios.get(url, {
-        timeout: 15000,
-        headers: { "User-Agent": "Mozilla/5.0" },
-        validateStatus: () => true
-      });
-      const $ = cheerio.load(res.data);
-      const direct = $("a[href*='.mp4'], a[href*='.mkv'], a[href*='/download']").first().attr("href");
-      if (direct && direct.startsWith("http")) return direct;
-    } catch (_) {}
+  // For hosts that require JS execution, use Puppeteer
+  const puppeteerHosts = ["usersdrive", "dgdrive", "filepv", "bysezoxexe", "send.now", "ouo.io", "tinyurl"];
+  if (puppeteerHosts.some(h => url.includes(h))) {
+    console.log("[film2] Resolving with Puppeteer:", url.substring(0, 80));
+    const resolved = await resolveWithPuppeteer(url);
+    if (resolved) return resolved;
   }
 
-  // TinyURL: follow redirect
-  if (url.includes("tinyurl.com")) {
-    try {
-      const res = await axios.get(url, {
-        timeout: 15000,
-        maxRedirects: 5,
-        headers: { "User-Agent": "Mozilla/5.0" },
-        validateStatus: () => true
-      });
-      if (res.request?.res?.responseUrl) return res.request.res.responseUrl;
-    } catch (_) {}
-  }
-
-  // Return as-is and let axios try during download
+  // Return as-is and let axios try during download (may work for direct CDN links)
   return url;
 }
 
@@ -528,44 +647,113 @@ async function getMovieDetails2(movieUrl) {
     || "";
 
   const downloadOptions = [];
+
+  // The page structure is: <p>quality label</p> followed by <p><a links></a></p>
+  // We process all block elements sequentially, tracking the last seen quality.
+  // Priority: use the most specific post-content container, NOT the generic
+  // .elementor-widget-container (which appears 20+ times on each page).
+  let contentEl = $(".elementor-widget-theme-post-content");
+  if (!contentEl.length) contentEl = $(".entry-content");
+  if (!contentEl.length) contentEl = $(".post-content");
+  const elements = contentEl.length
+    ? contentEl.find("p, h2, h3, h4").toArray()
+    : $("article p, article h2, article h3").toArray();
+
   let currentQuality = null;
   let currentSize = null;
+  let inDirectSection = false;
 
-  const contentEl = $(".elementor-widget-theme-post-content, .entry-content, .post-content, .elementor-widget-container");
-  const contentHtml = contentEl.length ? contentEl.html() : $("body").html();
-  const $c = cheerio.load(contentHtml || "");
+  for (const el of elements) {
+    const $el = $(el);
+    const text = $el.text().replace(/\s+/g, " ").trim();
 
-  $c("p, h2, h3, div").each((i, el) => {
-    const text = $c(el).text().replace(/\s+/g, " ").trim();
-    const elLinks = [];
-
-    $c(el).find("a[href]").each((j, a) => {
-      const href = $c(a).attr("href");
-      if (isExternalDownloadLink(href)) elLinks.push(href);
-    });
-
-    const qualityMatch = text.match(/(?:720p|1080p|480p|4K|2160p)/i);
-    const sizeMatch = text.match(/([\d.]+)\s*(GB|MB)/i);
-    const isQualityLabel = qualityMatch && text.includes("|") && text.length < 150;
-
-    if (isQualityLabel) {
-      currentQuality = qualityMatch[0].replace(/4k/i, "4K");
-      currentSize = sizeMatch ? `${sizeMatch[1]} ${sizeMatch[2].toUpperCase()}` : "N/A";
+    // Detect section headers — only collect links from "Direct Download" section
+    if (/Direct\s*Download/i.test(text)) {
+      inDirectSection = true;
+      continue;
+    }
+    if (/Torrent/i.test(text) && !inDirectSection) {
+      continue;
     }
 
-    if (elLinks.length > 0 && currentQuality) {
+    // Detect quality label lines: contain a quality keyword and pipe characters
+    const qualityMatch = text.match(/(?:4K|2160p|1080p|720p|480p)/i);
+    const sizeMatch = text.match(/([\d.]+)\s*(GB|MB)/i);
+    const hasPipes = (text.match(/\|/g) || []).length >= 1;
+    const isQualityLabel = qualityMatch && hasPipes && text.length < 200 && $el.find("a[href]").length === 0;
+
+    if (isQualityLabel) {
+      currentQuality = qualityMatch[0].toUpperCase() === "4K" ? "4K" : qualityMatch[0];
+      currentSize = sizeMatch ? `${sizeMatch[1]} ${sizeMatch[2].toUpperCase()}` : "N/A";
+      continue;
+    }
+
+    // Collect external links from this element (image-anchors included)
+    const links = [];
+    $el.find("a[href]").each((j, a) => {
+      const href = $(a).attr("href") || "";
+      if (isExternalDownloadLink(href)) links.push(href);
+    });
+
+    if (links.length > 0 && currentQuality) {
       const existing = downloadOptions.find(
         d => d.quality === currentQuality && d.size === currentSize
       );
       if (existing) {
-        for (const link of elLinks) {
+        for (const link of links) {
           if (!existing.links.includes(link)) existing.links.push(link);
         }
       } else {
-        downloadOptions.push({ quality: currentQuality, size: currentSize, links: elLinks });
+        downloadOptions.push({ quality: currentQuality, size: currentSize, links });
       }
     }
-  });
+  }
+
+  // If nothing found with the sectioned approach, fall back to a global scan
+  if (!downloadOptions.length) {
+    let fallbackQuality = null;
+    let fallbackSize = null;
+
+    $("p, h2, h3").each((i, el) => {
+      const $el = $(el);
+      const text = $el.text().replace(/\s+/g, " ").trim();
+      const qm = text.match(/(?:4K|2160p|1080p|720p|480p)/i);
+      const sm = text.match(/([\d.]+)\s*(GB|MB)/i);
+
+      if (qm && (text.includes("|") || sm) && text.length < 200 && $el.find("a[href]").length === 0) {
+        fallbackQuality = qm[0].toUpperCase() === "4K" ? "4K" : qm[0];
+        fallbackSize = sm ? `${sm[1]} ${sm[2].toUpperCase()}` : "N/A";
+      }
+
+      const links = [];
+      $el.find("a[href]").each((j, a) => {
+        const href = $(a).attr("href") || "";
+        if (isExternalDownloadLink(href)) links.push(href);
+      });
+
+      // Also check next sibling for links (common pattern)
+      const nextLinks = [];
+      const $next = $el.next();
+      $next.find("a[href]").each((j, a) => {
+        const href = $(a).attr("href") || "";
+        if (isExternalDownloadLink(href)) nextLinks.push(href);
+      });
+
+      const allLinks = [...new Set([...links, ...nextLinks])];
+      if (allLinks.length > 0 && fallbackQuality) {
+        const existing = downloadOptions.find(
+          d => d.quality === fallbackQuality && d.size === fallbackSize
+        );
+        if (existing) {
+          for (const link of allLinks) {
+            if (!existing.links.includes(link)) existing.links.push(link);
+          }
+        } else {
+          downloadOptions.push({ quality: fallbackQuality, size: fallbackSize, links: allLinks });
+        }
+      }
+    });
+  }
 
   downloadOptions.sort((a, b) => (QUALITY_ORDER[b.quality] || 0) - (QUALITY_ORDER[a.quality] || 0));
 
@@ -600,17 +788,38 @@ async function executeMovieDownload2(task) {
 
     for (const rawLink of selectedOption.links) {
       try {
-        progress.update({ stage: `Resolving: ${getHostLabel(rawLink)}...` });
-        directUrl = await resolveDirectUrl(rawLink);
-        break;
+        const label = getHostLabel(rawLink);
+        progress.update({ stage: `🌐 Resolving ${label}...` });
+        const resolved = await resolveDirectUrl(rawLink);
+        if (resolved) {
+          directUrl = resolved;
+          break;
+        }
       } catch (e) {
         linkError = e;
-        directUrl = null;
       }
     }
 
     if (!directUrl) {
-      throw linkError || new Error("Could not resolve a download link.");
+      // All resolution attempts failed — send links as text fallback
+      await progress.stop({ stage: "Sending links instead..." });
+      const linkLines = selectedOption.links.map(url =>
+        `${getHostLabel(url)}\n${url}`
+      ).join("\n\n");
+      const fallbackMsg =
+        `╭─────────────────────────╮\n` +
+        `│  🔗 *Download Links*\n` +
+        `│\n` +
+        `│  🎬 ${movieTitle}\n` +
+        `│  📊 ${selectedOption.quality}  •  ${selectedOption.size}\n` +
+        `│\n` +
+        `│  *${selectedOption.links.length} server(s) available*\n` +
+        `╰─────────────────────────╯\n\n` +
+        linkLines + "\n\n" +
+        `_Tap any link above to open the download page._`;
+      await sock.sendMessage(from, { text: fallbackMsg }, { quoted: mek });
+      await sock.sendMessage(from, { react: { text: "🔗", key: mek.key } });
+      return;
     }
 
     progress.update({ stage: "Downloading film..." });
