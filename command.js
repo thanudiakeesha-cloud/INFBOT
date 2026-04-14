@@ -8,6 +8,8 @@ if (!global.cmdRegistry) {
     global.cmdRegistry = new Map();
 }
 
+let _filterCounter = 0;
+
 function cmd(info, handler) {
     const command = {
         ...info,
@@ -25,6 +27,9 @@ function cmd(info, handler) {
             const aliases = Array.isArray(info.aliases) ? info.aliases : [info.aliases];
             aliases.forEach(a => global.cmdRegistry.set(a, command));
         }
+    } else if (typeof info.filter === 'function') {
+        // Filter-only commands (multi-step flows) — store with a unique key
+        global.cmdRegistry.set(`__filter_${_filterCounter++}`, command);
     }
     return command;
 }
