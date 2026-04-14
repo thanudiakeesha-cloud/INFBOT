@@ -278,7 +278,7 @@ async function sendSplitMovieParts(sock, chatId, quoted, sourcePath, baseFileNam
 
       await sock.sendMessage(chatId, {
         document: { url: partPath },
-        mimetype: "video/mp4",
+        mimetype: "application/octet-stream",
         fileName: partFileName,
         caption:
           `${baseCaption}\n\n` +
