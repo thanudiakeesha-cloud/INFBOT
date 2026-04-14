@@ -1312,8 +1312,9 @@ cmd({
       `╰─────────────────────────╯`;
 
     const qualityButtons = details.downloadOptions.map((d, i) => {
-      const sizeLabel = (d.size && d.size !== "N/A") ? `  •  ${d.size}` : "";
-      return btn(`bs_dl_${i + 1}`, `📥 ${d.quality}${sizeLabel}`);
+      const baseRes = (d.quality.match(/4K|2160p|1080p|720p|480p/i) || [d.quality])[0];
+      const sizeLabel = (d.size && d.size !== "N/A") ? ` - ${d.size}` : "";
+      return btn(`bs_dl_${i + 1}`, `📥 ${baseRes}${sizeLabel}`);
     });
 
     if (thumbnail) {
