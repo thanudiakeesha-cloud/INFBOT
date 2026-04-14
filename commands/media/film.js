@@ -1,11 +1,7 @@
 const { cmd } = require("../../command");
-const puppeteerExtra = require("puppeteer-extra");
-const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-const config = require("../../config");
-const { execSync } = require("child_process");
+const axios = require("axios");
+const cheerio = require("cheerio");
 const { sendBtn, btn } = require("../../utils/sendBtn");
-
-puppeteerExtra.use(StealthPlugin());
 
 // Global State
 global.pendingMovie = global.pendingMovie || {};
@@ -13,43 +9,19 @@ global.pendingMovie = global.pendingMovie || {};
 // Design Elements
 const LOGO_URL = "https://files.catbox.moe/2jt3ln.png";
 const FOOTER = `> 👑 ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴋɪɴɢ ʀᴀɴᴜx ᴘʀᴏ`;
-
-// ─── Chromium Detection ───────────────────────────────────────────────────────
-let CHROMIUM_PATH;
-try {
-  CHROMIUM_PATH = execSync("which chromium || which chromium-browser || which google-chrome", { encoding: "utf8" }).trim().split("\n")[0];
-} catch (_) {
-  CHROMIUM_PATH = "/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium";
-}
-
-const PUPPETEER_OPTS = {
-  headless: true,
-  executablePath: CHROMIUM_PATH,
-  args: [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-gpu",
-    "--window-size=1280,800"
-  ]
-};
-
-const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-
-async function newStealthPage(browser) {
-  const page = await browser.newPage();
-  await page.setUserAgent(USER_AGENT);
-  await page.setViewport({ width: 1280, height: 800 });
-  await page.setExtraHTTPHeaders({
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
-  });
-  return page;
-}
+const BASE_URL = "https://sinhalasub.lk";
+const PROXY = "https://api.codetabs.com/v1/proxy?quest=";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+function proxyFetch(url) {
+  return axios.get(PROXY + encodeURIComponent(url), {
+    timeout: 20000,
+    headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+  });
+}
+
 function normalizeQuality(text) {
-  if (!text) return null;
+  if (!text) return "Unknown";
   text = text.toUpperCase();
   if (/1080|FHD/.test(text)) return "1080p";
   if (/720|HD/.test(text)) return "720p";
@@ -65,113 +37,70 @@ function getDirectPixeldrainUrl(url) {
 
 // ─── Scrapers ─────────────────────────────────────────────────────────────────
 async function searchMovies(query) {
-  const searchUrl = `https://sinhalasub.lk/?s=${encodeURIComponent(query)}&post_type=movies`;
-  const browser = await puppeteerExtra.launch(PUPPETEER_OPTS);
-  const page = await newStealthPage(browser);
-  try {
-    await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 45000 });
-    const pageTitle = await page.title();
-    if (pageTitle.includes("Attention Required") || pageTitle.includes("Just a moment")) {
-      await new Promise(r => setTimeout(r, 8000));
-      await page.reload({ waitUntil: "networkidle2", timeout: 30000 });
-    }
-    const results = await page.$$eval(".display-item .item-box", boxes =>
-      boxes.slice(0, 8).map((box, index) => {
-        const a = box.querySelector("a");
-        return {
-          id: index + 1,
-          title: a?.title?.trim() || a?.textContent?.trim() || "Unknown Title",
-          movieUrl: a?.href || "",
-        };
-      }).filter(m => m.title && m.movieUrl)
-    );
-    await browser.close();
-    return results;
-  } catch (e) {
-    await browser.close();
-    throw e;
-  }
+  const url = `${BASE_URL}/?s=${encodeURIComponent(query)}&post_type=movies`;
+  const { data } = await proxyFetch(url);
+  const $ = cheerio.load(data);
+  const results = [];
+  $(".display-item .item-box").slice(0, 8).each((i, el) => {
+    const a = $(el).find("a").first();
+    const title = a.attr("title") || a.text().trim();
+    const movieUrl = a.attr("href");
+    if (title && movieUrl) results.push({ id: i + 1, title, movieUrl });
+  });
+  return results;
 }
 
-async function getMovieMetadata(url) {
-  const browser = await puppeteerExtra.launch(PUPPETEER_OPTS);
-  const page = await newStealthPage(browser);
-  try {
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
-    const pageTitle = await page.title();
-    if (pageTitle.includes("Attention Required") || pageTitle.includes("Just a moment")) {
-      await new Promise(r => setTimeout(r, 8000));
-      await page.reload({ waitUntil: "networkidle2", timeout: 30000 });
-    }
-    const metadata = await page.evaluate(() => {
-      const getText = el => el?.textContent.trim() || "";
-      const getList = selector => Array.from(document.querySelectorAll(selector)).map(el => el.textContent.trim());
-      const title = getText(document.querySelector(".info-details .details-title h3"));
-      let language = "N/A", directors = [];
-      document.querySelectorAll(".info-col p").forEach(p => {
-        const strong = p.querySelector("strong");
-        if (!strong) return;
-        const txt = strong.textContent.trim();
-        if (txt.includes("Language:")) language = strong.nextSibling?.textContent?.trim() || "N/A";
-        if (txt.includes("Director:")) directors = Array.from(p.querySelectorAll("a")).map(a => a.textContent.trim());
-      });
-      const duration = getText(document.querySelector(".info-details .data-views[itemprop='duration']")) || "N/A";
-      const imdb = getText(document.querySelector(".info-details .data-imdb"))?.replace("IMDb:", "").trim() || "N/A";
-      const genres = getList(".details-genre a");
-      const thumbnail = document.querySelector(".splash-bg img")?.src || "";
-      return { title, language, duration, imdb, genres, directors, thumbnail };
-    });
-    await browser.close();
-    return metadata;
-  } catch (e) {
-    await browser.close();
-    throw e;
-  }
+async function getMovieMetadata(movieUrl) {
+  const { data } = await proxyFetch(movieUrl);
+  const $ = cheerio.load(data);
+  const title = $(".info-details .details-title h3").text().trim();
+  const imdb = $(".info-details .data-imdb").text().replace("IMDb:", "").trim() || "N/A";
+  const duration = $(".info-details .data-views[itemprop='duration']").text().trim() || "N/A";
+  const genres = $(".details-genre a").map((i, el) => $(el).text().trim()).get();
+  const thumbnail = $(".splash-bg img").attr("src") || "";
+  let directors = [];
+  let language = "N/A";
+  $(".info-col p").each((i, el) => {
+    const strong = $(el).find("strong");
+    const txt = strong.text().trim();
+    if (txt.includes("Language:")) language = strong.next().text().trim() || "N/A";
+    if (txt.includes("Director:")) directors = $(el).find("a").map((j, a) => $(a).text().trim()).get();
+  });
+  return { title, imdb, duration, genres, directors, language, thumbnail };
 }
 
 async function getPixeldrainLinks(movieUrl) {
-  const browser = await puppeteerExtra.launch(PUPPETEER_OPTS);
-  const page = await newStealthPage(browser);
-  try {
-    await page.goto(movieUrl, { waitUntil: "networkidle2", timeout: 60000 });
-    const pageTitle = await page.title();
-    if (pageTitle.includes("Attention Required") || pageTitle.includes("Just a moment")) {
-      await new Promise(r => setTimeout(r, 8000));
-      await page.reload({ waitUntil: "networkidle2", timeout: 30000 });
-    }
-    const linksData = await page.$$eval(".link-pixeldrain tbody tr", rows =>
-      rows.map(row => {
-        const a = row.querySelector(".link-opt a");
-        const quality = row.querySelector(".quality")?.textContent.trim() || "";
-        const size = row.querySelector("td:nth-child(3) span")?.textContent.trim() || "";
-        return { pageLink: a?.href || "", quality, size };
-      })
-    );
-    const directLinks = [];
-    for (const l of linksData) {
-      try {
-        const subPage = await newStealthPage(browser);
-        await subPage.goto(l.pageLink, { waitUntil: "networkidle2", timeout: 45000 });
-        await new Promise(r => setTimeout(r, 12000));
-        const finalUrl = await subPage.$eval(".wait-done a[href^='https://pixeldrain.com/']", el => el.href).catch(() => null);
-        if (finalUrl) {
-          let sizeMB = 0;
-          const sizeText = l.size.toUpperCase();
-          if (sizeText.includes("GB")) sizeMB = parseFloat(sizeText) * 1024;
-          else if (sizeText.includes("MB")) sizeMB = parseFloat(sizeText);
-          if (sizeMB > 0 && sizeMB <= 2048) {
-            directLinks.push({ link: finalUrl, quality: normalizeQuality(l.quality), size: l.size });
-          }
-        }
-        await subPage.close();
-      } catch (e) { continue; }
-    }
-    await browser.close();
-    return directLinks;
-  } catch (e) {
-    await browser.close();
-    throw e;
+  const { data } = await proxyFetch(movieUrl);
+  const $ = cheerio.load(data);
+  const rows = [];
+  $(".link-pixeldrain tbody tr").each((i, row) => {
+    const pageLink = $(row).find(".link-opt a").attr("href");
+    const quality = $(row).find(".quality").text().trim();
+    const size = $(row).find("td:nth-child(3) span").text().trim();
+    if (pageLink) rows.push({ pageLink, quality, size });
+  });
+
+  const directLinks = [];
+  for (const row of rows) {
+    try {
+      const sizeMB = row.size.toUpperCase().includes("GB")
+        ? parseFloat(row.size) * 1024
+        : parseFloat(row.size);
+      if (sizeMB > 2048) continue;
+
+      const { data: linkData } = await proxyFetch(row.pageLink);
+      const $l = cheerio.load(linkData);
+      const pdUrl = $l('a[href*="pixeldrain.com"]').attr("href");
+      if (pdUrl) {
+        directLinks.push({
+          link: pdUrl,
+          quality: normalizeQuality(row.quality),
+          size: row.size
+        });
+      }
+    } catch (e) { continue; }
   }
+  return directLinks;
 }
 
 // ─── Step 1: Search ───────────────────────────────────────────────────────────
@@ -218,7 +147,7 @@ cmd({
     }, { quoted: mek });
 
   } catch (e) {
-    console.error("Movie Search Error:", e);
+    console.error("Movie Search Error:", e.message);
     reply("❌ *An error occurred during the search. Please try again later.*");
   }
 });
@@ -241,6 +170,7 @@ cmd({
   }
 
   const selected = results[index];
+  delete global.pendingMovie[sender];
 
   try {
     await reply(`*⏳ Fetching details for "${selected.title}"...*`);
@@ -266,7 +196,6 @@ cmd({
 
     const downloadLinks = await getPixeldrainLinks(selected.movieUrl);
     if (!downloadLinks.length) {
-      delete global.pendingMovie[sender];
       return reply(`*❌ No direct download links found under 2GB!*`);
     }
 
@@ -296,8 +225,8 @@ cmd({
 
   } catch (e) {
     delete global.pendingMovie[sender];
-    console.error("Movie Detail Fetch Error:", e);
-    reply("❌ *Failed to fetch movie details. The website might be down.*");
+    console.error("Movie Detail Fetch Error:", e.message);
+    reply("❌ *Failed to fetch movie details. Please try again.*");
   }
 });
 
@@ -325,7 +254,7 @@ cmd({
     const directUrl = getDirectPixeldrainUrl(selectedLink.link);
     if (!directUrl) throw new Error("Could not generate direct download link.");
 
-    const fileName = `${movie.metadata.title.substring(0, 50)} - ${selectedLink.quality}.mp4`.replace(/[^\w\s.-]/gi, '');
+    const fileName = `${movie.metadata.title.substring(0, 50)} - ${selectedLink.quality}.mp4`.replace(/[^\w\s.-]/gi, "");
     const caption =
       `╭───〔 ✅ *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐃* 〕───┈\n` +
       `│\n` +
@@ -345,7 +274,7 @@ cmd({
     }, { quoted: mek });
 
   } catch (error) {
-    console.error("Movie Send Error:", error);
+    console.error("Movie Send Error:", error.message);
     reply(`*❌ Failed to send movie:* ${error.message || "An unknown error occurred."}`);
   }
 });
