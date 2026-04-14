@@ -8,7 +8,9 @@ global.pendingMovie2 = global.pendingMovie2 || {};
 
 // Config
 const BASE_URL = "https://baiscopedownloads.link";
-const LOGO_URL = "https://files.catbox.moe/2jt3ln.png";
+const LOGO_URL 
+
+  ";
 
 // Only codetabs reliably bypasses Cloudflare protection for this site
 const PROXY_POOL = [
