@@ -624,14 +624,11 @@ cmd({
   if (!directUrl) return reply("❌ Download link not available. Please try a different quality.");
 
   const knownSizeBytes = parseSizeToBytes(selectedLink.size);
-  if (knownSizeBytes > 0) {
-    const estimatedParts = Math.min(3, Math.ceil(knownSizeBytes / MOVIE_UPLOAD_MAX_BYTES));
-    if (estimatedParts > 1) {
-      await reply(
-        `📦 *Large file (${selectedLink.size})*\n` +
-        `Will be sent in *${estimatedParts} parts*. Please wait while it downloads...`
-      );
-    }
+  if (knownSizeBytes > MOVIE_UPLOAD_MAX_BYTES) {
+    await reply(
+      `📦 *Large file (${selectedLink.size})*\n` +
+      `Downloading now — this may take a while. The movie will appear in chat when ready. ☕`
+    );
   }
 
   const caption =
@@ -674,27 +671,21 @@ cmd({
 
     progress.update({ downloadPercent: 100, uploadPercent: 0, downloadedBytes, totalBytes, stage: "Done! Sending to chat..." });
 
-    if (savedSize > MOVIE_UPLOAD_MAX_BYTES) {
-      // Split into at most 3 parts regardless of how large the file is
-      const partCount = Math.min(3, Math.ceil(savedSize / MOVIE_UPLOAD_MAX_BYTES));
-      const dynamicPartSize = Math.ceil(savedSize / partCount);
-      await sendSplitMovieParts(ranuxPro, from, mek, tempPath, fileName, caption, savedSize, progress, dynamicPartSize);
-    } else {
-      let uploadPercent = 0;
-      uploadTimer = setInterval(() => {
-        uploadPercent = Math.min(95, uploadPercent + 2);
-        progress.update({ uploadPercent, stage: "Uploading film to chat..." });
-      }, 1000);
+    let uploadPercent = 0;
+    uploadTimer = setInterval(() => {
+      uploadPercent = Math.min(95, uploadPercent + 2);
+      progress.update({ uploadPercent, stage: "Uploading film to chat..." });
+    }, 1000);
 
-      await ranuxPro.sendMessage(from, {
-        video: { url: tempPath },
-        mimetype: "video/mp4",
-        fileName,
-        caption
-      }, { quoted: mek });
-      clearInterval(uploadTimer);
-      uploadTimer = null;
-    }
+    await ranuxPro.sendMessage(from, {
+      video: { url: tempPath },
+      mimetype: "video/mp4",
+      fileName,
+      caption
+    }, { quoted: mek });
+
+    clearInterval(uploadTimer);
+    uploadTimer = null;
 
     await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "Sent! 🍿" });
 
