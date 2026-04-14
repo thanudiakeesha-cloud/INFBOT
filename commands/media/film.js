@@ -225,23 +225,25 @@ async function copyRangeToPart(sourcePath, partPath, start, end) {
   );
 }
 
-async function sendSplitMovieParts(sock, chatId, quoted, sourcePath, baseFileName, baseCaption, totalSize, progress) {
-  const partCount = Math.ceil(totalSize / MOVIE_UPLOAD_MAX_BYTES);
+async function sendSplitMovieParts(sock, chatId, quoted, sourcePath, baseFileName, baseCaption, totalSize, progress, partSize) {
+  const bytesPerPart = partSize || MOVIE_UPLOAD_MAX_BYTES;
+  const partCount = Math.ceil(totalSize / bytesPerPart);
+  const partSizeMB = Math.ceil(bytesPerPart / (1024 * 1024));
   const partPaths = [];
   let uploadTimer = null;
 
   try {
     await sock.sendMessage(chatId, {
       text:
-        `*📦 Large movie detected — sending in ${partCount} parts.*\n\n` +
-        `Each part is up to ${MOVIE_UPLOAD_MAX_MB}MB. Download every part and join them in order to restore the movie file.\n\n` +
-        `_Tip: Use a tool like_ *HJSplit* _or_ *cat* _(Linux/Mac) to merge the parts._`
+        `*📦 Large movie detected — sending in ${partCount} part${partCount > 1 ? "s" : ""}.*\n\n` +
+        `Each part is up to ${formatBytes(bytesPerPart)}. Download every part and join them in order to restore the full movie.\n\n` +
+        `_Tip: Use_ *HJSplit* _(Windows) or run_ \`cat part01 part02 > movie.mp4\` _(Linux/Mac) to merge._`
     }, { quoted });
 
     for (let index = 0; index < partCount; index += 1) {
       const partNumber = index + 1;
-      const start = index * MOVIE_UPLOAD_MAX_BYTES;
-      const end = Math.min(totalSize - 1, start + MOVIE_UPLOAD_MAX_BYTES - 1);
+      const start = index * bytesPerPart;
+      const end = Math.min(totalSize - 1, start + bytesPerPart - 1);
       const partPath = `${sourcePath}.part${String(partNumber).padStart(2, "0")}of${String(partCount).padStart(2, "0")}`;
       const partFileName = `${baseFileName}.part${String(partNumber).padStart(2, "0")}of${String(partCount).padStart(2, "0")}`;
       partPaths.push(partPath);
@@ -609,15 +611,14 @@ cmd({
   if (!directUrl) return reply("❌ *Could not generate a direct download link. The Pixeldrain URL may have changed.*");
 
   const knownSizeBytes = parseSizeToBytes(selectedLink.size);
-  if (knownSizeBytes > MOVIE_SPLIT_MAX_BYTES) {
-    return reply(buildDirectLinkMessage({
-      title: movie.metadata.title || "Selected Movie",
-      quality: selectedLink.quality,
-      size: selectedLink.size,
-      link: selectedLink.link,
-      directUrl,
-      reason: `File is over the safe upload limit (${MOVIE_SPLIT_MAX_MB}MB)`
-    }));
+  if (knownSizeBytes > 0) {
+    const estimatedParts = Math.min(3, Math.ceil(knownSizeBytes / MOVIE_UPLOAD_MAX_BYTES));
+    if (estimatedParts > 1) {
+      await reply(
+        `*📦 Large file detected (${selectedLink.size}).*\n` +
+        `This movie will be downloaded and sent in *${estimatedParts} parts*. Please wait...`
+      );
+    }
   }
 
   const caption =
@@ -657,28 +658,14 @@ cmd({
     });
 
     const savedSize = fs.statSync(tempPath).size;
-    if (savedSize > MOVIE_SPLIT_MAX_BYTES) {
-      await progress.stop({
-        downloadPercent: 100,
-        uploadPercent: 0,
-        downloadedBytes,
-        totalBytes,
-        stage: `File too large for direct upload. Sending link instead.`
-      });
-      return reply(buildDirectLinkMessage({
-        title: movieTitle,
-        quality: selectedLink.quality,
-        size: selectedLink.size || formatBytes(savedSize),
-        link: selectedLink.link,
-        directUrl,
-        reason: `Downloaded file is ${formatBytes(savedSize)}, over the safe upload limit (${MOVIE_SPLIT_MAX_MB}MB)`
-      }));
-    }
 
     progress.update({ downloadPercent: 100, uploadPercent: 0, downloadedBytes, totalBytes, stage: "Download complete. Uploading to chat..." });
 
     if (savedSize > MOVIE_UPLOAD_MAX_BYTES) {
-      await sendSplitMovieParts(ranuxPro, from, mek, tempPath, fileName, caption, savedSize, progress);
+      // Split into at most 3 parts regardless of how large the file is
+      const partCount = Math.min(3, Math.ceil(savedSize / MOVIE_UPLOAD_MAX_BYTES));
+      const dynamicPartSize = Math.ceil(savedSize / partCount);
+      await sendSplitMovieParts(ranuxPro, from, mek, tempPath, fileName, caption, savedSize, progress, dynamicPartSize);
     } else {
       let uploadPercent = 0;
       uploadTimer = setInterval(() => {
