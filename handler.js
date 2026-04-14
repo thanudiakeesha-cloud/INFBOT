@@ -1035,6 +1035,9 @@ const handleMessage = async (sock, msg) => {
               isMod: isMod(sender),
               commandName,
               prefix: sessionPrefix,
+              q: args.join(' '),
+              body,
+              message: msg,
               reply: (text) => sock.sendMessage(from, { text }, { quoted: msg }).catch(() => {}),
               react: (emoji) => sock.sendMessage(from, { react: { text: emoji, key: msg.key } }).catch(() => {})
             });
@@ -1048,6 +1051,33 @@ const handleMessage = async (sock, msg) => {
         return;
       }
     }
+
+    // ── Filter Commands (multi-step flows e.g. .movie selection) ──
+    try {
+      for (const [, cmdObj] of cmdRegistry) {
+        if (typeof cmdObj.filter === 'function') {
+          const matched = cmdObj.filter(body, { sender, from, message: msg });
+          if (matched) {
+            const executeFn = cmdObj.handler || cmdObj.execute;
+            if (executeFn) {
+              const q = body.trim();
+              await executeFn(sock, msg, [q], {
+                from, sender, isGroup, groupMetadata,
+                body: q,
+                isOwner: isOwner(sender, sock),
+                isAdmin: false, isBotAdmin: false, isMod: isMod(sender),
+                reply: (text) => sock.sendMessage(from, { text }, { quoted: msg }).catch(() => {}),
+                react: (emoji) => sock.sendMessage(from, { react: { text: emoji, key: msg.key } }).catch(() => {})
+              });
+              return;
+            }
+          }
+        }
+      }
+    } catch (filterErr) {
+      console.error('Filter command error:', filterErr);
+    }
+    // ── End Filter Commands ────────────────────────────────────────
 
     // ── Auto-Reply ───────────────────────────────────────────────
     try {

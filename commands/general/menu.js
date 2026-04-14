@@ -40,6 +40,7 @@ const CATEGORIES = {
   media: {
     icon: '📥', labelKey: 'cat_label_media',
     cmds: [
+      { name: 'movie',  descKey: 'desc_movie'  },
       { name: 'song',   descKey: 'desc_song'   },
       { name: 'yt',     descKey: 'desc_yt'     },
       { name: 'ytmp3',  descKey: 'desc_ytmp3'  },

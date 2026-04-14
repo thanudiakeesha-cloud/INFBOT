@@ -113,6 +113,7 @@ const STRINGS = {
     ytmp4:        'YouTube → MP4',
     play:         'Quick play',
     lyrics:       'Song lyrics',
+    movie:        'Movie finder',
     antilink:     'Block links',
     demote:       'Remove admin',
     goodbye:      'Leave message',
@@ -160,6 +161,7 @@ const STRINGS = {
     lang:         'Change language',
     save:         'Save status media',
     // ── Command descriptions (shown in menu) ──
+    desc_movie:       'Sinhalasub.lk movies 🎬',
     desc_song:        'Download songs 🎵',
     desc_yt:          'YouTube info & search 🔍',
     desc_ytmp3:       'YouTube → MP3 🎧',
@@ -318,6 +320,7 @@ const STRINGS = {
     ytmp4:        'YouTube → MP4',
     play:         'ඉක්මනින් වාදනය',
     lyrics:       'ගීත පද',
+    movie:        'චිත්‍රපට සෙවීම',
     antilink:     'සබැඳි අවහිර',
     demote:       'Admin ඉවත් කරන්න',
     goodbye:      'සමුගැනීමේ පණිවිඩ',
@@ -366,6 +369,7 @@ const STRINGS = {
     lang:         'භාෂාව වෙනස් කරන්න',
     save:         'Status සුරකින්න',
     // ── Command descriptions (shown in menu) ──
+    desc_movie:       'Sinhalasub.lk චිත්‍රපට 🎬',
     desc_song:        'ගීත බාගන්න 🎵',
     desc_yt:          'YouTube සෙවීම 🔍',
     desc_ytmp3:       'YouTube → MP3 🎧',
