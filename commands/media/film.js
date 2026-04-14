@@ -110,40 +110,43 @@ function renderProgressBar(percent) {
 }
 
 function renderMovieProgress({ title, quality, size, percent, downloadPercent, uploadPercent, stage, downloadedBytes, totalBytes, speedBytesPerSecond, startedAt }) {
-  const downloaded = formatBytes(downloadedBytes);
-  const total = formatBytes(totalBytes);
-  const sizeLine = downloaded && total ? `│ 📦 *Progress:* ${downloaded} / ${total}\n` : "";
-  const speed = formatBytes(speedBytesPerSecond);
-  const speedLine = speed ? `│ 🚀 *Speed:* ${speed}/s\n` : "";
+  const safeDownloadPercent = downloadPercent ?? percent ?? 0;
+  const safeUploadPercent = uploadPercent ?? 0;
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
 
-  // ETA calculation
-  let etaLine = "";
-  const safeDownloadPercent = downloadPercent ?? percent ?? 0;
+  const downloaded = formatBytes(downloadedBytes);
+  const total = formatBytes(totalBytes);
+  const speed = formatBytes(speedBytesPerSecond);
+
+  // ETA
+  let eta = "";
   if (speedBytesPerSecond > 0 && totalBytes > 0 && downloadedBytes > 0 && safeDownloadPercent < 100) {
-    const remainingBytes = totalBytes - downloadedBytes;
-    const etaSeconds = remainingBytes / speedBytesPerSecond;
-    const etaStr = formatEta(etaSeconds);
-    if (etaStr) etaLine = `│ ⏳ *ETA:* ${etaStr}\n`;
+    eta = formatEta((totalBytes - downloadedBytes) / speedBytesPerSecond);
   }
 
-  const safeUploadPercent = uploadPercent ?? 0;
+  const progressLine = downloaded && total
+    ? `${downloaded} / ${total}${speed ? "  •  " + speed + "/s" : ""}${eta ? "  •  ⏳ " + eta : ""}`
+    : size;
+
+  const isUploading = safeDownloadPercent >= 100;
+
   return (
-    `╭───〔 📥 *𝐌𝐎𝐕𝐈𝐄 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃* 〕───┈\n` +
+    `╭─────────────────────────╮\n` +
+    `│  📥 *Downloading Movie*\n` +
     `│\n` +
-    `│ 🎬 *Movie:* ${title}\n` +
-    `│ 📊 *Quality:* ${quality}\n` +
-    `│ 💾 *Size:* ${size}\n` +
-    sizeLine +
-    speedLine +
-    etaLine +
-    `│ ⏱️ *Time:* ${elapsedSeconds}s\n` +
-    `│ ⚙️ *Status:* ${stage}\n` +
-    `│ ⬇️ *Download:* ${renderProgressBar(safeDownloadPercent)}\n` +
-    `│ ⬆️ *Upload:*   ${renderProgressBar(safeUploadPercent)}\n` +
+    `│  🎬 ${title}\n` +
+    `│  📊 ${quality}  •  ${size}\n` +
     `│\n` +
-    `╰──────────────────────┈\n` +
-    `_This message updates every second until the film appears in chat._`
+    (isUploading
+      ? `│  ⬆️ *Sending to chat...*\n` +
+        `│  ${renderProgressBar(safeUploadPercent)}\n`
+      : `│  ⬇️ *Downloading...*\n` +
+        `│  ${renderProgressBar(safeDownloadPercent)}\n` +
+        (progressLine ? `│  ${progressLine}\n` : "")
+    ) +
+    `│\n` +
+    `│  ⏱️ ${elapsedSeconds}s  •  ${stage}\n` +
+    `╰─────────────────────────╯`
   );
 }
 
@@ -235,9 +238,17 @@ async function sendSplitMovieParts(sock, chatId, quoted, sourcePath, baseFileNam
   try {
     await sock.sendMessage(chatId, {
       text:
-        `*📦 Large movie detected — sending in ${partCount} part${partCount > 1 ? "s" : ""}.*\n\n` +
-        `Each part is up to ${formatBytes(bytesPerPart)}. Download every part and join them in order to restore the full movie.\n\n` +
-        `_Tip: Use_ *HJSplit* _(Windows) or run_ \`cat part01 part02 > movie.mp4\` _(Linux/Mac) to merge._`
+        `╭─────────────────────────╮\n` +
+        `│  📦 *Sending in ${partCount} Parts*\n` +
+        `│\n` +
+        `│  Each part: ~${formatBytes(bytesPerPart)}\n` +
+        `│\n` +
+        `│  ⚠️ *How to watch:*\n` +
+        `│  1. Download all ${partCount} parts\n` +
+        `│  2. Join them using HJSplit (Windows)\n` +
+        `│     or: cat part1 part2 > movie.mp4\n` +
+        `│  3. Open the joined .mp4 file\n` +
+        `╰─────────────────────────╯`
     }, { quoted });
 
     for (let index = 0; index < partCount; index += 1) {
@@ -271,9 +282,11 @@ async function sendSplitMovieParts(sock, chatId, quoted, sourcePath, baseFileNam
         fileName: partFileName,
         caption:
           `${baseCaption}\n\n` +
-          `📦 *Part:* ${partNumber}/${partCount}\n` +
-          `📏 *Part size:* ${formatBytes(end - start + 1)}\n\n` +
-          `⚠️ _Each part is a fragment — download all ${partCount} parts and join them to watch the full movie._`
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `📦 Part *${partNumber} of ${partCount}*\n` +
+          `📏 Size: ${formatBytes(end - start + 1)}\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `_Download all ${partCount} parts and join them before watching._`
       }, { quoted });
 
       clearInterval(uploadTimer);
@@ -431,35 +444,37 @@ cmd({
   filename: __filename
 }, async (ranuxPro, mek, m, { from, q, sender, reply }) => {
   if (!q) return reply(
-    `*ℹ️ Please provide a movie name.*\n\n` +
-    `*Example:* \`.movie avatar\`\n\n` +
-    `*Aliases:* .film | .mv | .films | .sinhalasub`
+    `🎬 *Movie Downloader*\n\n` +
+    `Usage: \`.movie <title>\`\n` +
+    `Example: \`.movie avatar\`\n\n` +
+    `_Also works with:_ .film | .mv | .films`
   );
 
   if (global.pendingMenu) delete global.pendingMenu[sender];
   if (global.pendingVideo) delete global.pendingVideo[sender];
   if (global.pendingMovie[sender]) delete global.pendingMovie[sender];
 
-  await reply(`*⏳ Searching for "${q}"...*`);
+  await reply(`🔍 Searching for *"${q}"*...`);
 
   try {
     const searchResults = await searchMovies(q);
     if (!searchResults.length) return reply(
-      `*❌ No movies found for "*${q}*"*\n\n` +
-      `Try a different spelling or a shorter title.\n` +
-      `_Example: .movie avatar (not "Avatar: The Way of Water")_`
+      `❌ *No results for "${q}"*\n\n` +
+      `Try a shorter or different title.\n` +
+      `_Example:_ .movie avatar`
     );
 
     global.pendingMovie[sender] = { step: 1, results: searchResults, timestamp: Date.now() };
 
     const text =
-      `╭───〔 🎬 *𝐌𝐎𝐕𝐈𝐄 𝐒𝐄𝐀𝐑𝐂𝐇* 〕───┈\n` +
+      `╭─────────────────────────╮\n` +
+      `│  🎬 *Movie Search*\n` +
       `│\n` +
-      `│ 🔍 *Results for:* "${q}"\n` +
-      `│ 🌸 *Found:* ${searchResults.length} movie(s)\n` +
+      `│  🔍 "${q}"\n` +
+      `│  Found *${searchResults.length}* result(s)\n` +
       `│\n` +
-      `╰──────────────────────┈\n\n` +
-      `*👇 Tap a movie below to select it:*`;
+      `│  👇 Tap a title to select\n` +
+      `╰─────────────────────────╯`;
 
     const movieButtons = searchResults.map((movie, i) =>
       btn(`mv_select_${i + 1}`, `🎬 ${movie.title}`)
@@ -474,7 +489,7 @@ cmd({
 
   } catch (e) {
     console.error("Movie Search Error:", e.message);
-    reply(`❌ *Search failed:* ${e.message || "Please try again later."}`);
+    reply(`❌ Search failed. Please try again.\n_${e.message || ""}_`);
   }
 });
 
@@ -489,9 +504,9 @@ cmd({
 }, async (ranuxPro, mek, m, { from, sender, reply }) => {
   if (global.pendingMovie[sender]) {
     delete global.pendingMovie[sender];
-    reply("*✅ Movie session cancelled.* You can start a new search with `.movie <title>`.");
+    reply("✅ *Cancelled.* Start a new search anytime with `.movie <title>`");
   } else {
-    reply("*ℹ️ You have no active movie session to cancel.*");
+    reply("ℹ️ No active movie session to cancel.");
   }
 });
 
@@ -516,21 +531,22 @@ cmd({
   delete global.pendingMovie[sender];
 
   try {
-    await reply(`*⏳ Fetching details for "${selected.title}"...*`);
+    await reply(`⏳ Loading *"${selected.title}"*...`);
     const metadata = await getMovieMetadata(selected.movieUrl);
 
+    const title = metadata.title || selected.title;
     const metaMsg =
-      `╭───〔 🎬 *𝐌𝐎𝐕𝐈𝐄 𝐃𝐄𝐓𝐀𝐈𝐋𝐒* 〕───┈\n` +
+      `╭─────────────────────────╮\n` +
+      `│  🎬 *${title}*\n` +
       `│\n` +
-      `│ 🏷️ *Title:* ${metadata.title || selected.title}\n` +
-      `│ ⭐ *IMDb:* ${metadata.imdb}\n` +
-      `│ 🕒 *Duration:* ${metadata.duration}\n` +
-      `│ 🎭 *Genre:* ${metadata.genres.join(", ") || "N/A"}\n` +
-      `│ 👤 *Director:* ${metadata.directors.join(", ") || "N/A"}\n` +
-      `│ 🌐 *Language:* ${metadata.language || "N/A"}\n` +
+      `│  ⭐ IMDb: ${metadata.imdb}\n` +
+      `│  🕒 ${metadata.duration}\n` +
+      `│  🎭 ${metadata.genres.join(", ") || "N/A"}\n` +
+      `│  🌐 ${metadata.language || "N/A"}\n` +
+      (metadata.directors.length ? `│  🎥 ${metadata.directors.join(", ")}\n` : "") +
       `│\n` +
-      `╰──────────────────────┈\n\n` +
-      `📥 *Fetching download links...*\n( ｡ • ̀ ω • ́ ｡ ) Please wait...`;
+      `│  ⏳ Loading download options...\n` +
+      `╰─────────────────────────╯`;
 
     if (metadata.thumbnail) {
       await ranuxPro.sendMessage(from, { image: { url: metadata.thumbnail }, caption: metaMsg }, { quoted: mek });
@@ -541,11 +557,9 @@ cmd({
     const downloadLinks = await getPixeldrainLinks(selected.movieUrl);
     if (!downloadLinks.length) {
       return reply(
-        `*❌ No direct download links found for this movie.*\n\n` +
-        `This may be because:\n` +
-        `• The movie page has no Pixeldrain links\n` +
-        `• The download page is temporarily unavailable\n\n` +
-        `Try searching for another quality or a different movie.`
+        `❌ *No download links found for this movie.*\n\n` +
+        `The movie site may not have upload links yet.\n` +
+        `Try a different movie or search again later.`
       );
     }
 
@@ -556,14 +570,14 @@ cmd({
     };
 
     const qualityText =
-      `╭───〔 📥 *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃 𝐋𝐈𝐒𝐓* 〕───┈\n` +
+      `╭─────────────────────────╮\n` +
+      `│  📥 *Choose Quality*\n` +
       `│\n` +
-      `│ 🎬 *${metadata.title || selected.title}*\n` +
-      `│ 📋 *${downloadLinks.length} quality option(s) available*\n` +
-      `│ _(sorted best quality first)_\n` +
+      `│  🎬 ${title}\n` +
+      `│  ${downloadLinks.length} option(s) — best quality first\n` +
       `│\n` +
-      `╰──────────────────────┈\n\n` +
-      `*👇 Tap a quality to start downloading:*`;
+      `│  👇 Tap to start download\n` +
+      `╰─────────────────────────╯`;
 
     const qualityButtons = downloadLinks.map((d, i) =>
       btn(`mv_dl_${i + 1}`, `📥 ${d.quality}  •  ${d.size}`)
@@ -577,7 +591,7 @@ cmd({
   } catch (e) {
     delete global.pendingMovie[sender];
     console.error("Movie Detail Fetch Error:", e.message);
-    reply(`❌ *Failed to fetch movie details:* ${e.message || "Please try again."}`);
+    reply(`❌ Couldn't load this movie. Please try again.\n_${e.message || ""}_`);
   }
 });
 
@@ -601,35 +615,34 @@ cmd({
 
   if (global.activeMovieDownloads.size >= MAX_MOVIE_DOWNLOADS) {
     return reply(
-      `*⏳ A movie download is already in progress.*\n\n` +
-      `Please wait for it to finish before starting a new one.\n` +
-      `_This prevents memory issues during large file uploads._`
+      `⏳ *Another download is running.*\n\n` +
+      `Please wait for it to finish, then try again.`
     );
   }
 
   const directUrl = getDirectPixeldrainUrl(selectedLink.link);
-  if (!directUrl) return reply("❌ *Could not generate a direct download link. The Pixeldrain URL may have changed.*");
+  if (!directUrl) return reply("❌ Download link not available. Please try a different quality.");
 
   const knownSizeBytes = parseSizeToBytes(selectedLink.size);
   if (knownSizeBytes > 0) {
     const estimatedParts = Math.min(3, Math.ceil(knownSizeBytes / MOVIE_UPLOAD_MAX_BYTES));
     if (estimatedParts > 1) {
       await reply(
-        `*📦 Large file detected (${selectedLink.size}).*\n` +
-        `This movie will be downloaded and sent in *${estimatedParts} parts*. Please wait...`
+        `📦 *Large file (${selectedLink.size})*\n` +
+        `Will be sent in *${estimatedParts} parts*. Please wait while it downloads...`
       );
     }
   }
 
   const caption =
-    `╭───〔 ✅ *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐃* 〕───┈\n` +
+    `╭─────────────────────────╮\n` +
+    `│  ✅ *Movie Ready!*\n` +
     `│\n` +
-    `│ 🎬 *Movie:* ${movie.metadata.title}\n` +
-    `│ 📊 *Quality:* ${selectedLink.quality}\n` +
-    `│ 💾 *Size:* ${selectedLink.size}\n` +
+    `│  🎬 ${movie.metadata.title}\n` +
+    `│  📊 ${selectedLink.quality}  •  ${selectedLink.size}\n` +
     `│\n` +
-    `╰──────────────────────┈\n` +
-    `🍿 *Enjoy the movie!*`;
+    `│  🍿 Enjoy watching!\n` +
+    `╰─────────────────────────╯`;
 
   const fileName = `${movie.metadata.title.substring(0, 50)} - ${selectedLink.quality}.mp4`
     .replace(/[^\w\s.-]/gi, "");
@@ -659,7 +672,7 @@ cmd({
 
     const savedSize = fs.statSync(tempPath).size;
 
-    progress.update({ downloadPercent: 100, uploadPercent: 0, downloadedBytes, totalBytes, stage: "Download complete. Uploading to chat..." });
+    progress.update({ downloadPercent: 100, uploadPercent: 0, downloadedBytes, totalBytes, stage: "Done! Sending to chat..." });
 
     if (savedSize > MOVIE_UPLOAD_MAX_BYTES) {
       // Split into at most 3 parts regardless of how large the file is
@@ -683,13 +696,13 @@ cmd({
       uploadTimer = null;
     }
 
-    await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "✅ Film sent to chat!" });
+    await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "Sent! 🍿" });
 
   } catch (error) {
     console.error("Movie Send Error:", error.message);
     if (uploadTimer) clearInterval(uploadTimer);
-    await progress.stop({ stage: `❌ Failed: ${error.message || "Unknown error"}` });
-    reply(`*❌ Failed to send movie:* ${error.message || "An unknown error occurred."}`);
+    await progress.stop({ stage: `Failed ❌` });
+    reply(`❌ *Failed to send movie.*\nPlease try again or choose a different quality.`);
   } finally {
     global.activeMovieDownloads.delete(sender);
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
