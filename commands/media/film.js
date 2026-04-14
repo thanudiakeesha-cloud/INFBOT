@@ -1,8 +1,11 @@
 const { cmd } = require("../../command");
-const puppeteer = require("puppeteer");
+const puppeteerExtra = require("puppeteer-extra");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 const config = require("../../config");
 const { execSync } = require("child_process");
 const { sendBtn, btn, urlBtn } = require("../../utils/sendBtn");
+
+puppeteerExtra.use(StealthPlugin());
 
 // Global State
 global.pendingMovie = global.pendingMovie || {};
@@ -19,10 +22,29 @@ try {
   CHROMIUM_PATH = "/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium";
 }
 const PUPPETEER_OPTS = {
-  headless: "new",
+  headless: true,
   executablePath: CHROMIUM_PATH,
-  args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+  args: [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--window-size=1280,800"
+  ]
 };
+
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+async function newStealthPage(browser) {
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  await page.setViewport({ width: 1280, height: 800 });
+  await page.setExtraHTTPHeaders({
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+  });
+  return page;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function normalizeQuality(text) {
@@ -43,82 +65,113 @@ function getDirectPixeldrainUrl(url) {
 // ─── Scrapers ─────────────────────────────────────────────────────────────────
 async function searchMovies(query) {
   const searchUrl = `https://sinhalasub.lk/?s=${encodeURIComponent(query)}&post_type=movies`;
-  const browser = await puppeteer.launch(PUPPETEER_OPTS);
-  const page = await browser.newPage();
-  await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 45000 });
-  const results = await page.$$eval(".display-item .item-box", boxes =>
-    boxes.slice(0, 8).map((box, index) => {
-      const a = box.querySelector("a");
-      return {
-        id: index + 1,
-        title: a?.title?.trim() || "Unknown Title",
-        movieUrl: a?.href || "",
-      };
-    }).filter(m => m.title && m.movieUrl)
-  );
-  await browser.close();
-  return results;
+  const browser = await puppeteerExtra.launch(PUPPETEER_OPTS);
+  const page = await newStealthPage(browser);
+  try {
+    await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 45000 });
+    // Check if blocked by Cloudflare
+    const pageTitle = await page.title();
+    if (pageTitle.includes("Attention Required") || pageTitle.includes("Just a moment")) {
+      await new Promise(r => setTimeout(r, 8000));
+      await page.reload({ waitUntil: "networkidle2", timeout: 30000 });
+    }
+    const results = await page.$$eval(".display-item .item-box", boxes =>
+      boxes.slice(0, 8).map((box, index) => {
+        const a = box.querySelector("a");
+        return {
+          id: index + 1,
+          title: a?.title?.trim() || a?.textContent?.trim() || "Unknown Title",
+          movieUrl: a?.href || "",
+        };
+      }).filter(m => m.title && m.movieUrl)
+    );
+    await browser.close();
+    return results;
+  } catch (e) {
+    await browser.close();
+    throw e;
+  }
 }
 
 async function getMovieMetadata(url) {
-  const browser = await puppeteer.launch(PUPPETEER_OPTS);
-  const page = await browser.newPage();
-  await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
-  const metadata = await page.evaluate(() => {
-    const getText = el => el?.textContent.trim() || "";
-    const getList = selector => Array.from(document.querySelectorAll(selector)).map(el => el.textContent.trim());
-    const title = getText(document.querySelector(".info-details .details-title h3"));
-    let language = "N/A", directors = [];
-    document.querySelectorAll(".info-col p").forEach(p => {
-      const strong = p.querySelector("strong");
-      if (!strong) return;
-      const txt = strong.textContent.trim();
-      if (txt.includes("Language:")) language = strong.nextSibling?.textContent?.trim() || "N/A";
-      if (txt.includes("Director:")) directors = Array.from(p.querySelectorAll("a")).map(a => a.textContent.trim());
+  const browser = await puppeteerExtra.launch(PUPPETEER_OPTS);
+  const page = await newStealthPage(browser);
+  try {
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
+    const pageTitle = await page.title();
+    if (pageTitle.includes("Attention Required") || pageTitle.includes("Just a moment")) {
+      await new Promise(r => setTimeout(r, 8000));
+      await page.reload({ waitUntil: "networkidle2", timeout: 30000 });
+    }
+    const metadata = await page.evaluate(() => {
+      const getText = el => el?.textContent.trim() || "";
+      const getList = selector => Array.from(document.querySelectorAll(selector)).map(el => el.textContent.trim());
+      const title = getText(document.querySelector(".info-details .details-title h3"));
+      let language = "N/A", directors = [];
+      document.querySelectorAll(".info-col p").forEach(p => {
+        const strong = p.querySelector("strong");
+        if (!strong) return;
+        const txt = strong.textContent.trim();
+        if (txt.includes("Language:")) language = strong.nextSibling?.textContent?.trim() || "N/A";
+        if (txt.includes("Director:")) directors = Array.from(p.querySelectorAll("a")).map(a => a.textContent.trim());
+      });
+      const duration = getText(document.querySelector(".info-details .data-views[itemprop='duration']")) || "N/A";
+      const imdb = getText(document.querySelector(".info-details .data-imdb"))?.replace("IMDb:", "").trim() || "N/A";
+      const genres = getList(".details-genre a");
+      const thumbnail = document.querySelector(".splash-bg img")?.src || "";
+      return { title, language, duration, imdb, genres, directors, thumbnail };
     });
-    const duration = getText(document.querySelector(".info-details .data-views[itemprop='duration']")) || "N/A";
-    const imdb = getText(document.querySelector(".info-details .data-imdb"))?.replace("IMDb:", "").trim() || "N/A";
-    const genres = getList(".details-genre a");
-    const thumbnail = document.querySelector(".splash-bg img")?.src || "";
-    return { title, language, duration, imdb, genres, directors, thumbnail };
-  });
-  await browser.close();
-  return metadata;
+    await browser.close();
+    return metadata;
+  } catch (e) {
+    await browser.close();
+    throw e;
+  }
 }
 
 async function getPixeldrainLinks(movieUrl) {
-  const browser = await puppeteer.launch(PUPPETEER_OPTS);
-  const page = await browser.newPage();
-  await page.goto(movieUrl, { waitUntil: "networkidle2", timeout: 60000 });
-  const linksData = await page.$$eval(".link-pixeldrain tbody tr", rows =>
-    rows.map(row => {
-      const a = row.querySelector(".link-opt a");
-      const quality = row.querySelector(".quality")?.textContent.trim() || "";
-      const size = row.querySelector("td:nth-child(3) span")?.textContent.trim() || "";
-      return { pageLink: a?.href || "", quality, size };
-    })
-  );
-  const directLinks = [];
-  for (const l of linksData) {
-    try {
-      const subPage = await browser.newPage();
-      await subPage.goto(l.pageLink, { waitUntil: "networkidle2", timeout: 45000 });
-      await new Promise(r => setTimeout(r, 12000));
-      const finalUrl = await subPage.$eval(".wait-done a[href^='https://pixeldrain.com/']", el => el.href).catch(() => null);
-      if (finalUrl) {
-        let sizeMB = 0;
-        const sizeText = l.size.toUpperCase();
-        if (sizeText.includes("GB")) sizeMB = parseFloat(sizeText) * 1024;
-        else if (sizeText.includes("MB")) sizeMB = parseFloat(sizeText);
-        if (sizeMB > 0 && sizeMB <= 2048) {
-          directLinks.push({ link: finalUrl, quality: normalizeQuality(l.quality), size: l.size });
+  const browser = await puppeteerExtra.launch(PUPPETEER_OPTS);
+  const page = await newStealthPage(browser);
+  try {
+    await page.goto(movieUrl, { waitUntil: "networkidle2", timeout: 60000 });
+    const pageTitle = await page.title();
+    if (pageTitle.includes("Attention Required") || pageTitle.includes("Just a moment")) {
+      await new Promise(r => setTimeout(r, 8000));
+      await page.reload({ waitUntil: "networkidle2", timeout: 30000 });
+    }
+    const linksData = await page.$$eval(".link-pixeldrain tbody tr", rows =>
+      rows.map(row => {
+        const a = row.querySelector(".link-opt a");
+        const quality = row.querySelector(".quality")?.textContent.trim() || "";
+        const size = row.querySelector("td:nth-child(3) span")?.textContent.trim() || "";
+        return { pageLink: a?.href || "", quality, size };
+      })
+    );
+    const directLinks = [];
+    for (const l of linksData) {
+      try {
+        const subPage = await newStealthPage(browser);
+        await subPage.goto(l.pageLink, { waitUntil: "networkidle2", timeout: 45000 });
+        await new Promise(r => setTimeout(r, 12000));
+        const finalUrl = await subPage.$eval(".wait-done a[href^='https://pixeldrain.com/']", el => el.href).catch(() => null);
+        if (finalUrl) {
+          let sizeMB = 0;
+          const sizeText = l.size.toUpperCase();
+          if (sizeText.includes("GB")) sizeMB = parseFloat(sizeText) * 1024;
+          else if (sizeText.includes("MB")) sizeMB = parseFloat(sizeText);
+          if (sizeMB > 0 && sizeMB <= 2048) {
+            directLinks.push({ link: finalUrl, quality: normalizeQuality(l.quality), size: l.size });
+          }
         }
-      }
-      await subPage.close();
-    } catch (e) { continue; }
+        await subPage.close();
+      } catch (e) { continue; }
+    }
+    await browser.close();
+    return directLinks;
+  } catch (e) {
+    await browser.close();
+    throw e;
   }
-  await browser.close();
-  return directLinks;
 }
 
 // ─── Step 1: Search ───────────────────────────────────────────────────────────
