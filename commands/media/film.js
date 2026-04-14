@@ -26,6 +26,8 @@ const DOWNLOAD_HIGH_WATER_MARK = 2 * 1024 * 1024;
 const MAX_MOVIE_DOWNLOADS = Math.max(1, Number(process.env.MAX_MOVIE_DOWNLOADS) || 1);
 const MOVIE_UPLOAD_MAX_MB = Math.max(50, Number(process.env.MOVIE_UPLOAD_MAX_MB) || 300);
 const MOVIE_UPLOAD_MAX_BYTES = MOVIE_UPLOAD_MAX_MB * 1024 * 1024;
+const MOVIE_SPLIT_MAX_MB = Math.max(MOVIE_UPLOAD_MAX_MB, Number(process.env.MOVIE_SPLIT_MAX_MB) || MOVIE_UPLOAD_MAX_MB * 3);
+const MOVIE_SPLIT_MAX_BYTES = MOVIE_SPLIT_MAX_MB * 1024 * 1024;
 const downloadHttpAgent = new http.Agent({ keepAlive: true, maxSockets: 8 });
 const downloadHttpsAgent = new https.Agent({ keepAlive: true, maxSockets: 8 });
 
@@ -180,6 +182,77 @@ async function downloadMovieToFile(url, tempPath, onProgress) {
   }
 
   return { downloadedBytes, totalBytes };
+}
+
+async function copyRangeToPart(sourcePath, partPath, start, end) {
+  await pipeline(
+    fs.createReadStream(sourcePath, { start, end, highWaterMark: DOWNLOAD_HIGH_WATER_MARK }),
+    fs.createWriteStream(partPath, { highWaterMark: DOWNLOAD_HIGH_WATER_MARK })
+  );
+}
+
+async function sendSplitMovieParts(sock, chatId, quoted, sourcePath, baseFileName, baseCaption, totalSize, progress) {
+  const partCount = Math.ceil(totalSize / MOVIE_UPLOAD_MAX_BYTES);
+  const partPaths = [];
+  let uploadTimer = null;
+
+  try {
+    await sock.sendMessage(chatId, {
+      text:
+        `*📦 Large movie detected — sending in ${partCount} parts.*\n\n` +
+        `Each part is up to ${MOVIE_UPLOAD_MAX_MB}MB. Download every part and join them in order to restore the movie file.`
+    }, { quoted });
+
+    for (let index = 0; index < partCount; index += 1) {
+      const partNumber = index + 1;
+      const start = index * MOVIE_UPLOAD_MAX_BYTES;
+      const end = Math.min(totalSize - 1, start + MOVIE_UPLOAD_MAX_BYTES - 1);
+      const partPath = `${sourcePath}.part${String(partNumber).padStart(2, "0")}of${String(partCount).padStart(2, "0")}`;
+      const partFileName = `${baseFileName}.part${String(partNumber).padStart(2, "0")}of${String(partCount).padStart(2, "0")}`;
+      partPaths.push(partPath);
+
+      progress.update({
+        uploadPercent: Math.round((index / partCount) * 100),
+        stage: `Preparing part ${partNumber}/${partCount}...`
+      });
+
+      await copyRangeToPart(sourcePath, partPath, start, end);
+
+      let currentPartPercent = 0;
+      uploadTimer = setInterval(() => {
+        currentPartPercent = Math.min(95, currentPartPercent + 2);
+        const totalUploadPercent = ((index + currentPartPercent / 100) / partCount) * 100;
+        progress.update({
+          uploadPercent: totalUploadPercent,
+          stage: `Uploading part ${partNumber}/${partCount} to chat...`
+        });
+      }, 1000);
+
+      await sock.sendMessage(chatId, {
+        document: { url: partPath },
+        mimetype: "application/octet-stream",
+        fileName: partFileName,
+        caption:
+          `${baseCaption}\n\n` +
+          `📦 *Part:* ${partNumber}/${partCount}\n` +
+          `📏 *Part size:* ${formatBytes(end - start + 1)}\n\n` +
+          `_Download all parts and join them in order._`
+      }, { quoted });
+
+      clearInterval(uploadTimer);
+      uploadTimer = null;
+      if (fs.existsSync(partPath)) fs.unlinkSync(partPath);
+      progress.update({
+        uploadPercent: Math.round((partNumber / partCount) * 100),
+        stage: `Part ${partNumber}/${partCount} sent.`
+      });
+    }
+  } finally {
+    if (uploadTimer) clearInterval(uploadTimer);
+    for (const partPath of partPaths) {
+      if (fs.existsSync(partPath)) fs.unlinkSync(partPath);
+    }
+  }
 }
 
 async function sendLiveProgress(sock, chatId, quoted, initialState) {
@@ -440,14 +513,14 @@ cmd({
   if (!directUrl) return reply("❌ *Could not generate direct download link.*");
 
   const knownSizeBytes = parseSizeToBytes(selectedLink.size);
-  if (knownSizeBytes > MOVIE_UPLOAD_MAX_BYTES) {
+  if (knownSizeBytes > MOVIE_SPLIT_MAX_BYTES) {
     return reply(buildDirectLinkMessage({
       title: movie.metadata.title || "Selected Movie",
       quality: selectedLink.quality,
       size: selectedLink.size,
       link: selectedLink.link,
       directUrl,
-      reason: `File is over the safe Railway upload limit (${MOVIE_UPLOAD_MAX_MB}MB)`
+      reason: `File is over the safe split-send limit (${MOVIE_SPLIT_MAX_MB}MB)`
     }));
   }
 
@@ -488,13 +561,13 @@ cmd({
     });
 
     const savedSize = fs.statSync(tempPath).size;
-    if (savedSize > MOVIE_UPLOAD_MAX_BYTES) {
+    if (savedSize > MOVIE_SPLIT_MAX_BYTES) {
       await progress.stop({
         downloadPercent: 100,
         uploadPercent: 0,
         downloadedBytes,
         totalBytes,
-        stage: `Too large for safe Railway upload. Direct link sent.`
+        stage: `Too large for safe split-send. Direct link sent.`
       });
       return reply(buildDirectLinkMessage({
         title: movieTitle,
@@ -502,26 +575,31 @@ cmd({
         size: selectedLink.size || formatBytes(savedSize),
         link: selectedLink.link,
         directUrl,
-        reason: `Downloaded file is ${formatBytes(savedSize)}, over safe upload limit (${MOVIE_UPLOAD_MAX_MB}MB)`
+        reason: `Downloaded file is ${formatBytes(savedSize)}, over safe split-send limit (${MOVIE_SPLIT_MAX_MB}MB)`
       }));
     }
 
     progress.update({ downloadPercent: 100, uploadPercent: 0, downloadedBytes, totalBytes, stage: "Download complete. Uploading to chat..." });
 
-    let uploadPercent = 0;
-    uploadTimer = setInterval(() => {
-      uploadPercent = Math.min(95, uploadPercent + 2);
-      progress.update({ uploadPercent, stage: "Uploading film to chat..." });
-    }, 1000);
+    if (savedSize > MOVIE_UPLOAD_MAX_BYTES) {
+      await sendSplitMovieParts(ranuxPro, from, mek, tempPath, fileName, caption, savedSize, progress);
+    } else {
+      let uploadPercent = 0;
+      uploadTimer = setInterval(() => {
+        uploadPercent = Math.min(95, uploadPercent + 2);
+        progress.update({ uploadPercent, stage: "Uploading film to chat..." });
+      }, 1000);
 
-    await ranuxPro.sendMessage(from, {
-      document: { url: tempPath },
-      mimetype: "video/mp4",
-      fileName,
-      caption
-    }, { quoted: mek });
-    clearInterval(uploadTimer);
-    uploadTimer = null;
+      await ranuxPro.sendMessage(from, {
+        document: { url: tempPath },
+        mimetype: "video/mp4",
+        fileName,
+        caption
+      }, { quoted: mek });
+      clearInterval(uploadTimer);
+      uploadTimer = null;
+    }
+
     await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "Film sent to chat." });
 
   } catch (error) {
