@@ -333,9 +333,8 @@ async function sendSplitMovieParts(sock, chatId, quoted, sourcePath, baseFileNam
         });
       }, 1000);
 
-      const partBuffer = fs.readFileSync(partPath);
       await sock.sendMessage(chatId, {
-        document: partBuffer,
+        document: { url: partPath },
         mimetype: "application/octet-stream",
         fileName: partFileName,
         caption:
@@ -774,9 +773,8 @@ cmd({
             progress.update({ uploadPercent, stage: `Uploading part ${partNum}/${partCount}...` });
           }, 1000);
 
-          const partBuffer = fs.readFileSync(partPaths[i]);
           await ranuxPro.sendMessage(from, {
-            document: partBuffer,
+            document: { url: partPaths[i] },
             mimetype: "video/mp4",
             fileName: `${movie.metadata.title} - Part ${partNum} of ${partCount}.mp4`,
             caption:
@@ -803,9 +801,8 @@ cmd({
         progress.update({ uploadPercent, stage: "Uploading film to chat..." });
       }, 1000);
 
-      const videoBuffer = fs.readFileSync(tempPath);
       await ranuxPro.sendMessage(from, {
-        video: videoBuffer,
+        video: { url: tempPath },
         mimetype: "video/mp4",
         fileName,
         caption
