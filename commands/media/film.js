@@ -24,6 +24,8 @@ const BASE_URL = "https://sinhalasub.lk";
 const PROXY = "https://api.codetabs.com/v1/proxy?quest=";
 const DOWNLOAD_HIGH_WATER_MARK = 2 * 1024 * 1024;
 const MAX_MOVIE_DOWNLOADS = Math.max(1, Number(process.env.MAX_MOVIE_DOWNLOADS) || 1);
+const MOVIE_UPLOAD_MAX_MB = Math.max(50, Number(process.env.MOVIE_UPLOAD_MAX_MB) || 300);
+const MOVIE_UPLOAD_MAX_BYTES = MOVIE_UPLOAD_MAX_MB * 1024 * 1024;
 const downloadHttpAgent = new http.Agent({ keepAlive: true, maxSockets: 8 });
 const downloadHttpsAgent = new https.Agent({ keepAlive: true, maxSockets: 8 });
 
@@ -62,6 +64,19 @@ function formatBytes(bytes) {
   return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
+function parseSizeToBytes(sizeText) {
+  if (!sizeText) return 0;
+  const match = String(sizeText).replace(",", ".").match(/([\d.]+)\s*(GB|GIB|MB|MIB|KB|KIB|B)/i);
+  if (!match) return 0;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) return 0;
+  const unit = match[2].toUpperCase();
+  if (unit === "GB" || unit === "GIB") return value * 1024 * 1024 * 1024;
+  if (unit === "MB" || unit === "MIB") return value * 1024 * 1024;
+  if (unit === "KB" || unit === "KIB") return value * 1024;
+  return value;
+}
+
 function renderProgressBar(percent) {
   const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
   const width = 20;
@@ -69,13 +84,15 @@ function renderProgressBar(percent) {
   return `${"█".repeat(filled)}${"░".repeat(width - filled)} ${safePercent}%`;
 }
 
-function renderMovieProgress({ title, quality, size, percent, stage, downloadedBytes, totalBytes, speedBytesPerSecond, startedAt }) {
+function renderMovieProgress({ title, quality, size, percent, downloadPercent, uploadPercent, stage, downloadedBytes, totalBytes, speedBytesPerSecond, startedAt }) {
   const downloaded = formatBytes(downloadedBytes);
   const total = formatBytes(totalBytes);
   const sizeLine = downloaded && total ? `│ 📦 *Progress:* ${downloaded} / ${total}\n` : "";
   const speed = formatBytes(speedBytesPerSecond);
   const speedLine = speed ? `│ 🚀 *Speed:* ${speed}/s\n` : "";
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+  const safeDownloadPercent = downloadPercent ?? percent ?? 0;
+  const safeUploadPercent = uploadPercent ?? 0;
   return (
     `╭───〔 📥 *𝐌𝐎𝐕𝐈𝐄 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃* 〕───┈\n` +
     `│\n` +
@@ -86,10 +103,27 @@ function renderMovieProgress({ title, quality, size, percent, stage, downloadedB
     speedLine +
     `│ ⏱️ *Time:* ${elapsedSeconds}s\n` +
     `│ ⚙️ *Status:* ${stage}\n` +
-    `│ ${renderProgressBar(percent)}\n` +
+    `│ ⬇️ *Download:* ${renderProgressBar(safeDownloadPercent)}\n` +
+    `│ ⬆️ *Upload:*   ${renderProgressBar(safeUploadPercent)}\n` +
     `│\n` +
     `╰──────────────────────┈\n` +
     `_This message updates every second until the film appears in chat._`
+  );
+}
+
+function buildDirectLinkMessage({ title, quality, size, link, directUrl, reason }) {
+  return (
+    `╭───〔 🔗 *𝐃𝐈𝐑𝐄𝐂𝐓 𝐌𝐎𝐕𝐈𝐄 𝐋𝐈𝐍𝐊* 〕───┈\n` +
+    `│\n` +
+    `│ 🎬 *Movie:* ${title}\n` +
+    `│ 📊 *Quality:* ${quality}\n` +
+    `│ 💾 *Size:* ${size}\n` +
+    `│ 🛡️ *Reason:* ${reason}\n` +
+    `│\n` +
+    `╰──────────────────────┈\n\n` +
+    `Railway cannot safely upload this large file without crashing, so use this link:\n\n` +
+    `${link}\n\n` +
+    `*Direct download:*\n${directUrl}`
   );
 }
 
@@ -129,7 +163,7 @@ async function downloadMovieToFile(url, tempPath, onProgress) {
       ? Math.min(85, (downloadedBytes / totalBytes) * 85)
       : Math.min(85, 5 + (downloadedBytes / (1024 * 1024 * 1024)) * 80);
     onProgress({
-      percent,
+      downloadPercent: percent,
       downloadedBytes,
       totalBytes,
       speedBytesPerSecond: downloadedBytes / seconds
@@ -405,6 +439,18 @@ cmd({
   const directUrl = getDirectPixeldrainUrl(selectedLink.link);
   if (!directUrl) return reply("❌ *Could not generate direct download link.*");
 
+  const knownSizeBytes = parseSizeToBytes(selectedLink.size);
+  if (knownSizeBytes > MOVIE_UPLOAD_MAX_BYTES) {
+    return reply(buildDirectLinkMessage({
+      title: movie.metadata.title || "Selected Movie",
+      quality: selectedLink.quality,
+      size: selectedLink.size,
+      link: selectedLink.link,
+      directUrl,
+      reason: `File is over the safe Railway upload limit (${MOVIE_UPLOAD_MAX_MB}MB)`
+    }));
+  }
+
   const caption =
     `╭───〔 ✅ *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐃* 〕───┈\n` +
     `│\n` +
@@ -424,7 +470,8 @@ cmd({
     title: movieTitle,
     quality: selectedLink.quality,
     size: selectedLink.size,
-    percent: 0,
+    downloadPercent: 0,
+    uploadPercent: 0,
     stage: "Starting download...",
     downloadedBytes: 0,
     totalBytes: 0,
@@ -435,17 +482,36 @@ cmd({
   global.activeMovieDownloads.add(sender);
 
   try {
-    progress.update({ stage: "Downloading film..." });
+    progress.update({ downloadPercent: 0, uploadPercent: 0, stage: "Downloading film..." });
     const { downloadedBytes, totalBytes } = await downloadMovieToFile(directUrl, tempPath, update => {
       progress.update({ ...update, stage: "Downloading film..." });
     });
 
-    progress.update({ percent: 90, downloadedBytes, totalBytes, stage: "Download complete. Uploading to chat..." });
+    const savedSize = fs.statSync(tempPath).size;
+    if (savedSize > MOVIE_UPLOAD_MAX_BYTES) {
+      await progress.stop({
+        downloadPercent: 100,
+        uploadPercent: 0,
+        downloadedBytes,
+        totalBytes,
+        stage: `Too large for safe Railway upload. Direct link sent.`
+      });
+      return reply(buildDirectLinkMessage({
+        title: movieTitle,
+        quality: selectedLink.quality,
+        size: selectedLink.size || formatBytes(savedSize),
+        link: selectedLink.link,
+        directUrl,
+        reason: `Downloaded file is ${formatBytes(savedSize)}, over safe upload limit (${MOVIE_UPLOAD_MAX_MB}MB)`
+      }));
+    }
 
-    let uploadPercent = 90;
+    progress.update({ downloadPercent: 100, uploadPercent: 0, downloadedBytes, totalBytes, stage: "Download complete. Uploading to chat..." });
+
+    let uploadPercent = 0;
     uploadTimer = setInterval(() => {
-      uploadPercent = Math.min(99, uploadPercent + 1);
-      progress.update({ percent: uploadPercent, stage: "Uploading film to chat..." });
+      uploadPercent = Math.min(95, uploadPercent + 2);
+      progress.update({ uploadPercent, stage: "Uploading film to chat..." });
     }, 1000);
 
     await ranuxPro.sendMessage(from, {
@@ -456,12 +522,12 @@ cmd({
     }, { quoted: mek });
     clearInterval(uploadTimer);
     uploadTimer = null;
-    await progress.stop({ percent: 100, stage: "Film sent to chat." });
+    await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "Film sent to chat." });
 
   } catch (error) {
     console.error("Movie Send Error:", error.message);
     if (uploadTimer) clearInterval(uploadTimer);
-    await progress.stop({ stage: "Failed to send film.", percent: 0 });
+    await progress.stop({ stage: "Failed to send film." });
     reply(`*❌ Failed to send movie:* ${error.message || "An unknown error occurred."}`);
   } finally {
     global.activeMovieDownloads.delete(sender);
