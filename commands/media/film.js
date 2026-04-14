@@ -1,8 +1,6 @@
 const { cmd } = require("../../command");
 const axios = require("axios");
 const cheerio = require("cheerio");
-const fs = require("fs");
-const path = require("path");
 const { sendBtn, btn } = require("../../utils/sendBtn");
 
 // Global State
@@ -10,7 +8,6 @@ global.pendingMovie = global.pendingMovie || {};
 
 // Design Elements
 const LOGO_URL = "https://files.catbox.moe/2jt3ln.png";
-const FOOTER = `> 👑 ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴋɪɴɢ ʀᴀɴᴜx ᴘʀᴏ`;
 const BASE_URL = "https://sinhalasub.lk";
 const PROXY = "https://api.codetabs.com/v1/proxy?quest=";
 
@@ -139,7 +136,6 @@ cmd({
       image: { url: LOGO_URL },
       title: "🎬 Movie Search Results",
       text,
-      footer: FOOTER,
       buttons: movieButtons,
     }, { quoted: mek });
 
@@ -216,7 +212,6 @@ cmd({
 
     await sendBtn(ranuxPro, from, {
       text: qualityText,
-      footer: FOOTER,
       buttons: qualityButtons,
     }, { quoted: mek });
 
@@ -256,40 +251,23 @@ cmd({
     `│ 💾 *Size:* ${selectedLink.size}\n` +
     `│\n` +
     `╰──────────────────────┈\n` +
-    `🍿 *Enjoy the movie!*\n\n` +
-    FOOTER;
+    `🍿 *Enjoy the movie!*`;
 
   const fileName = `${movie.metadata.title.substring(0, 50)} - ${selectedLink.quality}.mp4`
     .replace(/[^\w\s.-]/gi, "");
 
-  const tempPath = path.join("/tmp", `movie_${Date.now()}.mp4`);
-
-  await reply(`*⏳ Downloading "${movie.metadata.title}" (${selectedLink.quality} — ${selectedLink.size})...*\n_This may take a few minutes. Please wait._`);
+  await reply(`*⏳ Sending "${movie.metadata.title}" (${selectedLink.quality} — ${selectedLink.size})...*\n_Please wait._`);
 
   try {
-    // Stream download to /tmp
-    const response = await axios({ method: "GET", url: directUrl, responseType: "stream", timeout: 0 });
-    const writer = fs.createWriteStream(tempPath);
-    await new Promise((resolve, reject) => {
-      response.data.pipe(writer);
-      writer.on("finish", resolve);
-      writer.on("error", reject);
-    });
-
-    // Send as document from disk buffer
-    const buffer = fs.readFileSync(tempPath);
     await ranuxPro.sendMessage(from, {
-      document: buffer,
+      document: { url: directUrl },
       mimetype: "video/mp4",
       fileName,
       caption
     }, { quoted: mek });
-
   } catch (error) {
     console.error("Movie Send Error:", error.message);
     reply(`*❌ Failed to send movie:* ${error.message || "An unknown error occurred."}`);
-  } finally {
-    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
   }
 });
 
