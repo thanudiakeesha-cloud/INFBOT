@@ -1,16 +1,38 @@
 const { cmd } = require("../../command");
 const axios = require("axios");
 const cheerio = require("cheerio");
+const fs = require("fs");
+const path = require("path");
+const http = require("http");
+const https = require("https");
+const { pipeline } = require("stream/promises");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
+const execFileAsync = promisify(execFile);
 const { sendBtn, btn } = require("../../utils/sendBtn");
+
+// Patch Baileys upload timeout from 30s → 30 minutes so large files can upload
+try {
+  const baileys = require("@whiskeysockets/baileys");
+  if (baileys.UPLOAD_TIMEOUT !== undefined) baileys.UPLOAD_TIMEOUT = 30 * 60 * 1000;
+} catch (_) {}
 
 // Global State (separate namespace from film.js)
 global.pendingMovie2 = global.pendingMovie2 || {};
+global.activeMovieDownloads2 = global.activeMovieDownloads2 || new Set();
+global.movieDownloadQueue2 = global.movieDownloadQueue2 || [];
 
 // Config
 const BASE_URL = "https://baiscopedownloads.link";
-const LOGO_URL 
+const LOGO_URL = "https://files.catbox.moe/2jt3ln.png";
 
-  ";
+const DOWNLOAD_HIGH_WATER_MARK = 2 * 1024 * 1024;
+const MAX_MOVIE_DOWNLOADS2 = Math.max(1, Number(process.env.MAX_MOVIE_DOWNLOADS) || 1);
+const MOVIE_UPLOAD_MAX_MB2 = Math.max(10, Number(process.env.MOVIE_UPLOAD_MAX_MB) || 64);
+const MOVIE_UPLOAD_MAX_BYTES2 = MOVIE_UPLOAD_MAX_MB2 * 1024 * 1024;
+
+const downloadHttpAgent2 = new http.Agent({ keepAlive: true, maxSockets: 8 });
+const downloadHttpsAgent2 = new https.Agent({ keepAlive: true, maxSockets: 8 });
 
 // Only codetabs reliably bypasses Cloudflare protection for this site
 const PROXY_POOL = [
@@ -39,9 +61,8 @@ const HOST_LABELS = {
 // Quality sort order (higher = better)
 const QUALITY_ORDER = { "4K": 5, "2160p": 5, "1080p": 4, "720p": 3, "480p": 2 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Proxy Helpers ────────────────────────────────────────────────────────────
 async function proxyFetch2(url, retries = 3) {
-  // Return cached result if still fresh
   const cached = proxyCache2.get(url);
   if (cached && Date.now() < cached.expiry) {
     return cached.response;
@@ -53,7 +74,6 @@ async function proxyFetch2(url, retries = 3) {
   let proxySkips = 0;
 
   while (realAttempts < retries) {
-    // Pick the first proxy not currently in cooldown
     let proxyIndex = proxyCooldown2.findIndex(until => now() >= until);
     if (proxyIndex === -1) {
       proxyIndex = proxyCooldown2.indexOf(Math.min(...proxyCooldown2));
@@ -120,6 +140,352 @@ function isExternalDownloadLink(url) {
     "wikipedia.org", "justpaste.it", "wp-content", "fonts.g"
   ];
   return !blocked.some(b => url.includes(b));
+}
+
+// ─── Download / Progress Helpers ──────────────────────────────────────────────
+function formatBytes2(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function formatEta2(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  if (seconds < 60) return `${Math.ceil(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.ceil(seconds % 60);
+  return `${m}m ${s}s`;
+}
+
+function renderProgressBar2(percent) {
+  const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+  const width = 20;
+  const filled = Math.round((safePercent / 100) * width);
+  return `${"█".repeat(filled)}${"░".repeat(width - filled)} ${safePercent}%`;
+}
+
+function renderMovieProgress2({ title, quality, size, downloadPercent, uploadPercent, stage, downloadedBytes, totalBytes, speedBytesPerSecond, startedAt }) {
+  const safeDownloadPercent = downloadPercent ?? 0;
+  const safeUploadPercent = uploadPercent ?? 0;
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+
+  const downloaded = formatBytes2(downloadedBytes);
+  const total = formatBytes2(totalBytes);
+  const speed = formatBytes2(speedBytesPerSecond);
+
+  let eta = "";
+  if (speedBytesPerSecond > 0 && totalBytes > 0 && downloadedBytes > 0 && safeDownloadPercent < 100) {
+    eta = formatEta2((totalBytes - downloadedBytes) / speedBytesPerSecond);
+  }
+
+  const progressLine = downloaded && total
+    ? `${downloaded} / ${total}${speed ? "  •  " + speed + "/s" : ""}${eta ? "  •  ⏳ " + eta : ""}`
+    : size;
+
+  const isUploading = safeDownloadPercent >= 100;
+
+  return (
+    `╭─────────────────────────╮\n` +
+    `│  📥 *Downloading Movie*\n` +
+    `│\n` +
+    `│  🎬 ${title}\n` +
+    `│  📊 ${quality}  •  ${size}\n` +
+    `│\n` +
+    (isUploading
+      ? `│  ⬆️ *Sending to chat...*\n` +
+        `│  ${renderProgressBar2(safeUploadPercent)}\n`
+      : `│  ⬇️ *Downloading...*\n` +
+        `│  ${renderProgressBar2(safeDownloadPercent)}\n` +
+        (progressLine ? `│  ${progressLine}\n` : "")
+    ) +
+    `│\n` +
+    `│  ⏱️ ${elapsedSeconds}s  •  ${stage}\n` +
+    `╰─────────────────────────╯`
+  );
+}
+
+async function sendLiveProgress2(sock, chatId, quoted, initialState) {
+  let state = { startedAt: Date.now(), ...initialState };
+  let stopped = false;
+  let editing = false;
+  let lastText = "";
+  const message = await sock.sendMessage(chatId, { text: renderMovieProgress2(state) }, { quoted });
+
+  const edit = async (force = false) => {
+    if (stopped || !message?.key) return;
+    if (editing) {
+      if (!force) return;
+      while (editing) await new Promise(resolve => setTimeout(resolve, 100));
+      if (stopped) return;
+    }
+    editing = true;
+    try {
+      const text = renderMovieProgress2(state);
+      if (force || text !== lastText) {
+        lastText = text;
+        await sock.sendMessage(chatId, { text, edit: message.key });
+      }
+    } catch (e) {
+      console.error("[film2] Progress edit error:", e.message);
+    } finally {
+      editing = false;
+    }
+  };
+
+  lastText = renderMovieProgress2(state);
+  const timer = setInterval(edit, 1000);
+
+  return {
+    update(nextState) {
+      state = { ...state, ...nextState };
+    },
+    async stop(finalState) {
+      state = { ...state, ...finalState };
+      clearInterval(timer);
+      await edit(true);
+      stopped = true;
+    }
+  };
+}
+
+async function downloadMovieToFile2(url, tempPath, onProgress) {
+  const response = await axios({
+    method: "GET",
+    url,
+    responseType: "stream",
+    timeout: 0,
+    maxRedirects: 10,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+    decompress: false,
+    httpAgent: downloadHttpAgent2,
+    httpsAgent: downloadHttpsAgent2,
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Accept": "*/*",
+      "Accept-Encoding": "identity",
+      "Connection": "keep-alive",
+    },
+    validateStatus: status => status >= 200 && status < 400
+  });
+
+  const contentType = (response.headers["content-type"] || "").toLowerCase();
+  if (contentType.includes("text/html")) {
+    throw new Error("REQUIRES_PAGE");
+  }
+
+  const totalBytes = Number(response.headers["content-length"]) || 0;
+  const startedAt = Date.now();
+  let downloadedBytes = 0;
+  let lastProgressAt = 0;
+
+  const { Transform } = require("stream");
+  const progressTransform = new Transform({
+    highWaterMark: DOWNLOAD_HIGH_WATER_MARK,
+    transform(chunk, encoding, callback) {
+      downloadedBytes += chunk.length;
+      const now = Date.now();
+      if (now - lastProgressAt >= 250 || downloadedBytes === totalBytes) {
+        lastProgressAt = now;
+        const seconds = Math.max(1, (now - startedAt) / 1000);
+        const percent = totalBytes
+          ? Math.min(85, (downloadedBytes / totalBytes) * 85)
+          : Math.min(85, 5 + (downloadedBytes / (1024 * 1024 * 1024)) * 80);
+        onProgress({
+          downloadPercent: percent,
+          downloadedBytes,
+          totalBytes,
+          speedBytesPerSecond: downloadedBytes / seconds
+        });
+      }
+      callback(null, chunk);
+    }
+  });
+
+  await pipeline(
+    response.data,
+    progressTransform,
+    fs.createWriteStream(tempPath, { highWaterMark: DOWNLOAD_HIGH_WATER_MARK })
+  );
+
+  const savedSize = fs.existsSync(tempPath) ? fs.statSync(tempPath).size : 0;
+  if (!savedSize) {
+    throw new Error("Downloaded file is empty. The link may be expired or the file was removed.");
+  }
+
+  return { downloadedBytes: savedSize, totalBytes: totalBytes || savedSize };
+}
+
+async function splitVideoWithFfmpeg2(inputPath, partCount, baseTitle) {
+  const { stdout } = await execFileAsync("ffprobe", [
+    "-v", "quiet", "-print_format", "json", "-show_format", inputPath
+  ]);
+  const info = JSON.parse(stdout);
+  const duration = parseFloat(info.format.duration);
+  const partDuration = duration / partCount;
+  const partPaths = [];
+
+  for (let i = 0; i < partCount; i++) {
+    const startTime = i * partDuration;
+    const partPath = `/tmp/bs_part${String(i + 1).padStart(2, "0")}of${String(partCount).padStart(2, "0")}_${Date.now()}.mp4`;
+    await execFileAsync("ffmpeg", [
+      "-ss", String(startTime), "-i", inputPath,
+      "-t", String(partDuration), "-c", "copy",
+      "-avoid_negative_ts", "1", "-y", partPath
+    ], { maxBuffer: 10 * 1024 * 1024 });
+    partPaths.push(partPath);
+  }
+  return partPaths;
+}
+
+async function copyRangeToPart2(sourcePath, partPath, start, end) {
+  await pipeline(
+    fs.createReadStream(sourcePath, { start, end, highWaterMark: DOWNLOAD_HIGH_WATER_MARK }),
+    fs.createWriteStream(partPath, { highWaterMark: DOWNLOAD_HIGH_WATER_MARK })
+  );
+}
+
+async function sendSplitMovieParts2(sock, chatId, quoted, sourcePath, baseFileName, baseCaption, totalSize, progress) {
+  const bytesPerPart = MOVIE_UPLOAD_MAX_BYTES2;
+  const partCount = Math.ceil(totalSize / bytesPerPart);
+  const partPaths = [];
+  let uploadTimer = null;
+
+  try {
+    await sock.sendMessage(chatId, {
+      text:
+        `╭─────────────────────────╮\n` +
+        `│  📦 *Sending in ${partCount} Parts*\n` +
+        `│\n` +
+        `│  Each part: ~${formatBytes2(bytesPerPart)}\n` +
+        `│\n` +
+        `│  ⚠️ *How to watch:*\n` +
+        `│  1. Download all ${partCount} parts\n` +
+        `│  2. Join them using HJSplit (Windows)\n` +
+        `│     or: cat part1 part2 > movie.mp4\n` +
+        `│  3. Open the joined .mp4 file\n` +
+        `╰─────────────────────────╯`
+    }, { quoted });
+
+    for (let index = 0; index < partCount; index++) {
+      const partNumber = index + 1;
+      const start = index * bytesPerPart;
+      const end = Math.min(totalSize - 1, start + bytesPerPart - 1);
+      const partPath = `${sourcePath}.part${String(partNumber).padStart(2, "0")}of${String(partCount).padStart(2, "0")}`;
+      const partFileName = `${baseFileName}.part${String(partNumber).padStart(2, "0")}of${String(partCount).padStart(2, "0")}`;
+      partPaths.push(partPath);
+
+      const basePercent = Math.round((index / partCount) * 100);
+      let prepPercent = basePercent;
+      progress.update({ uploadPercent: prepPercent, stage: `Preparing part ${partNumber}/${partCount}...` });
+
+      const prepTimer = setInterval(() => {
+        prepPercent = Math.min(basePercent + Math.round(100 / partCount) - 2, prepPercent + 1);
+        progress.update({ uploadPercent: prepPercent, stage: `Preparing part ${partNumber}/${partCount}...` });
+      }, 400);
+
+      await copyRangeToPart2(sourcePath, partPath, start, end);
+      clearInterval(prepTimer);
+
+      let currentPartPercent = 0;
+      uploadTimer = setInterval(() => {
+        currentPartPercent = Math.min(95, currentPartPercent + 2);
+        const totalUploadPercent = ((index + currentPartPercent / 100) / partCount) * 100;
+        progress.update({
+          uploadPercent: totalUploadPercent,
+          stage: `Uploading part ${partNumber}/${partCount} to chat...`
+        });
+      }, 1000);
+
+      await sock.sendMessage(chatId, {
+        document: { url: partPath },
+        mimetype: "application/octet-stream",
+        fileName: partFileName,
+        caption:
+          `${baseCaption}\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `📦 Part *${partNumber} of ${partCount}*\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `_Download all ${partCount} parts and join them before watching._`
+      }, { quoted });
+
+      clearInterval(uploadTimer);
+      uploadTimer = null;
+      if (fs.existsSync(partPath)) fs.unlinkSync(partPath);
+      progress.update({
+        uploadPercent: Math.round((partNumber / partCount) * 100),
+        stage: `Part ${partNumber}/${partCount} sent.`
+      });
+    }
+  } finally {
+    if (uploadTimer) clearInterval(uploadTimer);
+    for (const p of partPaths) {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
+  }
+}
+
+// ─── Try to resolve a direct download URL from various hosts ──────────────────
+async function resolveDirectUrl(url) {
+  // Pixeldrain
+  const pdMatch = url.match(/pixeldrain\.com\/u\/(\w+)/);
+  if (pdMatch) return `https://pixeldrain.com/api/file/${pdMatch[1]}?download`;
+
+  // Google Drive
+  const gdMatch = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  if (gdMatch) return `https://drive.google.com/uc?export=download&id=${gdMatch[1]}`;
+
+  // Mediafire: fetch the page and extract direct link
+  if (url.includes("mediafire.com")) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 15000,
+        headers: { "User-Agent": "Mozilla/5.0" },
+        validateStatus: () => true
+      });
+      const $ = cheerio.load(res.data);
+      const direct = $("a#downloadButton, a.download_link, a[aria-label='Download file']").attr("href")
+        || $("a[href*='download.mediafire.com']").first().attr("href");
+      if (direct) return direct;
+    } catch (_) {}
+  }
+
+  // UsersDrive / DGDrive / FilePV — try page scrape for direct link
+  const scrapableHosts = ["usersdrive", "dgdrive", "filepv"];
+  if (scrapableHosts.some(h => url.includes(h))) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 15000,
+        headers: { "User-Agent": "Mozilla/5.0" },
+        validateStatus: () => true
+      });
+      const $ = cheerio.load(res.data);
+      const direct = $("a[href*='.mp4'], a[href*='.mkv'], a[href*='/download']").first().attr("href");
+      if (direct && direct.startsWith("http")) return direct;
+    } catch (_) {}
+  }
+
+  // TinyURL: follow redirect
+  if (url.includes("tinyurl.com")) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 15000,
+        maxRedirects: 5,
+        headers: { "User-Agent": "Mozilla/5.0" },
+        validateStatus: () => true
+      });
+      if (res.request?.res?.responseUrl) return res.request.res.responseUrl;
+    } catch (_) {}
+  }
+
+  // Return as-is and let axios try during download
+  return url;
 }
 
 // ─── Scrapers ─────────────────────────────────────────────────────────────────
@@ -206,12 +572,231 @@ async function getMovieDetails2(movieUrl) {
   return { title, thumbnail, downloadOptions };
 }
 
+// ─── Download Engine ──────────────────────────────────────────────────────────
+async function executeMovieDownload2(task) {
+  const { sock, from, mek, sender, selectedOption, movie } = task;
+  const movieTitle = movie.title || "Movie";
+  const tempPath = path.join("/tmp", `bs_movie_${Date.now()}.mp4`);
+
+  const progress = await sendLiveProgress2(sock, from, mek, {
+    title: movieTitle,
+    quality: selectedOption.quality,
+    size: selectedOption.size,
+    downloadPercent: 0,
+    uploadPercent: 0,
+    stage: "Resolving download link...",
+    downloadedBytes: 0,
+    totalBytes: 0,
+    speedBytesPerSecond: 0
+  });
+
+  let uploadTimer = null;
+  global.activeMovieDownloads2.add(sender);
+
+  try {
+    // Try each link in order until one works
+    let directUrl = null;
+    let linkError = null;
+
+    for (const rawLink of selectedOption.links) {
+      try {
+        progress.update({ stage: `Resolving: ${getHostLabel(rawLink)}...` });
+        directUrl = await resolveDirectUrl(rawLink);
+        break;
+      } catch (e) {
+        linkError = e;
+        directUrl = null;
+      }
+    }
+
+    if (!directUrl) {
+      throw linkError || new Error("Could not resolve a download link.");
+    }
+
+    progress.update({ stage: "Downloading film..." });
+
+    let downloadedBytes, totalBytes;
+    try {
+      const result = await downloadMovieToFile2(directUrl, tempPath, update => {
+        progress.update({ ...update, stage: "Downloading film..." });
+      });
+      downloadedBytes = result.downloadedBytes;
+      totalBytes = result.totalBytes;
+    } catch (dlErr) {
+      if (dlErr.message === "REQUIRES_PAGE" || dlErr.message.includes("HTML")) {
+        // Fall back: send the link text instead
+        await progress.stop({ stage: "Sending links instead..." });
+        const linkLines = selectedOption.links.map(url =>
+          `${getHostLabel(url)}\n${url}`
+        ).join("\n\n");
+        const fallbackMsg =
+          `╭─────────────────────────╮\n` +
+          `│  🔗 *Download Links*\n` +
+          `│\n` +
+          `│  🎬 ${movieTitle}\n` +
+          `│  📊 ${selectedOption.quality}  •  ${selectedOption.size}\n` +
+          `│\n` +
+          `│  *${selectedOption.links.length} server(s) available*\n` +
+          `╰─────────────────────────╯\n\n` +
+          linkLines + "\n\n" +
+          `_Tap any link above to open the download page._\n` +
+          `_If one server is slow, try another one._`;
+        await sock.sendMessage(from, { text: fallbackMsg }, { quoted: mek });
+        await sock.sendMessage(from, { react: { text: "🔗", key: mek.key } });
+        return;
+      }
+      throw dlErr;
+    }
+
+    const savedSize = fs.statSync(tempPath).size;
+    progress.update({ downloadPercent: 100, uploadPercent: 0, downloadedBytes, totalBytes, stage: "Done! Sending to chat..." });
+
+    const caption =
+      `╭─────────────────────────╮\n` +
+      `│  ✅ *Movie Ready!*\n` +
+      `│\n` +
+      `│  🎬 ${movieTitle}\n` +
+      `│  📊 ${selectedOption.quality}  •  ${selectedOption.size}\n` +
+      `│  🌐 Source: Baiscopedownloads.link\n` +
+      `│\n` +
+      `│  🍿 Enjoy watching!\n` +
+      `╰─────────────────────────╯`;
+
+    const fileName = `${movieTitle.substring(0, 50)} - ${selectedOption.quality}.mp4`
+      .replace(/[^\w\s.-]/gi, "");
+
+    if (savedSize > MOVIE_UPLOAD_MAX_BYTES2) {
+      const partCount = Math.min(3, Math.ceil(savedSize / MOVIE_UPLOAD_MAX_BYTES2));
+      progress.update({ downloadPercent: 100, uploadPercent: 0, stage: `Splitting into ${partCount} parts...` });
+
+      let splitPercent = 0;
+      const splitTimer = setInterval(() => {
+        splitPercent = Math.min(30, splitPercent + 1);
+        progress.update({ uploadPercent: splitPercent, stage: `Splitting into ${partCount} parts...` });
+      }, 600);
+
+      let partPaths = [];
+      let usedFfmpeg = false;
+      try {
+        partPaths = await splitVideoWithFfmpeg2(tempPath, partCount, movieTitle);
+        usedFfmpeg = true;
+      } catch (ffmpegErr) {
+        console.error("[film2] ffmpeg split failed, falling back to byte-split:", ffmpegErr.message);
+      }
+      clearInterval(splitTimer);
+
+      if (usedFfmpeg && partPaths.length) {
+        await sock.sendMessage(from, {
+          text:
+            `╭─────────────────────────╮\n` +
+            `│  🎬 *${movieTitle}*\n` +
+            `│  📦 Sending in *${partCount} parts*\n` +
+            `│  📥 Tap each part to download\n` +
+            `│  ▶️  Opens in your video player\n` +
+            `╰─────────────────────────╯`
+        }, { quoted: mek });
+
+        for (let i = 0; i < partPaths.length; i++) {
+          const partNum = i + 1;
+          let uploadPercent = 0;
+          uploadTimer = setInterval(() => {
+            uploadPercent = Math.min(95, uploadPercent + 3);
+            progress.update({ uploadPercent, stage: `Uploading part ${partNum}/${partCount}...` });
+          }, 1000);
+
+          await sock.sendMessage(from, {
+            document: { url: partPaths[i] },
+            mimetype: "video/mp4",
+            fileName: `${movieTitle} - Part ${partNum} of ${partCount}.mp4`,
+            caption: `${caption}\n\n📥 *Part ${partNum} of ${partCount}* — tap to download, then play`
+          }, { quoted: mek });
+
+          clearInterval(uploadTimer);
+          uploadTimer = null;
+          if (fs.existsSync(partPaths[i])) fs.unlinkSync(partPaths[i]);
+        }
+        await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: `All ${partCount} parts sent! 🍿` });
+      } else {
+        await sendSplitMovieParts2(sock, from, mek, tempPath, fileName.replace(".mp4", ""), caption, savedSize, progress);
+        await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "All parts sent! 🍿" });
+      }
+
+    } else {
+      let uploadPercent = 0;
+      uploadTimer = setInterval(() => {
+        uploadPercent = Math.min(95, uploadPercent + 2);
+        progress.update({ uploadPercent, stage: "Uploading film to chat..." });
+      }, 1000);
+
+      await sock.sendMessage(from, {
+        video: { url: tempPath },
+        mimetype: "video/mp4",
+        fileName,
+        caption
+      }, { quoted: mek });
+
+      clearInterval(uploadTimer);
+      uploadTimer = null;
+      await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "Sent! 🍿" });
+    }
+
+  } catch (error) {
+    console.error("[film2] Movie Download Error:", error.message, error.stack);
+    if (uploadTimer) clearInterval(uploadTimer);
+    await progress.stop({ stage: "Failed ❌" });
+    await sock.sendMessage(from, {
+      text: `❌ *Failed to send movie.*\nError: ${error.message}\nPlease try again or choose a different quality.`
+    }, { quoted: mek });
+  } finally {
+    global.activeMovieDownloads2.delete(sender);
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    processMovieQueue2();
+  }
+}
+
+function processMovieQueue2() {
+  while (
+    global.movieDownloadQueue2.length > 0 &&
+    global.activeMovieDownloads2.size < MAX_MOVIE_DOWNLOADS2
+  ) {
+    const next = global.movieDownloadQueue2.shift();
+
+    global.movieDownloadQueue2.forEach((item, i) => {
+      const pos = i + 1;
+      item.sock.sendMessage(item.from, {
+        text:
+          `╭─────────────────────────╮\n` +
+          `│  🎬 *Queue Update*\n` +
+          `│\n` +
+          `│  📋 You are now *#${pos}* in queue\n` +
+          `│  🎬 ${item.movie.title}\n` +
+          `│  ⏳ Almost there...\n` +
+          `╰─────────────────────────╯`
+      }, { quoted: item.mek }).catch(() => {});
+    });
+
+    next.sock.sendMessage(next.from, {
+      text:
+        `╭─────────────────────────╮\n` +
+        `│  ✅ *Your Turn!*\n` +
+        `│\n` +
+        `│  🎬 ${next.movie.title}\n` +
+        `│  📊 ${next.selectedOption.quality}  •  ${next.selectedOption.size}\n` +
+        `│\n` +
+        `│  ⬇️ Starting your download now...\n` +
+        `╰─────────────────────────╯`
+    }, { quoted: next.mek }).catch(() => {});
+
+    executeMovieDownload2(next);
+  }
+}
+
 // ─── Step 1: Search ───────────────────────────────────────────────────────────
 cmd({
   pattern: "baiscope",
   alias: ["bs", "film2", "baiscopelk"],
   react: "🎬",
-  desc: "Search and get download links for movies from Baiscopedownloads.link",
+  desc: "Search and Download movies from Baiscopedownloads.link",
   category: "download",
   filename: __filename
 }, async (ranuxPro, mek, m, { from, q, sender, reply }) => {
@@ -326,7 +911,7 @@ cmd({
       `│  📥 ${details.downloadOptions.length} quality option(s)\n` +
       `│  Source: Baiscopedownloads.link\n` +
       `│\n` +
-      `│  👇 Tap a quality below\n` +
+      `│  👇 Tap a quality to download\n` +
       `╰─────────────────────────╯`;
 
     const qualityButtons = details.downloadOptions.map((d, i) =>
@@ -347,7 +932,7 @@ cmd({
         `╭─────────────────────────╮\n` +
         `│  📥 *Choose Quality*\n` +
         `│  ${details.downloadOptions.length} option(s) — best first\n` +
-        `│  👇 Tap to get download links\n` +
+        `│  👇 Tap to start download\n` +
         `╰─────────────────────────╯`,
       buttons: qualityButtons,
     }, { quoted: mek });
@@ -359,7 +944,7 @@ cmd({
   }
 });
 
-// ─── Step 3: Send Download Links ──────────────────────────────────────────────
+// ─── Step 3: Download Movie to Chat ──────────────────────────────────────────
 cmd({
   filter: (body, { sender }) =>
     global.pendingMovie2[sender] &&
@@ -367,7 +952,7 @@ cmd({
     /^bs_dl_\d+$/.test(body)
 }, async (ranuxPro, mek, m, { body, sender, reply, from }) => {
 
-  await ranuxPro.sendMessage(from, { react: { text: "🔗", key: mek.key } });
+  await ranuxPro.sendMessage(from, { react: { text: "⬇️", key: mek.key } });
 
   const index = parseInt(body.replace("bs_dl_", "")) - 1;
   const { movie } = global.pendingMovie2[sender];
@@ -376,28 +961,33 @@ cmd({
     return reply("❌ *Invalid selection.* Please search again.");
   }
 
-  const selected = movie.downloadOptions[index];
+  const selectedOption = movie.downloadOptions[index];
   delete global.pendingMovie2[sender];
 
-  const linkLines = selected.links.map(url =>
-    `${getHostLabel(url)}\n${url}`
-  ).join("\n\n");
+  const task = { sock: ranuxPro, from, mek, sender, selectedOption, movie };
 
-  const msg =
+  if (global.activeMovieDownloads2.size < MAX_MOVIE_DOWNLOADS2) {
+    executeMovieDownload2(task);
+    return;
+  }
+
+  global.movieDownloadQueue2.push(task);
+  const queuePos = global.movieDownloadQueue2.length;
+  const activeCount = global.activeMovieDownloads2.size;
+
+  await reply(
     `╭─────────────────────────╮\n` +
-    `│  🔗 *Download Links*\n` +
+    `│  📋 *Added to Queue*\n` +
     `│\n` +
     `│  🎬 ${movie.title}\n` +
-    `│  📊 ${selected.quality}  •  ${selected.size}\n` +
+    `│  📊 ${selectedOption.quality}  •  ${selectedOption.size}\n` +
     `│\n` +
-    `│  *${selected.links.length} server(s) available*\n` +
-    `╰─────────────────────────╯\n\n` +
-    linkLines + "\n\n" +
-    `_Tap any link above to open the download page._\n` +
-    `_If one server is slow, try another one._`;
-
-  await ranuxPro.sendMessage(from, { text: msg }, { quoted: mek });
-  await ranuxPro.sendMessage(from, { react: { text: "✅", key: mek.key } });
+    `│  🔢 Queue position: *#${queuePos}*\n` +
+    `│  ⚙️ Active downloads: ${activeCount}/${MAX_MOVIE_DOWNLOADS2}\n` +
+    `│\n` +
+    `│  ⏳ You'll be notified when it's your turn.\n` +
+    `╰─────────────────────────╯`
+  );
 });
 
 // ─── Auto-cleanup stale sessions ──────────────────────────────────────────────
