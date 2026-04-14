@@ -5,3 +5,8 @@ tmp/
 .env
 *.log
 database/*.json
+
+# Database runtime files
+*.db
+*.db-shm
+*.db-wal
