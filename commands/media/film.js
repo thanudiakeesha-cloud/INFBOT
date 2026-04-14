@@ -736,7 +736,7 @@ cmd({
         }, 1000);
 
         await ranuxPro.sendMessage(from, {
-          document: { url: `file://${partPaths[i]}` },
+          document: { url: partPaths[i] },
           mimetype: "video/mp4",
           fileName: `${movie.metadata.title} - Part ${partNum} of ${partCount}.mp4`,
           caption:
@@ -774,9 +774,10 @@ cmd({
 
   } catch (error) {
     console.error("Movie Send Error:", error.message);
+    console.error("Movie Send Stack:", error.stack);
     if (uploadTimer) clearInterval(uploadTimer);
     await progress.stop({ stage: `Failed ❌` });
-    reply(`❌ *Failed to send movie.*\nPlease try again or choose a different quality.`);
+    reply(`❌ *Failed to send movie.*\nError: ${error.message}\nPlease try again or choose a different quality.`);
   } finally {
     global.activeMovieDownloads.delete(sender);
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
