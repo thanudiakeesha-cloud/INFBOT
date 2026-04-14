@@ -310,12 +310,18 @@ async function sendSplitMovieParts(sock, chatId, quoted, sourcePath, baseFileNam
       const partFileName = `${baseFileName}.part${String(partNumber).padStart(2, "0")}of${String(partCount).padStart(2, "0")}`;
       partPaths.push(partPath);
 
-      progress.update({
-        uploadPercent: Math.round((index / partCount) * 100),
-        stage: `Preparing part ${partNumber}/${partCount}...`
-      });
+      const basePercent = Math.round((index / partCount) * 100);
+      let prepPercent = basePercent;
+      progress.update({ uploadPercent: prepPercent, stage: `Preparing part ${partNumber}/${partCount}...` });
+
+      // Tick progress while copying so the bar doesn't stay frozen at 0
+      const prepTimer = setInterval(() => {
+        prepPercent = Math.min(basePercent + Math.round(100 / partCount) - 2, prepPercent + 1);
+        progress.update({ uploadPercent: prepPercent, stage: `Preparing part ${partNumber}/${partCount}...` });
+      }, 400);
 
       await copyRangeToPart(sourcePath, partPath, start, end);
+      clearInterval(prepTimer);
 
       let currentPartPercent = 0;
       uploadTimer = setInterval(() => {
@@ -732,6 +738,14 @@ cmd({
 
       let partPaths = [];
       let usedFfmpeg = false;
+
+      // Tick the progress bar while ffmpeg is splitting so it doesn't freeze at 0
+      let splitPercent = 0;
+      const splitTimer = setInterval(() => {
+        splitPercent = Math.min(30, splitPercent + 1);
+        progress.update({ uploadPercent: splitPercent, stage: `Splitting into ${partCount} parts...` });
+      }, 600);
+
       try {
         partPaths = await splitVideoWithFfmpeg(tempPath, partCount, movie.metadata.title);
         usedFfmpeg = true;
@@ -739,6 +753,7 @@ cmd({
         console.error("ffmpeg split failed, falling back to byte-split:", ffmpegErr.message);
         usedFfmpeg = false;
       }
+      clearInterval(splitTimer);
 
       if (usedFfmpeg && partPaths.length) {
         await ranuxPro.sendMessage(from, {
