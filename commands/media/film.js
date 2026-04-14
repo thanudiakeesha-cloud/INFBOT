@@ -20,6 +20,7 @@ try {
 // Global State
 global.pendingMovie = global.pendingMovie || {};
 global.activeMovieDownloads = global.activeMovieDownloads || new Set();
+global.movieDownloadQueue = global.movieDownloadQueue || [];
 
 // Design Elements
 const LOGO_URL = "https://files.catbox.moe/2jt3ln.png";
@@ -714,6 +715,165 @@ cmd({
   }
 });
 
+// ─── Queue Engine ─────────────────────────────────────────────────────────────
+async function executeMovieDownload(task) {
+  const { sock, from, mek, sender, directUrl, selectedLink, movie, caption, fileName } = task;
+  const tempPath = path.join("/tmp", `movie_${Date.now()}.mp4`);
+  const movieTitle = movie.metadata.title || "Movie";
+
+  const progress = await sendLiveProgress(sock, from, mek, {
+    title: movieTitle,
+    quality: selectedLink.quality,
+    size: selectedLink.size,
+    downloadPercent: 0,
+    uploadPercent: 0,
+    stage: "Starting download...",
+    downloadedBytes: 0,
+    totalBytes: 0,
+    speedBytesPerSecond: 0
+  });
+
+  let uploadTimer = null;
+  global.activeMovieDownloads.add(sender);
+
+  try {
+    progress.update({ stage: "Downloading film..." });
+    const { downloadedBytes, totalBytes } = await downloadMovieToFile(directUrl, tempPath, update => {
+      progress.update({ ...update, stage: "Downloading film..." });
+    });
+
+    const savedSize = fs.statSync(tempPath).size;
+    progress.update({ downloadPercent: 100, uploadPercent: 0, downloadedBytes, totalBytes, stage: "Done! Sending to chat..." });
+
+    if (savedSize > MOVIE_UPLOAD_MAX_BYTES) {
+      const partCount = Math.min(3, Math.ceil(savedSize / MOVIE_UPLOAD_MAX_BYTES));
+      progress.update({ downloadPercent: 100, uploadPercent: 0, stage: `Splitting into ${partCount} parts...` });
+
+      let splitPercent = 0;
+      const splitTimer = setInterval(() => {
+        splitPercent = Math.min(30, splitPercent + 1);
+        progress.update({ uploadPercent: splitPercent, stage: `Splitting into ${partCount} parts...` });
+      }, 600);
+
+      let partPaths = [];
+      let usedFfmpeg = false;
+      try {
+        partPaths = await splitVideoWithFfmpeg(tempPath, partCount, movieTitle);
+        usedFfmpeg = true;
+      } catch (ffmpegErr) {
+        console.error("ffmpeg split failed, falling back to byte-split:", ffmpegErr.message);
+      }
+      clearInterval(splitTimer);
+
+      if (usedFfmpeg && partPaths.length) {
+        await sock.sendMessage(from, {
+          text:
+            `╭─────────────────────────╮\n` +
+            `│  🎬 *${movieTitle}*\n` +
+            `│  📦 Sending in *${partCount} parts*\n` +
+            `│  📥 Tap each part to download\n` +
+            `│  ▶️  Opens in your video player\n` +
+            `╰─────────────────────────╯`
+        }, { quoted: mek });
+
+        for (let i = 0; i < partPaths.length; i++) {
+          const partNum = i + 1;
+          let uploadPercent = 0;
+          uploadTimer = setInterval(() => {
+            uploadPercent = Math.min(95, uploadPercent + 3);
+            progress.update({ uploadPercent, stage: `Uploading part ${partNum}/${partCount}...` });
+          }, 1000);
+
+          await sock.sendMessage(from, {
+            document: { url: partPaths[i] },
+            mimetype: "video/mp4",
+            fileName: `${movieTitle} - Part ${partNum} of ${partCount}.mp4`,
+            caption: `${caption}\n\n📥 *Part ${partNum} of ${partCount}* — tap to download, then play`
+          }, { quoted: mek });
+
+          clearInterval(uploadTimer);
+          uploadTimer = null;
+          if (fs.existsSync(partPaths[i])) fs.unlinkSync(partPaths[i]);
+        }
+        await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: `All ${partCount} parts sent! 🍿` });
+      } else {
+        await sendSplitMovieParts(sock, from, mek, tempPath, fileName.replace(".mp4", ""), caption, savedSize, progress, MOVIE_UPLOAD_MAX_BYTES);
+        await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: `All parts sent! 🍿` });
+      }
+
+    } else {
+      let uploadPercent = 0;
+      uploadTimer = setInterval(() => {
+        uploadPercent = Math.min(95, uploadPercent + 2);
+        progress.update({ uploadPercent, stage: "Uploading film to chat..." });
+      }, 1000);
+
+      await sock.sendMessage(from, {
+        video: { url: tempPath },
+        mimetype: "video/mp4",
+        fileName,
+        caption
+      }, { quoted: mek });
+
+      clearInterval(uploadTimer);
+      uploadTimer = null;
+      await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "Sent! 🍿" });
+    }
+
+  } catch (error) {
+    console.error("Movie Download Error:", error.message, error.stack);
+    if (uploadTimer) clearInterval(uploadTimer);
+    await progress.stop({ stage: "Failed ❌" });
+    await sock.sendMessage(from, {
+      text: `❌ *Failed to send movie.*\nError: ${error.message}\nPlease try again or choose a different quality.`
+    }, { quoted: mek });
+  } finally {
+    global.activeMovieDownloads.delete(sender);
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    // Start next queued download if any
+    processMovieQueue();
+  }
+}
+
+function processMovieQueue() {
+  while (
+    global.movieDownloadQueue.length > 0 &&
+    global.activeMovieDownloads.size < MAX_MOVIE_DOWNLOADS
+  ) {
+    const next = global.movieDownloadQueue.shift();
+
+    // Update remaining queue members about their new position
+    global.movieDownloadQueue.forEach((item, i) => {
+      const pos = i + 1;
+      item.sock.sendMessage(item.from, {
+        text:
+          `╭─────────────────────────╮\n` +
+          `│  🎬 *Queue Update*\n` +
+          `│\n` +
+          `│  📋 You are now *#${pos}* in queue\n` +
+          `│  🎬 ${item.movie.metadata.title}\n` +
+          `│  ⏳ Almost there...\n` +
+          `╰─────────────────────────╯`
+      }, { quoted: item.mek }).catch(() => {});
+    });
+
+    // Notify the next user that their download is starting
+    next.sock.sendMessage(next.from, {
+      text:
+        `╭─────────────────────────╮\n` +
+        `│  ✅ *Your Turn!*\n` +
+        `│\n` +
+        `│  🎬 ${next.movie.metadata.title}\n` +
+        `│  📊 ${next.selectedLink.quality}  •  ${next.selectedLink.size}\n` +
+        `│\n` +
+        `│  ⬇️ Starting your download now...\n` +
+        `╰─────────────────────────╯`
+    }, { quoted: next.mek }).catch(() => {});
+
+    executeMovieDownload(next);
+  }
+}
+
 // ─── Step 3: Download (button tap mv_dl_N) ────────────────────────────────────
 cmd({
   filter: (body, { sender }) =>
@@ -732,25 +892,8 @@ cmd({
   const selectedLink = movie.downloadLinks[index];
   delete global.pendingMovie[sender];
 
-  if (global.activeMovieDownloads.size >= MAX_MOVIE_DOWNLOADS) {
-    return reply(
-      `⏳ *Another download is running.*\n\n` +
-      `Please wait for it to finish, then try again.`
-    );
-  }
-
   const directUrl = getDirectPixeldrainUrl(selectedLink.link);
   if (!directUrl) return reply("❌ Download link not available. Please try a different quality.");
-
-  const knownSizeBytes = parseSizeToBytes(selectedLink.size);
-  if (knownSizeBytes > MOVIE_UPLOAD_MAX_BYTES) {
-    const estimatedParts = Math.min(3, Math.ceil(knownSizeBytes / MOVIE_UPLOAD_MAX_BYTES));
-    await reply(
-      `📦 *Large file (${selectedLink.size})*\n` +
-      `Will be sent in *${estimatedParts} parts* — tap each to download & play.\n` +
-      `Downloading now, please wait... ☕`
-    );
-  }
 
   const caption =
     `╭─────────────────────────╮\n` +
@@ -765,127 +908,32 @@ cmd({
   const fileName = `${movie.metadata.title.substring(0, 50)} - ${selectedLink.quality}.mp4`
     .replace(/[^\w\s.-]/gi, "");
 
-  const tempPath = path.join("/tmp", `movie_${Date.now()}.mp4`);
-  const movieTitle = movie.metadata.title || "Selected Movie";
-  const progress = await sendLiveProgress(ranuxPro, from, mek, {
-    title: movieTitle,
-    quality: selectedLink.quality,
-    size: selectedLink.size,
-    downloadPercent: 0,
-    uploadPercent: 0,
-    stage: "Starting download...",
-    downloadedBytes: 0,
-    totalBytes: 0,
-    speedBytesPerSecond: 0
-  });
+  const task = { sock: ranuxPro, from, mek, sender, directUrl, selectedLink, movie, caption, fileName };
 
-  let uploadTimer = null;
-  global.activeMovieDownloads.add(sender);
-
-  try {
-    progress.update({ downloadPercent: 0, uploadPercent: 0, stage: "Downloading film..." });
-    const { downloadedBytes, totalBytes } = await downloadMovieToFile(directUrl, tempPath, update => {
-      progress.update({ ...update, stage: "Downloading film..." });
-    });
-
-    const savedSize = fs.statSync(tempPath).size;
-
-    progress.update({ downloadPercent: 100, uploadPercent: 0, downloadedBytes, totalBytes, stage: "Done! Sending to chat..." });
-
-    if (savedSize > MOVIE_UPLOAD_MAX_BYTES) {
-      const partCount = Math.min(3, Math.ceil(savedSize / MOVIE_UPLOAD_MAX_BYTES));
-
-      progress.update({ downloadPercent: 100, uploadPercent: 0, stage: `Splitting into ${partCount} parts...` });
-
-      let partPaths = [];
-      let usedFfmpeg = false;
-
-      // Tick the progress bar while ffmpeg is splitting so it doesn't freeze at 0
-      let splitPercent = 0;
-      const splitTimer = setInterval(() => {
-        splitPercent = Math.min(30, splitPercent + 1);
-        progress.update({ uploadPercent: splitPercent, stage: `Splitting into ${partCount} parts...` });
-      }, 600);
-
-      try {
-        partPaths = await splitVideoWithFfmpeg(tempPath, partCount, movie.metadata.title);
-        usedFfmpeg = true;
-      } catch (ffmpegErr) {
-        console.error("ffmpeg split failed, falling back to byte-split:", ffmpegErr.message);
-        usedFfmpeg = false;
-      }
-      clearInterval(splitTimer);
-
-      if (usedFfmpeg && partPaths.length) {
-        await ranuxPro.sendMessage(from, {
-          text:
-            `╭─────────────────────────╮\n` +
-            `│  🎬 *${movie.metadata.title}*\n` +
-            `│  📦 Sending in *${partCount} parts*\n` +
-            `│  📥 Tap each part to download\n` +
-            `│  ▶️  Opens in your video player\n` +
-            `╰─────────────────────────╯`
-        }, { quoted: mek });
-
-        for (let i = 0; i < partPaths.length; i++) {
-          const partNum = i + 1;
-          let uploadPercent = 0;
-          uploadTimer = setInterval(() => {
-            uploadPercent = Math.min(95, uploadPercent + 3);
-            progress.update({ uploadPercent, stage: `Uploading part ${partNum}/${partCount}...` });
-          }, 1000);
-
-          await ranuxPro.sendMessage(from, {
-            document: { url: partPaths[i] },
-            mimetype: "video/mp4",
-            fileName: `${movie.metadata.title} - Part ${partNum} of ${partCount}.mp4`,
-            caption:
-              `${caption}\n\n` +
-              `📥 *Part ${partNum} of ${partCount}* — tap to download, then play`
-          }, { quoted: mek });
-
-          clearInterval(uploadTimer);
-          uploadTimer = null;
-
-          if (fs.existsSync(partPaths[i])) fs.unlinkSync(partPaths[i]);
-        }
-
-        await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: `All ${partCount} parts sent! 🍿` });
-      } else {
-        await sendSplitMovieParts(ranuxPro, from, mek, tempPath, fileName.replace(".mp4", ""), caption, savedSize, progress, MOVIE_UPLOAD_MAX_BYTES);
-        await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: `All parts sent! 🍿` });
-      }
-
-    } else {
-      let uploadPercent = 0;
-      uploadTimer = setInterval(() => {
-        uploadPercent = Math.min(95, uploadPercent + 2);
-        progress.update({ uploadPercent, stage: "Uploading film to chat..." });
-      }, 1000);
-
-      await ranuxPro.sendMessage(from, {
-        video: { url: tempPath },
-        mimetype: "video/mp4",
-        fileName,
-        caption
-      }, { quoted: mek });
-
-      clearInterval(uploadTimer);
-      uploadTimer = null;
-
-      await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "Sent! 🍿" });
-    }
-
-  } catch (error) {
-    console.error("Movie Send Error:", error.message);
-    console.error("Movie Send Stack:", error.stack);
-    if (uploadTimer) clearInterval(uploadTimer);
-    await progress.stop({ stage: `Failed ❌` });
-    reply(`❌ *Failed to send movie.*\nError: ${error.message}\nPlease try again or choose a different quality.`);
-  } finally {
-    global.activeMovieDownloads.delete(sender);
-    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+  // If a slot is free, start immediately
+  if (global.activeMovieDownloads.size < MAX_MOVIE_DOWNLOADS) {
+    executeMovieDownload(task);
+    return;
   }
+
+  // Otherwise, queue the request and show position
+  global.movieDownloadQueue.push(task);
+  const queuePos = global.movieDownloadQueue.length;
+  const activeCount = global.activeMovieDownloads.size;
+
+  await reply(
+    `╭─────────────────────────╮\n` +
+    `│  📋 *Added to Queue*\n` +
+    `│\n` +
+    `│  🎬 ${movie.metadata.title}\n` +
+    `│  📊 ${selectedLink.quality}  •  ${selectedLink.size}\n` +
+    `│\n` +
+    `│  🔢 Queue position: *#${queuePos}*\n` +
+    `│  ⚙️ Active downloads: ${activeCount}/${MAX_MOVIE_DOWNLOADS}\n` +
+    `│\n` +
+    `│  ⏳ You'll be notified when it's your turn.\n` +
+    `╰─────────────────────────╯`
+  );
 });
 
 // ─── Auto-cleanup stale sessions ──────────────────────────────────────────────
