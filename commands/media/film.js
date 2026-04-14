@@ -1,6 +1,8 @@
 const { cmd } = require("../../command");
 const axios = require("axios");
 const cheerio = require("cheerio");
+const fs = require("fs");
+const path = require("path");
 const { sendBtn, btn } = require("../../utils/sendBtn");
 
 // Global State
@@ -243,29 +245,51 @@ cmd({
   const selectedLink = movie.downloadLinks[index];
   delete global.pendingMovie[sender];
 
+  const directUrl = getDirectPixeldrainUrl(selectedLink.link);
+  if (!directUrl) return reply("❌ *Could not generate direct download link.*");
+
+  const caption =
+    `╭───〔 ✅ *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐃* 〕───┈\n` +
+    `│\n` +
+    `│ 🎬 *Movie:* ${movie.metadata.title}\n` +
+    `│ 📊 *Quality:* ${selectedLink.quality}\n` +
+    `│ 💾 *Size:* ${selectedLink.size}\n` +
+    `│\n` +
+    `╰──────────────────────┈\n` +
+    `🍿 *Enjoy the movie!*\n\n` +
+    FOOTER;
+
+  const fileName = `${movie.metadata.title.substring(0, 50)} - ${selectedLink.quality}.mp4`
+    .replace(/[^\w\s.-]/gi, "");
+
+  const tempPath = path.join("/tmp", `movie_${Date.now()}.mp4`);
+
+  await reply(`*⏳ Downloading "${movie.metadata.title}" (${selectedLink.quality} — ${selectedLink.size})...*\n_This may take a few minutes. Please wait._`);
+
   try {
-    const directUrl = getDirectPixeldrainUrl(selectedLink.link);
-    if (!directUrl) throw new Error("Could not generate direct download link.");
+    // Stream download to /tmp
+    const response = await axios({ method: "GET", url: directUrl, responseType: "stream", timeout: 0 });
+    const writer = fs.createWriteStream(tempPath);
+    await new Promise((resolve, reject) => {
+      response.data.pipe(writer);
+      writer.on("finish", resolve);
+      writer.on("error", reject);
+    });
 
-    const caption =
-      `╭───〔 ✅ *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃 𝐋𝐈𝐍𝐊* 〕───┈\n` +
-      `│\n` +
-      `│ 🎬 *Movie:* ${movie.metadata.title}\n` +
-      `│ 📊 *Quality:* ${selectedLink.quality}\n` +
-      `│ 💾 *Size:* ${selectedLink.size}\n` +
-      `│\n` +
-      `│ 🔗 *Download Link:*\n` +
-      `│ ${directUrl}\n` +
-      `│\n` +
-      `╰──────────────────────┈\n` +
-      `🍿 *Tap the link to download the movie!*\n\n` +
-      FOOTER;
-
-    await ranuxPro.sendMessage(from, { text: caption }, { quoted: mek });
+    // Send as document from disk buffer
+    const buffer = fs.readFileSync(tempPath);
+    await ranuxPro.sendMessage(from, {
+      document: buffer,
+      mimetype: "video/mp4",
+      fileName,
+      caption
+    }, { quoted: mek });
 
   } catch (error) {
     console.error("Movie Send Error:", error.message);
-    reply(`*❌ Failed to get download link:* ${error.message || "An unknown error occurred."}`);
+    reply(`*❌ Failed to send movie:* ${error.message || "An unknown error occurred."}`);
+  } finally {
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
   }
 });
 
