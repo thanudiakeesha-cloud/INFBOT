@@ -3,6 +3,7 @@ const puppeteerExtra = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 const config = require("../../config");
 const { execSync } = require("child_process");
+const { sendBtn, btn } = require("../../utils/sendBtn");
 
 puppeteerExtra.use(StealthPlugin());
 
@@ -11,7 +12,7 @@ global.pendingMovie = global.pendingMovie || {};
 
 // Design Elements
 const LOGO_URL = "https://files.catbox.moe/2jt3ln.png";
-const FOOTER = "> 👑 ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴋɪɴɢ ʀᴀɴᴜx ᴘʀᴏ";
+const FOOTER = `> 👑 ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴋɪɴɢ ʀᴀɴᴜx ᴘʀᴏ`;
 
 // ─── Chromium Detection ───────────────────────────────────────────────────────
 let CHROMIUM_PATH;
@@ -75,7 +76,7 @@ async function searchMovies(query) {
       await page.reload({ waitUntil: "networkidle2", timeout: 30000 });
     }
     const results = await page.$$eval(".display-item .item-box", boxes =>
-      boxes.slice(0, 10).map((box, index) => {
+      boxes.slice(0, 8).map((box, index) => {
         const a = box.querySelector("a");
         return {
           id: index + 1,
@@ -195,28 +196,25 @@ cmd({
 
     global.pendingMovie[sender] = { step: 1, results: searchResults, timestamp: Date.now() };
 
-    let text = `╭───〔 🎬 *𝐌𝐎𝐕𝐈𝐄 𝐒𝐄𝐀𝐑𝐂𝐇* 〕───┈
-│ 
-│ 🔍 *Search Results For:* "${q}"
-│ 🌸 *Found:* ${searchResults.length} Movies
-│ 
-╰──────────────────────┈
+    const text =
+      `╭───〔 🎬 *𝐌𝐎𝐕𝐈𝐄 𝐒𝐄𝐀𝐑𝐂𝐇* 〕───┈\n` +
+      `│\n` +
+      `│ 🔍 *Results for:* "${q}"\n` +
+      `│ 🌸 *Found:* ${searchResults.length} movie(s)\n` +
+      `│\n` +
+      `╰──────────────────────┈\n\n` +
+      `*👇 Tap a movie below to select it:*`;
 
-╭───〔 📂 *𝐑𝐄𝐒𝐔𝐋𝐓𝐒* 〕───┈
-│
-`;
-    searchResults.forEach((movie, i) => {
-      text += `│ *${i + 1}* ➻ ${movie.title}\n`;
-    });
-    text += `│
-╰──────────────────────┈
-│ 🔢 *Reply with a number to select!*
-╰──────────────────────┈
-${FOOTER}`;
+    const movieButtons = searchResults.map((movie, i) =>
+      btn(`mv_select_${i + 1}`, `🎬 ${movie.title}`)
+    );
 
-    await ranuxPro.sendMessage(from, {
+    await sendBtn(ranuxPro, from, {
       image: { url: LOGO_URL },
-      caption: text.trim()
+      title: "🎬 Movie Search Results",
+      text,
+      footer: FOOTER,
+      buttons: movieButtons,
     }, { quoted: mek });
 
   } catch (e) {
@@ -225,21 +223,21 @@ ${FOOTER}`;
   }
 });
 
-// ─── Step 2: Movie Details (number reply) ─────────────────────────────────────
+// ─── Step 2: Movie Details (button tap mv_select_N) ───────────────────────────
 cmd({
-  filter: (text, { sender }) =>
+  filter: (body, { sender }) =>
     global.pendingMovie[sender] &&
     global.pendingMovie[sender].step === 1 &&
-    /^\d+$/.test(text.trim())
+    /^mv_select_\d+$/.test(body)
 }, async (ranuxPro, mek, m, { body, sender, reply, from }) => {
 
   await ranuxPro.sendMessage(from, { react: { text: "⏳", key: mek.key } });
 
-  const index = parseInt(body.trim()) - 1;
+  const index = parseInt(body.replace("mv_select_", "")) - 1;
   const { results } = global.pendingMovie[sender];
 
   if (index < 0 || index >= results.length) {
-    return reply("❌ *Invalid number. Please select from the list.*");
+    return reply("❌ *Invalid selection. Please search again.*");
   }
 
   const selected = results[index];
@@ -248,24 +246,22 @@ cmd({
     await reply(`*⏳ Fetching details for "${selected.title}"...*`);
     const metadata = await getMovieMetadata(selected.movieUrl);
 
-    let metaMsg = `
-╭───〔 🎬 *𝐌𝐎𝐕𝐈𝐄 𝐃𝐄𝐓𝐀𝐈𝐋𝐒* 〕───┈
-│
-│ 🏷️ *Title:* ${metadata.title || selected.title}
-│ ⭐ *IMDb:* ${metadata.imdb}
-│ 🕒 *Duration:* ${metadata.duration}
-│ 🎭 *Genre:* ${metadata.genres.join(", ") || "N/A"}
-│ 👤 *Director:* ${metadata.directors.join(", ") || "N/A"}
-│
-╰──────────────────────┈
-
-📥 *Fetching download links...*
-( ｡ • ̀ ω • ́ ｡ ) Please wait...`;
+    const metaMsg =
+      `╭───〔 🎬 *𝐌𝐎𝐕𝐈𝐄 𝐃𝐄𝐓𝐀𝐈𝐋𝐒* 〕───┈\n` +
+      `│\n` +
+      `│ 🏷️ *Title:* ${metadata.title || selected.title}\n` +
+      `│ ⭐ *IMDb:* ${metadata.imdb}\n` +
+      `│ 🕒 *Duration:* ${metadata.duration}\n` +
+      `│ 🎭 *Genre:* ${metadata.genres.join(", ") || "N/A"}\n` +
+      `│ 👤 *Director:* ${metadata.directors.join(", ") || "N/A"}\n` +
+      `│\n` +
+      `╰──────────────────────┈\n\n` +
+      `📥 *Fetching download links...*\n( ｡ • ̀ ω • ́ ｡ ) Please wait...`;
 
     if (metadata.thumbnail) {
-      await ranuxPro.sendMessage(from, { image: { url: metadata.thumbnail }, caption: metaMsg.trim() }, { quoted: mek });
+      await ranuxPro.sendMessage(from, { image: { url: metadata.thumbnail }, caption: metaMsg }, { quoted: mek });
     } else {
-      await ranuxPro.sendMessage(from, { text: metaMsg.trim() }, { quoted: mek });
+      await ranuxPro.sendMessage(from, { text: metaMsg }, { quoted: mek });
     }
 
     const downloadLinks = await getPixeldrainLinks(selected.movieUrl);
@@ -277,23 +273,26 @@ cmd({
     global.pendingMovie[sender] = {
       step: 2,
       movie: { metadata, downloadLinks },
-      lastMsgId: mek.key.id,
       timestamp: Date.now()
     };
 
-    let qualityMsg = `
-╭───〔 📥 *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃 𝐋𝐈𝐒𝐓* 〕───┈
-│
-`;
-    downloadLinks.forEach((d, i) => {
-      qualityMsg += `│ *${i + 1}* ➻ ${d.quality}  [${d.size}]\n`;
-    });
-    qualityMsg += `│
-╰──────────────────────┈
-│ 🔢 *Reply with a number to download!*
-╰──────────────────────┈`;
+    const qualityText =
+      `╭───〔 📥 *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃 𝐋𝐈𝐒𝐓* 〕───┈\n` +
+      `│\n` +
+      `│ 🎬 *${metadata.title || selected.title}*\n` +
+      `│\n` +
+      `╰──────────────────────┈\n\n` +
+      `*👇 Tap a quality to download:*`;
 
-    await ranuxPro.sendMessage(from, { text: qualityMsg.trim() }, { quoted: mek });
+    const qualityButtons = downloadLinks.map((d, i) =>
+      btn(`mv_dl_${i + 1}`, `📥 ${d.quality}  •  ${d.size}`)
+    );
+
+    await sendBtn(ranuxPro, from, {
+      text: qualityText,
+      footer: FOOTER,
+      buttons: qualityButtons,
+    }, { quoted: mek });
 
   } catch (e) {
     delete global.pendingMovie[sender];
@@ -302,16 +301,15 @@ cmd({
   }
 });
 
-// ─── Step 3: Download (number reply) ──────────────────────────────────────────
+// ─── Step 3: Download (button tap mv_dl_N) ────────────────────────────────────
 cmd({
-  filter: (text, { sender, message }) =>
+  filter: (body, { sender }) =>
     global.pendingMovie[sender] &&
     global.pendingMovie[sender].step === 2 &&
-    message.key.id !== global.pendingMovie[sender].lastMsgId &&
-    /^\d+$/.test(text.trim())
+    /^mv_dl_\d+$/.test(body)
 }, async (ranuxPro, mek, m, { body, sender, reply, from }) => {
 
-  const index = parseInt(body.trim()) - 1;
+  const index = parseInt(body.replace("mv_dl_", "")) - 1;
   const { movie } = global.pendingMovie[sender];
 
   if (index < 0 || index >= movie.downloadLinks.length) {
@@ -328,23 +326,22 @@ cmd({
     if (!directUrl) throw new Error("Could not generate direct download link.");
 
     const fileName = `${movie.metadata.title.substring(0, 50)} - ${selectedLink.quality}.mp4`.replace(/[^\w\s.-]/gi, '');
-    const caption = `
-╭───〔 ✅ *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐃* 〕───┈
-│
-│ 🎬 *Movie:* ${movie.metadata.title}
-│ 📊 *Quality:* ${selectedLink.quality}
-│ 💾 *Size:* ${selectedLink.size}
-│
-╰──────────────────────┈
-🍿 *Enjoy the movie!*
-
-${FOOTER}`;
+    const caption =
+      `╭───〔 ✅ *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐃* 〕───┈\n` +
+      `│\n` +
+      `│ 🎬 *Movie:* ${movie.metadata.title}\n` +
+      `│ 📊 *Quality:* ${selectedLink.quality}\n` +
+      `│ 💾 *Size:* ${selectedLink.size}\n` +
+      `│\n` +
+      `╰──────────────────────┈\n` +
+      `🍿 *Enjoy the movie!*\n\n` +
+      FOOTER;
 
     await ranuxPro.sendMessage(from, {
       document: { url: directUrl },
       mimetype: "video/mp4",
       fileName,
-      caption: caption.trim()
+      caption
     }, { quoted: mek });
 
   } catch (error) {
