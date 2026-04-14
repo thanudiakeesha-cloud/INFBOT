@@ -27,7 +27,7 @@ const BASE_URL = "https://sinhalasub.lk";
 const PROXY = "https://api.codetabs.com/v1/proxy?quest=";
 const DOWNLOAD_HIGH_WATER_MARK = 2 * 1024 * 1024;
 const MAX_MOVIE_DOWNLOADS = Math.max(1, Number(process.env.MAX_MOVIE_DOWNLOADS) || 1);
-const MOVIE_UPLOAD_MAX_MB = Math.max(50, Number(process.env.MOVIE_UPLOAD_MAX_MB) || 300);
+const MOVIE_UPLOAD_MAX_MB = Math.max(10, Number(process.env.MOVIE_UPLOAD_MAX_MB) || 64);
 const MOVIE_UPLOAD_MAX_BYTES = MOVIE_UPLOAD_MAX_MB * 1024 * 1024;
 const MOVIE_SPLIT_MAX_MB = Math.max(MOVIE_UPLOAD_MAX_MB, Number(process.env.MOVIE_SPLIT_MAX_MB) || MOVIE_UPLOAD_MAX_MB * 3);
 const MOVIE_SPLIT_MAX_BYTES = MOVIE_SPLIT_MAX_MB * 1024 * 1024;
@@ -665,7 +665,7 @@ cmd({
     const estimatedParts = Math.min(3, Math.ceil(knownSizeBytes / MOVIE_UPLOAD_MAX_BYTES));
     await reply(
       `📦 *Large file (${selectedLink.size})*\n` +
-      `Will be split into *${estimatedParts} playable parts* — each plays with one tap!\n` +
+      `Will be sent in *${estimatedParts} parts* — tap each to download & play.\n` +
       `Downloading now, please wait... ☕`
     );
   }
@@ -721,8 +721,9 @@ cmd({
         text:
           `╭─────────────────────────╮\n` +
           `│  🎬 *${movie.metadata.title}*\n` +
-          `│  📦 Sending in *${partCount} playable parts*\n` +
-          `│  ▶️  Each part plays with one tap!\n` +
+          `│  📦 Sending in *${partCount} parts*\n` +
+          `│  📥 Tap each part to download\n` +
+          `│  ▶️  Opens in your video player\n` +
           `╰─────────────────────────╯`
       }, { quoted: mek });
 
@@ -735,12 +736,12 @@ cmd({
         }, 1000);
 
         await ranuxPro.sendMessage(from, {
-          video: { url: partPaths[i] },
+          document: { url: `file://${partPaths[i]}` },
           mimetype: "video/mp4",
           fileName: `${movie.metadata.title} - Part ${partNum} of ${partCount}.mp4`,
           caption:
             `${caption}\n\n` +
-            `▶️ *Part ${partNum} of ${partCount}*`
+            `📥 *Part ${partNum} of ${partCount}* — tap to download, then play`
         }, { quoted: mek });
 
         clearInterval(uploadTimer);
