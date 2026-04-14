@@ -556,13 +556,18 @@ async function resolveWithPuppeteer(pageUrl) {
     await new Promise(r => setTimeout(r, 3000));
     if (resolvedUrl) return resolvedUrl;
 
-    // Try clicking download/free download buttons
+    // Try clicking download/free download buttons (CSS-only selectors — no jQuery)
     const buttonSelectors = [
-      "a#dlbutton", "a.download-btn", "input[value*='Free']",
-      "button[class*='download']", "a[class*='download']",
-      "input[name='method_free']", "button:contains('Free')",
-      "a:contains('Download')", "input[type='submit']",
-      "#direct_link", ".download-link"
+      "#downloadbtn",                        // usersdrive countdown page
+      "a#dlbutton",
+      "a.download-btn",
+      "input[value='Free Download']",
+      "input[name='method_free']",
+      "button[class*='download']",
+      "a[class*='download']",
+      "input[type='submit']",
+      "#direct_link",
+      ".download-link"
     ];
 
     for (const sel of buttonSelectors) {
@@ -571,7 +576,11 @@ async function resolveWithPuppeteer(pageUrl) {
         if (el) {
           console.log("[film2][puppeteer] Clicking:", sel);
           await el.click();
-          await new Promise(r => setTimeout(r, 5000));
+          // Wait up to 35 s for the countdown timer JS to fire and submit the form
+          for (let s = 0; s < 35; s++) {
+            if (resolvedUrl) break;
+            await new Promise(r => setTimeout(r, 1000));
+          }
           if (resolvedUrl) break;
         }
       } catch (_) {}
@@ -831,7 +840,15 @@ async function getMovieDetails2(movieUrl) {
     const isQualityLabel = qualityMatch && hasPipes && text.length < 200 && $el.find("a[href]").length === 0;
 
     if (isQualityLabel) {
-      currentQuality = qualityMatch[0].toUpperCase() === "4K" ? "4K" : qualityMatch[0];
+      const baseQuality = qualityMatch[0].toUpperCase() === "4K" ? "4K" : qualityMatch[0];
+      // Extract codec and extra tags for a more descriptive label
+      const codecMatch = text.match(/x265|x264|HEVC|AVC|H\.265|H\.264/i);
+      const is10bit = /10\s*bit/i.test(text);
+      const codec = codecMatch ? codecMatch[0].toLowerCase() : "";
+      let qualityLabel = baseQuality;
+      if (codec) qualityLabel += ` ${codec}`;
+      if (is10bit) qualityLabel += " 10bit";
+      currentQuality = qualityLabel;
       currentSize = sizeMatch ? `${sizeMatch[1]} ${sizeMatch[2].toUpperCase()}` : "N/A";
       continue;
     }
@@ -869,7 +886,11 @@ async function getMovieDetails2(movieUrl) {
       const sm = text.match(/([\d.]+)\s*(GB|MB)/i);
 
       if (qm && (text.includes("|") || sm) && text.length < 200 && $el.find("a[href]").length === 0) {
-        fallbackQuality = qm[0].toUpperCase() === "4K" ? "4K" : qm[0];
+        const bq = qm[0].toUpperCase() === "4K" ? "4K" : qm[0];
+        const cm = text.match(/x265|x264|HEVC|AVC|H\.265|H\.264/i);
+        const c = cm ? cm[0].toLowerCase() : "";
+        const b10 = /10\s*bit/i.test(text);
+        fallbackQuality = bq + (c ? ` ${c}` : "") + (b10 ? " 10bit" : "");
         fallbackSize = sm ? `${sm[1]} ${sm[2].toUpperCase()}` : "N/A";
       }
 
@@ -903,7 +924,11 @@ async function getMovieDetails2(movieUrl) {
     });
   }
 
-  downloadOptions.sort((a, b) => (QUALITY_ORDER[b.quality] || 0) - (QUALITY_ORDER[a.quality] || 0));
+  function baseQualityRank(q) {
+    const m = q.match(/4K|2160p|1080p|720p|480p/i);
+    return m ? (QUALITY_ORDER[m[0]] || 0) : 0;
+  }
+  downloadOptions.sort((a, b) => baseQualityRank(b.quality) - baseQualityRank(a.quality));
 
   return { title, thumbnail, downloadOptions };
 }
