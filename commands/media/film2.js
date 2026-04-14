@@ -665,11 +665,132 @@ async function resolveOuoIo(url, depth = 0) {
   return null;
 }
 
+// ─── HTTP-based countdown bypass for wdupload-style hosts (usersdrive, dgdrive, filepv) ───
+async function resolveWdUploadStyle(pageUrl) {
+  try {
+    const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+    // Step 1: GET the page and collect cookies
+    const getRes = await axios.get(pageUrl, {
+      timeout: 20000,
+      headers: { "User-Agent": UA, "Accept": "text/html" },
+      validateStatus: () => true
+    });
+
+    if ((getRes.headers["content-type"] || "").includes("video/") ||
+        (getRes.headers["content-type"] || "").includes("octet-stream")) {
+      return pageUrl; // it's already a direct file
+    }
+
+    const cookies = (getRes.headers["set-cookie"] || []).map(c => c.split(";")[0]).join("; ");
+    const $ = cheerio.load(getRes.data);
+
+    // Extract form fields (standard wdupload pattern)
+    const op    = $('input[name="op"]').val()    || "download2";
+    const id    = $('input[name="id"]').val()    || "";
+    const fname = $('input[name="fname"]').val() || "";
+    const rand  = $('input[name="rand"]').val()  || "";
+    const referer = pageUrl;
+
+    // Also check for a direct link already in the page (some hosts put it immediately)
+    const directInPage = $('a#direct-link, a.download-direct, a[id*="download"][href*="http"]').attr("href");
+    if (directInPage && directInPage.startsWith("http") && !/usersdrive|dgdrive|filepv|bysezox/.test(directInPage)) {
+      console.log("[film2][wdupload] Found direct link in page:", directInPage.substring(0, 80));
+      return directInPage;
+    }
+
+    if (!id && !rand) {
+      console.log("[film2][wdupload] No form fields found — trying Puppeteer");
+      return null; // will fall through to Puppeteer
+    }
+
+    // Step 2: Try to POST immediately (many sites don't enforce the countdown server-side)
+    const postBody = new URLSearchParams({
+      op: op || "download2",
+      id,
+      fname,
+      rand,
+      referer,
+      method_free: "",
+      method_premium: ""
+    }).toString();
+
+    const postRes = await axios.post(pageUrl, postBody, {
+      timeout: 20000,
+      maxRedirects: 5,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Referer": pageUrl,
+        "User-Agent": UA,
+        "Cookie": cookies
+      },
+      validateStatus: () => true
+    });
+
+    // Check if we got a redirect to the CDN file
+    const location = postRes.headers?.location || postRes.headers?.Location;
+    if (location && location.startsWith("http") && !/usersdrive|dgdrive|filepv/.test(location)) {
+      console.log("[film2][wdupload] Got CDN URL via immediate POST:", location.substring(0, 80));
+      return location;
+    }
+
+    // Check if the POST response body contains a direct link
+    if (postRes.data) {
+      const $p = cheerio.load(postRes.data);
+      const cdnLink = $p('a#direct-link, a[href*="/dl/"], a[href*="/download/"], a.btn-primary[href^="http"]').attr("href");
+      if (cdnLink && cdnLink.startsWith("http")) {
+        console.log("[film2][wdupload] Found CDN link in POST response:", cdnLink.substring(0, 80));
+        return cdnLink;
+      }
+      // Look for any large-file URL in the HTML
+      const match = postRes.data.match(/https?:\/\/[^\s"'<>]+\.(?:mp4|mkv|avi|mov|webm)[^\s"'<>]*/i);
+      if (match) {
+        console.log("[film2][wdupload] Found direct URL in POST body:", match[0].substring(0, 80));
+        return match[0];
+      }
+    }
+
+    // Step 3: If immediate POST didn't work, wait 5s and retry (shortened from 30s)
+    console.log("[film2][wdupload] Immediate POST failed — waiting 5s and retrying...");
+    await new Promise(r => setTimeout(r, 5000));
+
+    const retryRes = await axios.post(pageUrl, postBody, {
+      timeout: 20000,
+      maxRedirects: 5,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Referer": pageUrl,
+        "User-Agent": UA,
+        "Cookie": cookies
+      },
+      validateStatus: () => true
+    });
+
+    const retryLocation = retryRes.headers?.location || retryRes.headers?.Location;
+    if (retryLocation && retryLocation.startsWith("http") && !/usersdrive|dgdrive|filepv/.test(retryLocation)) {
+      console.log("[film2][wdupload] Got CDN URL on retry:", retryLocation.substring(0, 80));
+      return retryLocation;
+    }
+
+    if (retryRes.data) {
+      const $r = cheerio.load(retryRes.data);
+      const retryLink = $r('a#direct-link, a[href*="/dl/"], a[href*="/download/"], a.btn-primary[href^="http"]').attr("href");
+      if (retryLink && retryLink.startsWith("http")) return retryLink;
+      const retryMatch = retryRes.data.match(/https?:\/\/[^\s"'<>]+\.(?:mp4|mkv|avi|mov|webm)[^\s"'<>]*/i);
+      if (retryMatch) return retryMatch[0];
+    }
+
+  } catch (e) {
+    console.warn("[film2][wdupload] HTTP bypass error:", e.message);
+  }
+  return null;
+}
+
 // ─── Try to resolve a direct download URL from various hosts ──────────────────
 async function resolveDirectUrl(url, depth = 0) {
   if (!url || depth > 5) return null;
 
-  // Pixeldrain
+  // Pixeldrain — convert page link to direct API download (same as film.js)
   const pdMatch = url.match(/pixeldrain\.com\/u\/(\w+)/);
   if (pdMatch) return `https://pixeldrain.com/api/file/${pdMatch[1]}?download`;
 
@@ -693,7 +814,7 @@ async function resolveDirectUrl(url, depth = 0) {
     return null;
   }
 
-  // ouo.io — bypass the interstitial with a POST
+  // ouo.io — bypass the interstitial with a POST, then resolve the resulting URL
   if (url.includes("ouo.io") || url.includes("ouo.press")) {
     console.log("[film2] Bypassing ouo.io:", url.substring(0, 80));
     const resolved = await resolveOuoIo(url);
@@ -722,21 +843,34 @@ async function resolveDirectUrl(url, depth = 0) {
     || url.includes("/dl/");
   if (looksLikeDirect) return url;
 
-  // Hosts that require JS execution — use Puppeteer as next resort
-  const puppeteerHosts = ["usersdrive", "dgdrive", "filepv", "bysezoxexe", "send.now", "1fichier"];
-  if (puppeteerHosts.some(h => url.includes(h))) {
+  // wdUpload-style countdown hosts: try HTTP bypass FIRST, fall back to Puppeteer
+  const wdHosts = ["usersdrive", "dgdrive", "filepv", "bysezoxexe"];
+  if (wdHosts.some(h => url.includes(h))) {
+    console.log("[film2] Trying HTTP bypass for:", url.substring(0, 80));
+    const httpResolved = await resolveWdUploadStyle(url);
+    if (httpResolved && httpResolved !== url) {
+      console.log("[film2] HTTP bypass succeeded:", httpResolved.substring(0, 80));
+      return httpResolved;
+    }
+    // Fall back to Puppeteer
+    console.log("[film2] HTTP bypass failed — trying Puppeteer:", url.substring(0, 80));
+    const resolved = await resolveWithPuppeteer(url);
+    if (resolved && resolved !== url) {
+      if (wdHosts.some(h => resolved.includes(h)) || resolved.includes("ouo.io")) {
+        return resolveDirectUrl(resolved, depth + 1);
+      }
+      return resolved;
+    }
+    return null;
+  }
+
+  // send.now, 1fichier — Puppeteer only
+  const puppeteerOnlyHosts = ["send.now", "1fichier"];
+  if (puppeteerOnlyHosts.some(h => url.includes(h))) {
     console.log("[film2] Resolving with Puppeteer:", url.substring(0, 80));
     const resolved = await resolveWithPuppeteer(url);
-    if (!resolved) {
-      // Puppeteer failed — try the URL directly as a last resort
-      console.log("[film2] Puppeteer returned nothing — attempting direct GET as fallback");
-      return url;
-    }
-    // If Puppeteer landed on another intermediate host, recurse
-    if (puppeteerHosts.some(h => resolved.includes(h)) || resolved.includes("ouo.io")) {
-      return resolveDirectUrl(resolved, depth + 1);
-    }
-    return resolved;
+    if (resolved && resolved !== url) return resolved;
+    return null;
   }
 
   // Unknown host — try following redirects and check if final URL is a direct file
