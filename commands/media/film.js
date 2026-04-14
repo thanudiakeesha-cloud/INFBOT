@@ -24,8 +24,17 @@ global.activeMovieDownloads = global.activeMovieDownloads || new Set();
 // Design Elements
 const LOGO_URL = "https://files.catbox.moe/2jt3ln.png";
 const BASE_URL = "https://sinhalasub.lk";
-const PROXY = "https://api.codetabs.com/v1/proxy?quest=";
 const DOWNLOAD_HIGH_WATER_MARK = 2 * 1024 * 1024;
+
+// Proxy pool — rotate when one gets rate-limited (429)
+const PROXY_POOL = [
+  { build: url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,  raw: true },
+  { build: url => `https://corsproxy.io/?${encodeURIComponent(url)}`,                    raw: true },
+  { build: url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,       raw: true },
+  { build: url => `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(url)}`,   raw: true },
+];
+// Track per-proxy cooldown timestamps (ms) so we skip recently-429'd ones
+const proxyCooldown = new Array(PROXY_POOL.length).fill(0);
 const MAX_MOVIE_DOWNLOADS = Math.max(1, Number(process.env.MAX_MOVIE_DOWNLOADS) || 1);
 const MOVIE_UPLOAD_MAX_MB = Math.max(10, Number(process.env.MOVIE_UPLOAD_MAX_MB) || 64);
 const MOVIE_UPLOAD_MAX_BYTES = MOVIE_UPLOAD_MAX_MB * 1024 * 1024;
@@ -38,19 +47,53 @@ const downloadHttpsAgent = new https.Agent({ keepAlive: true, maxSockets: 8 });
 const QUALITY_ORDER = { "1080p": 3, "720p": 2, "480p": 1 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+const PROXY_COOLDOWN_MS = 60 * 1000; // skip a proxy for 60s after a 429
+
 async function proxyFetch(url, retries = 3) {
   let lastError;
-  for (let attempt = 1; attempt <= retries; attempt++) {
+  const now = () => Date.now();
+  let realAttempts = 0;
+  let proxySkips = 0;
+  const MAX_PROXY_SKIPS = PROXY_POOL.length;
+
+  while (realAttempts < retries && proxySkips <= MAX_PROXY_SKIPS) {
+    // Pick the first proxy not currently in cooldown
+    let proxyIndex = proxyCooldown.findIndex(until => now() >= until);
+    if (proxyIndex === -1) {
+      // All proxies in cooldown — wait for the soonest to recover
+      proxyIndex = proxyCooldown.indexOf(Math.min(...proxyCooldown));
+      await new Promise(r => setTimeout(r, Math.max(0, proxyCooldown[proxyIndex] - now())));
+    }
+
+    const proxy = PROXY_POOL[proxyIndex];
     try {
-      const response = await axios.get(PROXY + encodeURIComponent(url), {
-        timeout: 25000,
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+      const response = await axios.get(proxy.build(url), {
+        timeout: 30000,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "text/html,application/xhtml+xml,*/*"
+        },
+        validateStatus: s => s < 500
       });
+
+      if (response.status === 429) {
+        proxyCooldown[proxyIndex] = now() + PROXY_COOLDOWN_MS;
+        console.warn(`Proxy #${proxyIndex} hit 429 — cooling down 60s, trying next...`);
+        lastError = new Error("All proxies rate-limited (429). Please try again in a minute.");
+        proxySkips++;
+        continue; // don't count as a real attempt
+      }
+
+      if (response.status >= 400) {
+        throw new Error(`Proxy returned HTTP ${response.status}`);
+      }
+
       return response;
     } catch (err) {
       lastError = err;
-      if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 1500 * attempt));
+      realAttempts++;
+      if (realAttempts < retries) {
+        await new Promise(r => setTimeout(r, 1500 * realAttempts));
       }
     }
   }
