@@ -389,9 +389,8 @@ cmd({
       progress.update({ percent: uploadPercent, stage: "Uploading film to chat..." });
     }, 1000);
 
-    const buffer = fs.readFileSync(tempPath);
     await ranuxPro.sendMessage(from, {
-      document: buffer,
+      document: { url: tempPath },
       mimetype: "video/mp4",
       fileName,
       caption

@@ -10,7 +10,7 @@ Infinity MD is a Node.js/Express WhatsApp multi-device bot dashboard. The main s
 - Deployment files: `railway.json`, `nixpacks.toml`, and `Procfile` configure Railway startup.
 
 ## Recent Changes (Latest)
-- Added a live edited WhatsApp progress message to `.movie` film downloads. The progress message updates every second with a visual bar, real downloaded bytes when available, and an upload-to-chat phase until the film is sent.
+- Added a live edited WhatsApp progress message to `.movie` film downloads. The progress message updates every second with a visual bar, real downloaded bytes when available, and an upload-to-chat phase until the film is sent. Large movie sending now uses the saved file path instead of reading the whole file into RAM to prevent freezes around 900MB+.
 - Added `/terabox` Movie Downloader web page: searches sinhalasub.lk, shows movie results, fetches download links from each movie page (TeraBox links sorted to top), and resolves TeraBox share URLs to direct download links via the bot's `resolveTeraBox()` utility.
 - Created `utils/sinhalasub.js` shared scraper module — exports `searchMovies()` and `getMovieDetails()`, used by both the `.film3` WhatsApp command and the web API.
 - Added three new backend API routes: `POST /api/sinhalasub/search`, `POST /api/sinhalasub/details`, and `POST /api/sinhalasub/resolve`. All include Cloudflare detection with helpful fallback messaging.
