@@ -1,7 +1,15 @@
 const { cmd } = require("../../command");
 const axios = require("axios");
 const cheerio = require("cheerio");
+const fs = require("fs");
+const path = require("path");
 const { sendBtn, btn } = require("../../utils/sendBtn");
+
+// Patch Baileys upload timeout from 30s → 30 minutes so large files can upload
+try {
+  const baileys = require("@whiskeysockets/baileys");
+  if (baileys.UPLOAD_TIMEOUT !== undefined) baileys.UPLOAD_TIMEOUT = 30 * 60 * 1000;
+} catch (_) {}
 
 // Global State
 global.pendingMovie = global.pendingMovie || {};
@@ -256,18 +264,36 @@ cmd({
   const fileName = `${movie.metadata.title.substring(0, 50)} - ${selectedLink.quality}.mp4`
     .replace(/[^\w\s.-]/gi, "");
 
-  await reply(`*⏳ Sending "${movie.metadata.title}" (${selectedLink.quality} — ${selectedLink.size})...*\n_Please wait._`);
+  await reply(`*⏳ Downloading "${movie.metadata.title}" (${selectedLink.quality} — ${selectedLink.size})...*\n_Please wait, large files take a few minutes._`);
+
+  const tempPath = path.join("/tmp", `movie_${Date.now()}.mp4`);
 
   try {
+    // Stream download directly to disk (avoids memory buffering during download)
+    const response = await axios({ method: "GET", url: directUrl, responseType: "stream", timeout: 0 });
+    await new Promise((resolve, reject) => {
+      const writer = fs.createWriteStream(tempPath);
+      response.data.pipe(writer);
+      writer.on("finish", resolve);
+      writer.on("error", reject);
+    });
+
+    await reply(`*📤 Download complete! Sending to chat now...*`);
+
+    // Read from disk and send as document (UPLOAD_TIMEOUT patched to 30 min above)
+    const buffer = fs.readFileSync(tempPath);
     await ranuxPro.sendMessage(from, {
-      document: { url: directUrl },
+      document: buffer,
       mimetype: "video/mp4",
       fileName,
       caption
     }, { quoted: mek });
+
   } catch (error) {
     console.error("Movie Send Error:", error.message);
     reply(`*❌ Failed to send movie:* ${error.message || "An unknown error occurred."}`);
+  } finally {
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
   }
 });
 
