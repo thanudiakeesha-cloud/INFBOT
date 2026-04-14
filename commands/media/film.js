@@ -1,6 +1,7 @@
 const { cmd } = require("../../command");
 const puppeteer = require("puppeteer");
 const config = require("../../config");
+const { execSync } = require("child_process");
 
 // Global State
 global.pendingMovie = global.pendingMovie || {};
@@ -28,9 +29,21 @@ function getDirectPixeldrainUrl(url) {
   return `https://pixeldrain.com/api/file/${match[1]}?download`;
 }
 
+let CHROMIUM_PATH;
+try {
+  CHROMIUM_PATH = execSync("which chromium || which chromium-browser || which google-chrome", { encoding: "utf8" }).trim().split("\n")[0];
+} catch (_) {
+  CHROMIUM_PATH = "/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium";
+}
+const PUPPETEER_OPTS = {
+  headless: "new",
+  executablePath: CHROMIUM_PATH,
+  args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+};
+
 async function searchMovies(query) {
   const searchUrl = `https://sinhalasub.lk/?s=${encodeURIComponent(query)}&post_type=movies`;
-  const browser = await puppeteer.launch({ headless: "new", args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+  const browser = await puppeteer.launch(PUPPETEER_OPTS);
   const page = await browser.newPage();
   await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 45000 });
   const results = await page.$$eval(".display-item .item-box", boxes =>
@@ -48,7 +61,7 @@ async function searchMovies(query) {
 }
 
 async function getMovieMetadata(url) {
-  const browser = await puppeteer.launch({ headless: "new", args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+  const browser = await puppeteer.launch(PUPPETEER_OPTS);
   const page = await browser.newPage();
   await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
   const metadata = await page.evaluate(() => {
@@ -74,7 +87,7 @@ async function getMovieMetadata(url) {
 }
 
 async function getPixeldrainLinks(movieUrl) {
-  const browser = await puppeteer.launch({ headless: "new", args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+  const browser = await puppeteer.launch(PUPPETEER_OPTS);
   const page = await browser.newPage();
   await page.goto(movieUrl, { waitUntil: "networkidle2", timeout: 60000 });
   const linksData = await page.$$eval(".link-pixeldrain tbody tr", rows =>
