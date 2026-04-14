@@ -621,9 +621,44 @@ async function resolveWithPuppeteer(pageUrl) {
   }
 }
 
+// ─── ouo.io bypass (no puppeteer needed) ──────────────────────────────────────
+async function resolveOuoIo(url, depth = 0) {
+  if (depth > 3) return null;
+  try {
+    const res = await axios.post(url, "go=1", {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Referer": url,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      },
+      maxRedirects: 0,
+      timeout: 20000,
+      validateStatus: () => true
+    });
+    const location = res.headers?.location || res.headers?.Location;
+    if (location && location !== url) {
+      // If it lands on another ouo.io-like page, recurse
+      if (location.includes("ouo.io")) return resolveOuoIo(location, depth + 1);
+      return location;
+    }
+    // Check HTML for redirect or hidden link
+    if (res.data) {
+      const $ = cheerio.load(res.data);
+      const metaRefresh = $("meta[http-equiv='refresh']").attr("content") || "";
+      const metaUrl = metaRefresh.match(/url=(.+)/i)?.[1]?.trim();
+      if (metaUrl && metaUrl !== url) return metaUrl;
+      const anchor = $("a#go-link, a.btn-download, a[href*='download']").attr("href");
+      if (anchor && anchor.startsWith("http")) return anchor;
+    }
+  } catch (e) {
+    if (e.response?.headers?.location) return e.response.headers.location;
+  }
+  return null;
+}
+
 // ─── Try to resolve a direct download URL from various hosts ──────────────────
 async function resolveDirectUrl(url, depth = 0) {
-  if (!url || depth > 4) return null;
+  if (!url || depth > 5) return null;
 
   // Pixeldrain
   const pdMatch = url.match(/pixeldrain\.com\/u\/(\w+)/);
@@ -649,34 +684,27 @@ async function resolveDirectUrl(url, depth = 0) {
     return null;
   }
 
-  // Simple URL shorteners — just follow HTTP redirects
-  const simpleRedirectors = ["tinyurl.com", "bit.ly", "shorturl", "linkshortify"];
+  // ouo.io — bypass the interstitial with a POST
+  if (url.includes("ouo.io") || url.includes("ouo.press")) {
+    console.log("[film2] Bypassing ouo.io:", url.substring(0, 80));
+    const resolved = await resolveOuoIo(url);
+    if (resolved && resolved !== url) return resolveDirectUrl(resolved, depth + 1);
+    return null;
+  }
+
+  // Simple URL shorteners — follow HTTP redirects
+  const simpleRedirectors = ["tinyurl.com", "bit.ly", "shorturl", "linkshortify", "t.ly", "rb.gy"];
   if (simpleRedirectors.some(h => url.includes(h))) {
     try {
-      const res = await axios.head(url, {
+      const res = await axios.get(url, {
         maxRedirects: 10, timeout: 15000,
         headers: { "User-Agent": "Mozilla/5.0" },
         validateStatus: () => true
       });
-      const finalUrl = res.request?.res?.responseUrl || res.config?.url;
-      if (finalUrl && finalUrl !== url) {
-        return resolveDirectUrl(finalUrl, depth + 1);
-      }
+      const finalUrl = res.request?.res?.responseUrl || res.config?.url || url;
+      if (finalUrl && finalUrl !== url) return resolveDirectUrl(finalUrl, depth + 1);
     } catch (_) {}
     return null;
-  }
-
-  // Hosts that require JS execution — use Puppeteer, then recurse if result is another host
-  const puppeteerHosts = ["usersdrive", "dgdrive", "filepv", "bysezoxexe", "send.now", "ouo.io", "1fichier"];
-  if (puppeteerHosts.some(h => url.includes(h))) {
-    console.log("[film2] Resolving with Puppeteer:", url.substring(0, 80));
-    const resolved = await resolveWithPuppeteer(url);
-    if (!resolved) return null;
-    // If Puppeteer landed on another intermediate host, resolve again
-    if (puppeteerHosts.some(h => resolved.includes(h))) {
-      return resolveDirectUrl(resolved, depth + 1);
-    }
-    return resolved;
   }
 
   // URL looks like a direct CDN/file link — return it as-is
@@ -685,7 +713,45 @@ async function resolveDirectUrl(url, depth = 0) {
     || url.includes("/dl/");
   if (looksLikeDirect) return url;
 
-  // Unknown host — don't attempt download (would get HTML/404)
+  // Hosts that require JS execution — use Puppeteer as next resort
+  const puppeteerHosts = ["usersdrive", "dgdrive", "filepv", "bysezoxexe", "send.now", "1fichier"];
+  if (puppeteerHosts.some(h => url.includes(h))) {
+    console.log("[film2] Resolving with Puppeteer:", url.substring(0, 80));
+    const resolved = await resolveWithPuppeteer(url);
+    if (!resolved) {
+      // Puppeteer failed — try the URL directly as a last resort
+      console.log("[film2] Puppeteer returned nothing — attempting direct GET as fallback");
+      return url;
+    }
+    // If Puppeteer landed on another intermediate host, recurse
+    if (puppeteerHosts.some(h => resolved.includes(h)) || resolved.includes("ouo.io")) {
+      return resolveDirectUrl(resolved, depth + 1);
+    }
+    return resolved;
+  }
+
+  // Unknown host — try following redirects and check if final URL is a direct file
+  try {
+    const res = await axios.head(url, {
+      maxRedirects: 10, timeout: 15000,
+      headers: { "User-Agent": "Mozilla/5.0" },
+      validateStatus: () => true
+    });
+    const finalUrl = res.request?.res?.responseUrl || url;
+    const ct = (res.headers["content-type"] || "").toLowerCase();
+    const cl = parseInt(res.headers["content-length"] || "0", 10);
+    if (
+      ct.includes("video/") ||
+      ct.includes("application/octet-stream") ||
+      ct.includes("application/force-download") ||
+      (res.headers["content-disposition"] || "").includes("attachment") ||
+      cl > 10 * 1024 * 1024
+    ) {
+      return finalUrl;
+    }
+    if (finalUrl !== url) return resolveDirectUrl(finalUrl, depth + 1);
+  } catch (_) {}
+
   return null;
 }
 
@@ -848,10 +914,11 @@ async function executeMovieDownload2(task) {
   const movieTitle = movie.title || "Movie";
   const tempPath = path.join("/tmp", `bs_movie_${Date.now()}.mp4`);
 
+  const displaySize = (selectedOption.size && selectedOption.size !== "N/A") ? selectedOption.size : "Unknown";
   const progress = await sendLiveProgress2(sock, from, mek, {
     title: movieTitle,
     quality: selectedOption.quality,
-    size: selectedOption.size,
+    size: displaySize,
     downloadPercent: 0,
     uploadPercent: 0,
     stage: "Resolving download link...",
@@ -914,12 +981,13 @@ async function executeMovieDownload2(task) {
       const linkLines = selectedOption.links.map(url =>
         `${getHostLabel(url)}\n${url}`
       ).join("\n\n");
+      const fbSizeInfo = (selectedOption.size && selectedOption.size !== "N/A") ? `  •  ${selectedOption.size}` : "";
       const fallbackMsg =
         `╭─────────────────────────╮\n` +
         `│  🔗 *Download Links*\n` +
         `│\n` +
         `│  🎬 ${movieTitle}\n` +
-        `│  📊 ${selectedOption.quality}  •  ${selectedOption.size}\n` +
+        `│  📊 ${selectedOption.quality}${fbSizeInfo}\n` +
         `│\n` +
         `│  *${selectedOption.links.length} server(s) available*\n` +
         `│  _Auto-download not supported for_\n` +
@@ -936,12 +1004,13 @@ async function executeMovieDownload2(task) {
     const savedSize = fs.statSync(tempPath).size;
     progress.update({ downloadPercent: 100, uploadPercent: 0, downloadedBytes, totalBytes, stage: "Done! Sending to chat..." });
 
+    const sizeInfo = (selectedOption.size && selectedOption.size !== "N/A") ? `  •  ${selectedOption.size}` : "";
     const caption =
       `╭─────────────────────────╮\n` +
       `│  ✅ *Movie Ready!*\n` +
       `│\n` +
       `│  🎬 ${movieTitle}\n` +
-      `│  📊 ${selectedOption.quality}  •  ${selectedOption.size}\n` +
+      `│  📊 ${selectedOption.quality}${sizeInfo}\n` +
       `│  🌐 Source: Baiscopedownloads.link\n` +
       `│\n` +
       `│  🍿 Enjoy watching!\n` +
@@ -1060,13 +1129,14 @@ function processMovieQueue2() {
       }, { quoted: item.mek }).catch(() => {});
     });
 
+    const nextSizeLabel = (next.selectedOption.size && next.selectedOption.size !== "N/A") ? `  •  ${next.selectedOption.size}` : "";
     next.sock.sendMessage(next.from, {
       text:
         `╭─────────────────────────╮\n` +
         `│  ✅ *Your Turn!*\n` +
         `│\n` +
         `│  🎬 ${next.movie.title}\n` +
-        `│  📊 ${next.selectedOption.quality}  •  ${next.selectedOption.size}\n` +
+        `│  📊 ${next.selectedOption.quality}${nextSizeLabel}\n` +
         `│\n` +
         `│  ⬇️ Starting your download now...\n` +
         `╰─────────────────────────╯`
@@ -1199,9 +1269,10 @@ cmd({
       `│  👇 Tap a quality to download\n` +
       `╰─────────────────────────╯`;
 
-    const qualityButtons = details.downloadOptions.map((d, i) =>
-      btn(`bs_dl_${i + 1}`, `📥 ${d.quality}  •  ${d.size}`)
-    );
+    const qualityButtons = details.downloadOptions.map((d, i) => {
+      const sizeLabel = (d.size && d.size !== "N/A") ? `  •  ${d.size}` : "";
+      return btn(`bs_dl_${i + 1}`, `📥 ${d.quality}${sizeLabel}`);
+    });
 
     if (thumbnail) {
       await ranuxPro.sendMessage(from, {
@@ -1260,12 +1331,13 @@ cmd({
   const queuePos = global.movieDownloadQueue2.length;
   const activeCount = global.activeMovieDownloads2.size;
 
+  const queueSizeLabel = (selectedOption.size && selectedOption.size !== "N/A") ? `  •  ${selectedOption.size}` : "";
   await reply(
     `╭─────────────────────────╮\n` +
     `│  📋 *Added to Queue*\n` +
     `│\n` +
     `│  🎬 ${movie.title}\n` +
-    `│  📊 ${selectedOption.quality}  •  ${selectedOption.size}\n` +
+    `│  📊 ${selectedOption.quality}${queueSizeLabel}\n` +
     `│\n` +
     `│  🔢 Queue position: *#${queuePos}*\n` +
     `│  ⚙️ Active downloads: ${activeCount}/${MAX_MOVIE_DOWNLOADS2}\n` +
