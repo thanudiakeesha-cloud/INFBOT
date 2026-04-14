@@ -83,11 +83,6 @@ async function getPixeldrainLinks(movieUrl) {
   const directLinks = [];
   for (const row of rows) {
     try {
-      const sizeMB = row.size.toUpperCase().includes("GB")
-        ? parseFloat(row.size) * 1024
-        : parseFloat(row.size);
-      if (sizeMB > 2048) continue;
-
       const { data: linkData } = await proxyFetch(row.pageLink);
       const $l = cheerio.load(linkData);
       const pdUrl = $l('a[href*="pixeldrain.com"]').attr("href");
@@ -248,34 +243,29 @@ cmd({
   const selectedLink = movie.downloadLinks[index];
   delete global.pendingMovie[sender];
 
-  await reply(`*🚀 Download initiated for "${movie.metadata.title}" (${selectedLink.quality}). Please wait...*`);
-
   try {
     const directUrl = getDirectPixeldrainUrl(selectedLink.link);
     if (!directUrl) throw new Error("Could not generate direct download link.");
 
-    const fileName = `${movie.metadata.title.substring(0, 50)} - ${selectedLink.quality}.mp4`.replace(/[^\w\s.-]/gi, "");
     const caption =
-      `╭───〔 ✅ *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐃* 〕───┈\n` +
+      `╭───〔 ✅ *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃 𝐋𝐈𝐍𝐊* 〕───┈\n` +
       `│\n` +
       `│ 🎬 *Movie:* ${movie.metadata.title}\n` +
       `│ 📊 *Quality:* ${selectedLink.quality}\n` +
       `│ 💾 *Size:* ${selectedLink.size}\n` +
       `│\n` +
+      `│ 🔗 *Download Link:*\n` +
+      `│ ${directUrl}\n` +
+      `│\n` +
       `╰──────────────────────┈\n` +
-      `🍿 *Enjoy the movie!*\n\n` +
+      `🍿 *Tap the link to download the movie!*\n\n` +
       FOOTER;
 
-    await ranuxPro.sendMessage(from, {
-      document: { url: directUrl },
-      mimetype: "video/mp4",
-      fileName,
-      caption
-    }, { quoted: mek });
+    await ranuxPro.sendMessage(from, { text: caption }, { quoted: mek });
 
   } catch (error) {
     console.error("Movie Send Error:", error.message);
-    reply(`*❌ Failed to send movie:* ${error.message || "An unknown error occurred."}`);
+    reply(`*❌ Failed to get download link:* ${error.message || "An unknown error occurred."}`);
   }
 });
 
