@@ -31,12 +31,27 @@ const MOVIE_SPLIT_MAX_BYTES = MOVIE_SPLIT_MAX_MB * 1024 * 1024;
 const downloadHttpAgent = new http.Agent({ keepAlive: true, maxSockets: 8 });
 const downloadHttpsAgent = new https.Agent({ keepAlive: true, maxSockets: 8 });
 
+// Quality order for sorting (higher = better)
+const QUALITY_ORDER = { "1080p": 3, "720p": 2, "480p": 1 };
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function proxyFetch(url) {
-  return axios.get(PROXY + encodeURIComponent(url), {
-    timeout: 20000,
-    headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-  });
+async function proxyFetch(url, retries = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.get(PROXY + encodeURIComponent(url), {
+        timeout: 25000,
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+      });
+      return response;
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 1500 * attempt));
+      }
+    }
+  }
+  throw lastError;
 }
 
 function normalizeQuality(text) {
@@ -66,6 +81,14 @@ function formatBytes(bytes) {
   return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
+function formatEta(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  if (seconds < 60) return `${Math.ceil(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.ceil(seconds % 60);
+  return `${m}m ${s}s`;
+}
+
 function parseSizeToBytes(sizeText) {
   if (!sizeText) return 0;
   const match = String(sizeText).replace(",", ".").match(/([\d.]+)\s*(GB|GIB|MB|MIB|KB|KIB|B)/i);
@@ -93,7 +116,17 @@ function renderMovieProgress({ title, quality, size, percent, downloadPercent, u
   const speed = formatBytes(speedBytesPerSecond);
   const speedLine = speed ? `│ 🚀 *Speed:* ${speed}/s\n` : "";
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+
+  // ETA calculation
+  let etaLine = "";
   const safeDownloadPercent = downloadPercent ?? percent ?? 0;
+  if (speedBytesPerSecond > 0 && totalBytes > 0 && downloadedBytes > 0 && safeDownloadPercent < 100) {
+    const remainingBytes = totalBytes - downloadedBytes;
+    const etaSeconds = remainingBytes / speedBytesPerSecond;
+    const etaStr = formatEta(etaSeconds);
+    if (etaStr) etaLine = `│ ⏳ *ETA:* ${etaStr}\n`;
+  }
+
   const safeUploadPercent = uploadPercent ?? 0;
   return (
     `╭───〔 📥 *𝐌𝐎𝐕𝐈𝐄 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃* 〕───┈\n` +
@@ -103,6 +136,7 @@ function renderMovieProgress({ title, quality, size, percent, downloadPercent, u
     `│ 💾 *Size:* ${size}\n` +
     sizeLine +
     speedLine +
+    etaLine +
     `│ ⏱️ *Time:* ${elapsedSeconds}s\n` +
     `│ ⚙️ *Status:* ${stage}\n` +
     `│ ⬇️ *Download:* ${renderProgressBar(safeDownloadPercent)}\n` +
@@ -123,9 +157,9 @@ function buildDirectLinkMessage({ title, quality, size, link, directUrl, reason 
     `│ 🛡️ *Reason:* ${reason}\n` +
     `│\n` +
     `╰──────────────────────┈\n\n` +
-    `Railway cannot safely upload this large file without crashing, so use this link:\n\n` +
-    `${link}\n\n` +
-    `*Direct download:*\n${directUrl}`
+    `This file is too large to send directly through the bot. Use the link below to download it:\n\n` +
+    `🌐 *Page:* ${link}\n\n` +
+    `⬇️ *Direct download:*\n${directUrl}`
   );
 }
 
@@ -200,7 +234,8 @@ async function sendSplitMovieParts(sock, chatId, quoted, sourcePath, baseFileNam
     await sock.sendMessage(chatId, {
       text:
         `*📦 Large movie detected — sending in ${partCount} parts.*\n\n` +
-        `Each part is up to ${MOVIE_UPLOAD_MAX_MB}MB. Download every part and join them in order to restore the movie file.`
+        `Each part is up to ${MOVIE_UPLOAD_MAX_MB}MB. Download every part and join them in order to restore the movie file.\n\n` +
+        `_Tip: Use a tool like_ *HJSplit* _or_ *cat* _(Linux/Mac) to merge the parts._`
     }, { quoted });
 
     for (let index = 0; index < partCount; index += 1) {
@@ -302,7 +337,13 @@ async function sendLiveProgress(sock, chatId, quoted, initialState) {
 // ─── Scrapers ─────────────────────────────────────────────────────────────────
 async function searchMovies(query) {
   const url = `${BASE_URL}/?s=${encodeURIComponent(query)}&post_type=movies`;
-  const { data } = await proxyFetch(url);
+  let data;
+  try {
+    const res = await proxyFetch(url);
+    data = res.data;
+  } catch (err) {
+    throw new Error(`Could not reach the movie site. Please try again. (${err.message})`);
+  }
   const $ = cheerio.load(data);
   const results = [];
   $(".display-item .item-box").slice(0, 8).each((i, el) => {
@@ -315,7 +356,13 @@ async function searchMovies(query) {
 }
 
 async function getMovieMetadata(movieUrl) {
-  const { data } = await proxyFetch(movieUrl);
+  let data;
+  try {
+    const res = await proxyFetch(movieUrl);
+    data = res.data;
+  } catch (err) {
+    throw new Error(`Failed to load movie page. (${err.message})`);
+  }
   const $ = cheerio.load(data);
   const title = $(".info-details .details-title h3").text().trim();
   const imdb = $(".info-details .data-imdb").text().replace("IMDb:", "").trim() || "N/A";
@@ -334,7 +381,13 @@ async function getMovieMetadata(movieUrl) {
 }
 
 async function getPixeldrainLinks(movieUrl) {
-  const { data } = await proxyFetch(movieUrl);
+  let data;
+  try {
+    const res = await proxyFetch(movieUrl);
+    data = res.data;
+  } catch (err) {
+    throw new Error(`Failed to load download page. (${err.message})`);
+  }
   const $ = cheerio.load(data);
   const rows = [];
   $(".link-pixeldrain tbody tr").each((i, row) => {
@@ -347,7 +400,7 @@ async function getPixeldrainLinks(movieUrl) {
   const directLinks = [];
   for (const row of rows) {
     try {
-      const { data: linkData } = await proxyFetch(row.pageLink);
+      const { data: linkData } = await proxyFetch(row.pageLink, 2);
       const $l = cheerio.load(linkData);
       const pdUrl = $l('a[href*="pixeldrain.com"]').attr("href");
       if (pdUrl) {
@@ -359,28 +412,41 @@ async function getPixeldrainLinks(movieUrl) {
       }
     } catch (e) { continue; }
   }
+
+  // Sort by quality: best quality first
+  directLinks.sort((a, b) => (QUALITY_ORDER[b.quality] || 0) - (QUALITY_ORDER[a.quality] || 0));
+
   return directLinks;
 }
 
 // ─── Step 1: Search ───────────────────────────────────────────────────────────
 cmd({
   pattern: "movie",
-  alias: ["sinhalasub", "films", "mv"],
+  alias: ["sinhalasub", "films", "mv", "film"],
   react: "🎬",
   desc: "Search and Download movies from Sinhalasub.lk",
   category: "download",
   filename: __filename
 }, async (ranuxPro, mek, m, { from, q, sender, reply }) => {
-  if (!q) return reply(`*ℹ️ Please provide a movie name.*\n\n*Example:* \`.movie avatar\``);
+  if (!q) return reply(
+    `*ℹ️ Please provide a movie name.*\n\n` +
+    `*Example:* \`.movie avatar\`\n\n` +
+    `*Aliases:* .film | .mv | .films | .sinhalasub`
+  );
 
   if (global.pendingMenu) delete global.pendingMenu[sender];
   if (global.pendingVideo) delete global.pendingVideo[sender];
+  if (global.pendingMovie[sender]) delete global.pendingMovie[sender];
 
   await reply(`*⏳ Searching for "${q}"...*`);
 
   try {
     const searchResults = await searchMovies(q);
-    if (!searchResults.length) return reply("*❌ No movies found matching your query!*");
+    if (!searchResults.length) return reply(
+      `*❌ No movies found for "*${q}*"*\n\n` +
+      `Try a different spelling or a shorter title.\n` +
+      `_Example: .movie avatar (not "Avatar: The Way of Water")_`
+    );
 
     global.pendingMovie[sender] = { step: 1, results: searchResults, timestamp: Date.now() };
 
@@ -406,7 +472,24 @@ cmd({
 
   } catch (e) {
     console.error("Movie Search Error:", e.message);
-    reply("❌ *An error occurred during the search. Please try again later.*");
+    reply(`❌ *Search failed:* ${e.message || "Please try again later."}`);
+  }
+});
+
+// ─── Cancel movie session ─────────────────────────────────────────────────────
+cmd({
+  pattern: "cancelmovie",
+  alias: ["stopmovie", "mvcancel"],
+  react: "🚫",
+  desc: "Cancel your current movie selection session",
+  category: "download",
+  filename: __filename
+}, async (ranuxPro, mek, m, { from, sender, reply }) => {
+  if (global.pendingMovie[sender]) {
+    delete global.pendingMovie[sender];
+    reply("*✅ Movie session cancelled.* You can start a new search with `.movie <title>`.");
+  } else {
+    reply("*ℹ️ You have no active movie session to cancel.*");
   }
 });
 
@@ -442,6 +525,7 @@ cmd({
       `│ 🕒 *Duration:* ${metadata.duration}\n` +
       `│ 🎭 *Genre:* ${metadata.genres.join(", ") || "N/A"}\n` +
       `│ 👤 *Director:* ${metadata.directors.join(", ") || "N/A"}\n` +
+      `│ 🌐 *Language:* ${metadata.language || "N/A"}\n` +
       `│\n` +
       `╰──────────────────────┈\n\n` +
       `📥 *Fetching download links...*\n( ｡ • ̀ ω • ́ ｡ ) Please wait...`;
@@ -454,7 +538,13 @@ cmd({
 
     const downloadLinks = await getPixeldrainLinks(selected.movieUrl);
     if (!downloadLinks.length) {
-      return reply(`*❌ No direct download links found under 2GB!*`);
+      return reply(
+        `*❌ No direct download links found for this movie.*\n\n` +
+        `This may be because:\n` +
+        `• The movie page has no Pixeldrain links\n` +
+        `• The download page is temporarily unavailable\n\n` +
+        `Try searching for another quality or a different movie.`
+      );
     }
 
     global.pendingMovie[sender] = {
@@ -467,9 +557,11 @@ cmd({
       `╭───〔 📥 *𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃 𝐋𝐈𝐒𝐓* 〕───┈\n` +
       `│\n` +
       `│ 🎬 *${metadata.title || selected.title}*\n` +
+      `│ 📋 *${downloadLinks.length} quality option(s) available*\n` +
+      `│ _(sorted best quality first)_\n` +
       `│\n` +
       `╰──────────────────────┈\n\n` +
-      `*👇 Tap a quality to download:*`;
+      `*👇 Tap a quality to start downloading:*`;
 
     const qualityButtons = downloadLinks.map((d, i) =>
       btn(`mv_dl_${i + 1}`, `📥 ${d.quality}  •  ${d.size}`)
@@ -483,7 +575,7 @@ cmd({
   } catch (e) {
     delete global.pendingMovie[sender];
     console.error("Movie Detail Fetch Error:", e.message);
-    reply("❌ *Failed to fetch movie details. Please try again.*");
+    reply(`❌ *Failed to fetch movie details:* ${e.message || "Please try again."}`);
   }
 });
 
@@ -499,18 +591,22 @@ cmd({
   const { movie } = global.pendingMovie[sender];
 
   if (index < 0 || index >= movie.downloadLinks.length) {
-    return reply("❌ *Invalid quality selection.*");
+    return reply("❌ *Invalid quality selection. Please try again.*");
   }
 
   const selectedLink = movie.downloadLinks[index];
   delete global.pendingMovie[sender];
 
   if (global.activeMovieDownloads.size >= MAX_MOVIE_DOWNLOADS) {
-    return reply(`*⏳ Another movie download is already running.*\n\nPlease wait until it finishes. This prevents Railway RAM crashes during large uploads.`);
+    return reply(
+      `*⏳ A movie download is already in progress.*\n\n` +
+      `Please wait for it to finish before starting a new one.\n` +
+      `_This prevents memory issues during large file uploads._`
+    );
   }
 
   const directUrl = getDirectPixeldrainUrl(selectedLink.link);
-  if (!directUrl) return reply("❌ *Could not generate direct download link.*");
+  if (!directUrl) return reply("❌ *Could not generate a direct download link. The Pixeldrain URL may have changed.*");
 
   const knownSizeBytes = parseSizeToBytes(selectedLink.size);
   if (knownSizeBytes > MOVIE_SPLIT_MAX_BYTES) {
@@ -520,7 +616,7 @@ cmd({
       size: selectedLink.size,
       link: selectedLink.link,
       directUrl,
-      reason: `File is over the safe split-send limit (${MOVIE_SPLIT_MAX_MB}MB)`
+      reason: `File is over the safe upload limit (${MOVIE_SPLIT_MAX_MB}MB)`
     }));
   }
 
@@ -567,7 +663,7 @@ cmd({
         uploadPercent: 0,
         downloadedBytes,
         totalBytes,
-        stage: `Too large for safe split-send. Direct link sent.`
+        stage: `File too large for direct upload. Sending link instead.`
       });
       return reply(buildDirectLinkMessage({
         title: movieTitle,
@@ -575,7 +671,7 @@ cmd({
         size: selectedLink.size || formatBytes(savedSize),
         link: selectedLink.link,
         directUrl,
-        reason: `Downloaded file is ${formatBytes(savedSize)}, over safe split-send limit (${MOVIE_SPLIT_MAX_MB}MB)`
+        reason: `Downloaded file is ${formatBytes(savedSize)}, over the safe upload limit (${MOVIE_SPLIT_MAX_MB}MB)`
       }));
     }
 
@@ -600,12 +696,12 @@ cmd({
       uploadTimer = null;
     }
 
-    await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "Film sent to chat." });
+    await progress.stop({ downloadPercent: 100, uploadPercent: 100, stage: "✅ Film sent to chat!" });
 
   } catch (error) {
     console.error("Movie Send Error:", error.message);
     if (uploadTimer) clearInterval(uploadTimer);
-    await progress.stop({ stage: "Failed to send film." });
+    await progress.stop({ stage: `❌ Failed: ${error.message || "Unknown error"}` });
     reply(`*❌ Failed to send movie:* ${error.message || "An unknown error occurred."}`);
   } finally {
     global.activeMovieDownloads.delete(sender);
