@@ -18,7 +18,7 @@ nixPkgs = [
 ]
 
 [phases.install]
-cmds = ["npm install --legacy-peer-deps"]
+cmds = ["PUPPETEER_SKIP_DOWNLOAD=true PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true npm install --legacy-peer-deps"]
 
 [start]
 cmd = "node index.js"
