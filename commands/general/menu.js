@@ -48,6 +48,7 @@ const CATEGORIES = {
       { name: 'play',   descKey: 'desc_play'   },
       { name: 'tiktok', descKey: 'desc_tiktok' },
       { name: 'lyrics', descKey: 'desc_lyrics' },
+      { name: 'film2',  descKey: 'desc_film2'  },
     ],
   },
   admin: {

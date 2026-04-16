@@ -1,11 +1,13 @@
 const { cmd } = require("../../command");
 const axios = require("axios");
 const cheerio = require("cheerio");
+const { sendBtn, btn, urlBtn, navButtons } = require("../../utils/sendBtn");
 
 global.pendingCine = global.pendingCine || {};
 
 const BASE_URL = "https://cinesubz.net";
 const LOGO_URL = "https://files.catbox.moe/2jt3ln.png";
+
 const PROXY_POOL = [
   url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
   url => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`,
@@ -81,7 +83,7 @@ async function searchMovies(query) {
     tryAdd($(el).attr('href'), $(el).attr('title') || $(el).text());
   });
 
-  // Fallback
+  // Fallback — scan all links
   if (!results.length) {
     $('a[href]').each((_, el) => {
       tryAdd($(el).attr('href'), $(el).attr('title') || $(el).text());
@@ -100,19 +102,17 @@ async function getMovieDetails(movieUrl) {
     title = $('title').text().split(/[–|-]/)[0].trim() || 'Unknown Title';
   }
 
-  // Parse metadata from page text
   const lines = $.root().text().split('\n').map(l => l.trim()).filter(Boolean);
   let imdb = 'N/A', director = 'N/A', year = 'N/A', country = 'N/A', subtitleBy = 'N/A';
 
   for (const line of lines) {
-    if (line.includes('IMDb:'))         imdb       = line.split('IMDb:')[1]?.trim()        || 'N/A';
-    else if (line.includes('Director:'))director   = line.split('Director:')[1]?.trim()    || 'N/A';
-    else if (line.includes('Year:'))    year       = line.split('Year:')[1]?.trim()        || 'N/A';
-    else if (line.includes('Country:')) country    = line.split('Country:')[1]?.trim()     || 'N/A';
+    if (line.includes('IMDb:'))           imdb       = line.split('IMDb:')[1]?.trim()        || 'N/A';
+    else if (line.includes('Director:'))  director   = line.split('Director:')[1]?.trim()    || 'N/A';
+    else if (line.includes('Year:'))      year       = line.split('Year:')[1]?.trim()        || 'N/A';
+    else if (line.includes('Country:'))   country    = line.split('Country:')[1]?.trim()     || 'N/A';
     else if (line.includes('Subtitle By:')) subtitleBy = line.split('Subtitle By:')[1]?.trim() || 'N/A';
   }
 
-  // Description
   let description = $('.description, #edit-content').first().text().trim();
   if (!description) {
     let foundMeta = false;
@@ -133,7 +133,6 @@ async function getMovieDetails(movieUrl) {
     if (href) downloadLinks.push({ label, link: href });
   });
 
-  // Thumbnail
   const thumbnail =
     $('img.thumb').attr('src') ||
     $('.movie-thumbnail img, .poster img').first().attr('src') ||
@@ -170,48 +169,72 @@ cmd({
 
     global.pendingCine[sender] = { step: 1, results, timestamp: Date.now() };
 
-    let text =
+    const text =
       `╭─────────────────────────╮\n` +
       `│  🎬 *CineSubz Search*\n` +
       `│\n` +
       `│  🔍 "${q}"\n` +
       `│  Found *${results.length}* result(s)\n` +
-      `│\n`;
-
-    results.forEach((r, i) => {
-      text += `│  *${i + 1}.* ${r.title}\n`;
-    });
-
-    text +=
       `│\n` +
-      `│  Reply with a number to select.\n` +
+      `│  👇 Tap a title to select\n` +
       `╰─────────────────────────╯`;
 
-    await sock.sendMessage(from, { image: { url: LOGO_URL }, caption: text }, { quoted: mek });
+    const movieButtons = results.map((r, i) =>
+      btn(`cine_select_${i + 1}`, `🎬 ${r.title}`)
+    );
+
+    await sendBtn(sock, from, {
+      image: { url: LOGO_URL },
+      title: "🎬 CineSubz Results",
+      text,
+      buttons: movieButtons,
+    }, { quoted: mek });
 
   } catch (e) {
     console.error('CineSubz search error:', e.message);
-    reply(`❌ *Search failed:* ${e.message}`);
+    reply(`❌ *Search failed.* Please try again.\n_${e.message}_`);
   }
 });
 
-// ─── Step 2: Movie Details & Download Links ───────────────────────────────────
+// ─── Cancel cine session ──────────────────────────────────────────────────────
 cmd({
-  filter: (text, { sender }) =>
+  pattern: "cancelcine",
+  alias: ["cinestop", "cinecancel"],
+  react: "🚫",
+  desc: "Cancel your current CineSubz session",
+  category: "download",
+  filename: __filename
+}, async (sock, mek, m, { from, sender, reply }) => {
+  if (global.pendingCine[sender]) {
+    delete global.pendingCine[sender];
+    reply("✅ *Cancelled.* Start a new search anytime with `.film2 <title>`");
+  } else {
+    reply("ℹ️ No active CineSubz session to cancel.");
+  }
+});
+
+// ─── Step 2: Movie Details (button tap cine_select_N) ────────────────────────
+cmd({
+  filter: (body, { sender }) =>
     global.pendingCine[sender] &&
     global.pendingCine[sender].step === 1 &&
-    /^\d+$/.test(text.trim())
+    /^cine_select_\d+$/.test(body)
 }, async (sock, mek, m, { body, sender, reply, from }) => {
-  const index = parseInt(body.trim()) - 1;
+
+  await sock.sendMessage(from, { react: { text: '⏳', key: mek.key } });
+
+  const index = parseInt(body.replace('cine_select_', '')) - 1;
   const { results } = global.pendingCine[sender];
 
-  if (index < 0 || index >= results.length) return reply('❌ *Invalid number. Pick from the list.*');
+  if (index < 0 || index >= results.length) {
+    return reply('❌ *Invalid selection. Please search again.*');
+  }
 
   const selected = results[index];
-  await sock.sendMessage(from, { react: { text: '⏳', key: mek.key } });
-  await reply(`⏳ Fetching details for *"${selected.title}"*...`);
+  delete global.pendingCine[sender];
 
   try {
+    await reply(`⏳ Loading *"${selected.title}"*...`);
     const details = await getMovieDetails(selected.movieUrl);
     const movieTitle = details.title || selected.title;
 
@@ -228,6 +251,7 @@ cmd({
         ? `│\n│  📝 ${details.description.slice(0, 150).trim()}...\n`
         : '') +
       `│\n` +
+      `│  ⏳ Loading download links...\n` +
       `╰─────────────────────────╯`;
 
     if (details.thumbnail) {
@@ -237,33 +261,37 @@ cmd({
     }
 
     if (!details.downloadLinks.length) {
-      delete global.pendingCine[sender];
-      return reply('❌ *No download links found for this title.*');
+      return reply('❌ *No download links found for this title.*\n\nTry a different movie or check back later.');
     }
 
-    let linkMsg =
+    const dlText =
       `╭─────────────────────────╮\n` +
       `│  📥 *Download Links*\n` +
       `│  🎬 ${movieTitle}\n` +
-      `│\n`;
+      `│\n` +
+      `│  👇 Tap a link to open\n` +
+      `╰─────────────────────────╯`;
 
-    details.downloadLinks.forEach((dl, i) => {
-      linkMsg += `│  *${i + 1}.* ${dl.label}\n│  🔗 ${dl.link}\n│\n`;
-    });
+    // Use URL buttons so tapping opens the download page directly
+    const dlButtons = details.downloadLinks.slice(0, 5).map(dl =>
+      urlBtn(`📥 ${dl.label || 'Download'}`, dl.link)
+    );
 
-    linkMsg += `╰─────────────────────────╯`;
-
-    delete global.pendingCine[sender];
-    await sock.sendMessage(from, { text: linkMsg }, { quoted: mek });
+    // Always add nav buttons at end
+    await sendBtn(sock, from, {
+      text: dlText,
+      title: `📥 ${movieTitle}`,
+      buttons: [...dlButtons, ...navButtons],
+    }, { quoted: mek });
 
   } catch (e) {
     delete global.pendingCine[sender];
     console.error('CineSubz detail error:', e.message);
-    reply(`❌ *Failed to fetch details:* ${e.message}`);
+    reply(`❌ *Failed to load this title.* Please try again.\n_${e.message}_`);
   }
 });
 
-// ─── Auto-cleanup ─────────────────────────────────────────────────────────────
+// ─── Auto-cleanup stale sessions ──────────────────────────────────────────────
 setInterval(() => {
   const now = Date.now();
   const timeout = 10 * 60 * 1000;
