@@ -2300,7 +2300,7 @@ async function startSessionHealthMonitor() {
       console.error('Session health monitor error:', e.message);
     }
   }, HEALTH_CHECK_INTERVAL);
-  console.log('🏥 Session health monitor started (checks every 5 min)');
+  console.log('🏥 Session health monitor started (checks every 90s)');
 }
 
 function clearReconnectTimer() {
