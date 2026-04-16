@@ -61,7 +61,7 @@ async function loadWhatsAppCore() {
     jidNormalizedUser = baileys.jidNormalizedUser;
     baileysDelay = baileys.delay;
     QRCode = require('qrcode');
-    pn = require('awesome-phonenumber');
+    pn = require('awesome-phonenumber').parsePhoneNumber;
     logger = pino({ level: 'silent' });
     whatsAppLoadError = null;
     return true;
@@ -1017,10 +1017,10 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
   let num;
   try {
     const phone = pn('+' + cleaned);
-    if (!phone.isValid()) {
+    if (!phone.valid) {
       return res.status(400).json({ success: false, message: 'Invalid phone number. Enter your full international number (e.g., 15551234567 for US, 447911123456 for UK) without + or spaces.' });
     }
-    num = phone.getNumber('e164').replace('+', '');
+    num = phone.number?.e164?.replace('+', '') || cleaned;
   } catch (phoneErr) {
     num = cleaned;
   }
