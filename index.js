@@ -1179,9 +1179,32 @@ app.post('/api/pair', isAuthenticated, async (req, res) => {
           return res.status(400).json({ success: false, message: 'This number already has an active session.' });
         }
 
-        await baileysDelay(2500 + (attempt * 1500));
-        let code = await currentPairSock.requestPairingCode(num);
-        code = code?.match(/.{1,4}/g)?.join('-') || code;
+        // Wait for the QR event — this is the true signal that the socket
+        // has completed its handshake and is ready to accept a pairing code.
+        // Using a hardcoded delay is unreliable on slow connections.
+        const sockRef = currentPairSock;
+        let code = await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Pairing code timeout: socket did not become ready in 60s')), 60000);
+          const onUpdate = async (update) => {
+            if (update.qr) {
+              sockRef.ev.off('connection.update', onUpdate);
+              clearTimeout(timeout);
+              try {
+                const c = await sockRef.requestPairingCode(num);
+                resolve(c?.match(/.{1,4}/g)?.join('-') || c);
+              } catch (e) { reject(e); }
+            } else if (update.connection === 'close') {
+              sockRef.ev.off('connection.update', onUpdate);
+              clearTimeout(timeout);
+              reject(new Error(update.lastDisconnect?.error?.message || 'Socket closed before pairing'));
+            } else if (update.connection === 'open') {
+              sockRef.ev.off('connection.update', onUpdate);
+              clearTimeout(timeout);
+              reject(new Error('Session already registered'));
+            }
+          };
+          sockRef.ev.on('connection.update', onUpdate);
+        });
         console.log(`🔑 Pair code for ${num} generated on attempt ${attempt}`);
 
         setTimeout(() => {
