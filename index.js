@@ -367,9 +367,9 @@ async function connectSession(id, sessionData) {
     browser: [sessionData.name || 'Infinity MD', 'Chrome', '1.0.0'],
     syncFullHistory: false,
     markOnlineOnConnect: true,
-    connectTimeoutMs: 60000,
-    keepAliveIntervalMs: 25000,
-    retryRequestDelayMs: 2000,
+    connectTimeoutMs: 30000,
+    keepAliveIntervalMs: 30000,
+    retryRequestDelayMs: 1500,
     generateHighQualityLinkPreview: false,
   });
 
