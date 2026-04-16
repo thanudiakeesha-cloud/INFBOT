@@ -408,7 +408,7 @@ async function connectSession(id, sessionData) {
     }
   });
 
-  const MAX_RETRY_COUNT = 20; // give up after this many consecutive failures
+  const MAX_RETRY_COUNT = 50; // give up after this many consecutive failures
 
   newSock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
@@ -517,7 +517,7 @@ async function connectSession(id, sessionData) {
           return;
         }
 
-        const delay = Math.min(5000 * Math.pow(1.5, sessionData._retryCount - 1), 60000);
+        const delay = Math.min(5000 * Math.pow(1.5, sessionData._retryCount - 1), 30000);
         console.log(`🔄 Reconnecting session ${id} (Status: ${statusCode}, attempt ${sessionData._retryCount}/${MAX_RETRY_COUNT}, delay ${Math.round(delay/1000)}s)...`);
         reconnectingSet.add(id);
         setTimeout(() => {
@@ -943,18 +943,24 @@ app.post('/api/session/restart', isAuthenticated, async (req, res) => {
     const sessionData = sessions[sessionId];
     if (!sessionData) return res.status(404).send('Session not found');
 
+    // Force-kill any existing socket cleanly before reconnecting
     if (activeSessions.has(sessionId)) {
       const oldSock = activeSessions.get(sessionId);
-      oldSock.ev.removeAllListeners('connection.update');
-      oldSock.end();
+      try { oldSock.ev.removeAllListeners(); } catch (_) {}
+      try { oldSock.ws?.terminate(); } catch (_) {}
+      try { oldSock.end?.(); } catch (_) {}
       activeSessions.delete(sessionId);
     }
 
-    // Clear paused flag and retry count so the session gets a fresh start
+    // Clear all reconnect state so the session gets a completely fresh start
     sessionData.paused = false;
     sessionData._retryCount = 0;
+    sessionData._connectedAt = null;
     reconnectingSet.delete(sessionId);
-    await database.patchSession(sessionId, { paused: false });
+    await database.patchSession(sessionId, { paused: false, _retryCount: 0 });
+
+    // Short delay to allow the old WS connection to fully close on WhatsApp's side
+    await new Promise(r => setTimeout(r, 2000));
 
     await connectSession(sessionId, sessionData);
     res.json({ success: true });
@@ -2244,7 +2250,7 @@ const sessionOfflineSince = new Map(); // tracks when each session first went of
 const OFFLINE_AUTO_DELETE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 async function startSessionHealthMonitor() {
-  const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // every 5 minutes
+  const HEALTH_CHECK_INTERVAL = 90 * 1000; // every 90 seconds
   setInterval(async () => {
     try {
       const sessions = await database.getAllSessions();
