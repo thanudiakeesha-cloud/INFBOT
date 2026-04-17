@@ -24,6 +24,10 @@ const firebaseConfig = {
 
 let app;
 let database;
+let _firebaseBlocked = false;
+
+/** True once any operation has returned permission_denied */
+function isFirebaseBlocked() { return _firebaseBlocked; }
 
 function initFirebase() {
   try {
@@ -63,6 +67,7 @@ async function fbSet(path, value) {
     await set(ref(database, path), value);
     return true;
   } catch (e) {
+    if (e.message && e.message.toLowerCase().includes('permission')) _firebaseBlocked = true;
     console.error(`❌ Firebase set error [${path}]:`, e.message);
     return false;
   }
@@ -73,6 +78,7 @@ async function fbGet(path) {
     const snapshot = await get(ref(database, path));
     return snapshot.exists() ? snapshot.val() : null;
   } catch (e) {
+    if (e.message && e.message.toLowerCase().includes('permission')) _firebaseBlocked = true;
     console.error(`❌ Firebase get error [${path}]:`, e.message);
     return null;
   }
@@ -121,6 +127,7 @@ const initialized = initFirebase();
 
 module.exports = {
   initialized,
+  isFirebaseBlocked,
   getDB,
   dbRef,
   sanitizeKey,

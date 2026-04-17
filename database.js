@@ -45,7 +45,7 @@ let userSettingsCache = {};
 let warningsCache = {};
 
 // ─── Key Sanitization ─────────────────────────────────────────────────────────
-const { sanitizeKey, desanitizeKey, fbSet, fbGet, fbUpdate, fbRemove, fbListen } = fb;
+const { sanitizeKey, desanitizeKey, fbSet, fbGet, fbUpdate, fbRemove, fbListen, isFirebaseBlocked } = fb;
 
 // ─── Firebase Write (non-blocking, writes to both Firebase + SQLite) ───────────
 function firebaseWrite(path, value) {
@@ -186,21 +186,65 @@ let _ready = false;
 let _readyResolve;
 const readyPromise = new Promise(r => { _readyResolve = r; });
 
+// ─── SQLite-only bootstrap helper ─────────────────────────────────────────────
+function loadAllFromSQLite() {
+  const rows = db.prepare('SELECT * FROM global_settings').all();
+  rows.forEach(row => {
+    try { globalSettingsCache[row.key] = JSON.parse(row.value); }
+    catch { globalSettingsCache[row.key] = row.value; }
+  });
+
+  moderatorsCache = db.prepare('SELECT userId FROM moderators').all().map(r => r.userId);
+
+  const sessionRows = db.prepare('SELECT * FROM sessions').all();
+  sessionRows.forEach(row => {
+    sessionsCache[row.id] = {
+      userId: row.userId, folder: row.folder, name: row.name,
+      ownerName: row.ownerName, ownerNumber: row.ownerNumber,
+      settings: JSON.parse(row.settings || '{}'),
+      creds: row.creds, addedAt: row.addedAt
+    };
+  });
+  if (sessionRows.length) console.log(`📦 Loaded ${sessionRows.length} sessions from SQLite`);
+
+  const userRows = db.prepare('SELECT * FROM dashboard_users').all();
+  userRows.forEach(row => {
+    dashboardUsersCache[row.username] = { password: row.password, data: JSON.parse(row.data || '{}') };
+  });
+  if (userRows.length) console.log(`📦 Loaded ${userRows.length} dashboard users from SQLite`);
+
+  const groupRows = db.prepare('SELECT * FROM group_settings').all();
+  groupRows.forEach(row => {
+    try { groupSettingsCache[row.groupId] = JSON.parse(row.settings); } catch {}
+  });
+  if (groupRows.length) console.log(`📦 Loaded ${groupRows.length} group settings from SQLite`);
+
+  const uRows = db.prepare('SELECT * FROM user_settings').all();
+  uRows.forEach(row => {
+    try { userSettingsCache[row.username] = JSON.parse(row.settings || '{}'); } catch {}
+  });
+
+  const wRows = db.prepare('SELECT * FROM warnings').all();
+  wRows.forEach(row => {
+    if (!warningsCache[row.groupId]) warningsCache[row.groupId] = {};
+    warningsCache[row.groupId][row.userId] = row.count;
+  });
+}
+
 async function bootstrapFromFirebase() {
   try {
     console.log('🔥 Loading data from Firebase...');
 
-    // Load global settings
+    // ── Global settings ────────────────────────────────────────────────────────
     const fbGlobalSettings = await fbGet('global_settings');
     if (fbGlobalSettings && typeof fbGlobalSettings === 'object') {
       Object.assign(globalSettingsCache, fbGlobalSettings);
-      // Also sync to SQLite
       const stmt = db.prepare(`INSERT OR REPLACE INTO global_settings (key, value) VALUES (?, ?)`);
       for (const [k, v] of Object.entries(fbGlobalSettings)) {
         try { stmt.run(k, JSON.stringify(v)); } catch {}
       }
-    } else {
-      // Migrate from SQLite to Firebase
+    } else if (!isFirebaseBlocked()) {
+      // Firebase is reachable but path is empty — migrate from SQLite
       const rows = db.prepare('SELECT * FROM global_settings').all();
       if (rows.length > 0) {
         const settings = {};
@@ -212,9 +256,16 @@ async function bootstrapFromFirebase() {
         await fbSet('global_settings', settings);
         console.log('📤 Migrated global_settings to Firebase');
       }
+    } else {
+      // Firebase is blocked — load from SQLite silently
+      const rows = db.prepare('SELECT * FROM global_settings').all();
+      rows.forEach(row => {
+        try { globalSettingsCache[row.key] = JSON.parse(row.value); }
+        catch { globalSettingsCache[row.key] = row.value; }
+      });
     }
 
-    // Load sessions
+    // ── Sessions ───────────────────────────────────────────────────────────────
     const fbSessions = await fbGet('sessions');
     if (fbSessions && typeof fbSessions === 'object') {
       for (const [sKey, data] of Object.entries(fbSessions)) {
@@ -223,28 +274,24 @@ async function bootstrapFromFirebase() {
           ...data,
           settings: typeof data.settings === 'string' ? JSON.parse(data.settings) : (data.settings || {})
         };
-        // Sync to SQLite (without creds to save space)
         try {
           db.prepare(`INSERT OR REPLACE INTO sessions (id, userId, folder, name, ownerName, ownerNumber, settings, creds, addedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run(id, data.userId, data.folder, data.name, data.ownerName, data.ownerNumber, JSON.stringify(data.settings || {}), data.creds || null, data.addedAt || Date.now());
         } catch {}
       }
       console.log(`📥 Loaded ${Object.keys(fbSessions).length} sessions from Firebase`);
-    } else {
-      // Migrate sessions from SQLite to Firebase
+    } else if (!isFirebaseBlocked()) {
+      // Migrate from SQLite → Firebase
       const rows = db.prepare('SELECT * FROM sessions').all();
       if (rows.length > 0) {
         for (const row of rows) {
           const id = row.id;
           const data = {
-            userId: row.userId || null,
-            folder: row.folder || null,
-            name: row.name || null,
-            ownerName: row.ownerName || null,
+            userId: row.userId || null, folder: row.folder || null,
+            name: row.name || null, ownerName: row.ownerName || null,
             ownerNumber: row.ownerNumber || null,
             settings: JSON.parse(row.settings || '{}'),
-            creds: row.creds || null,
-            addedAt: row.addedAt || Date.now()
+            creds: row.creds || null, addedAt: row.addedAt || Date.now()
           };
           sessionsCache[id] = data;
           await fbSet(`sessions/${sanitizeKey(id)}`, { ...data, settings: data.settings });
@@ -265,9 +312,20 @@ async function bootstrapFromFirebase() {
           console.log('📤 Migrated sessions.json to Firebase');
         } catch {}
       }
+    } else {
+      // Firebase blocked — load from SQLite
+      const rows = db.prepare('SELECT * FROM sessions').all();
+      rows.forEach(row => {
+        sessionsCache[row.id] = {
+          userId: row.userId, folder: row.folder, name: row.name,
+          ownerName: row.ownerName, ownerNumber: row.ownerNumber,
+          settings: JSON.parse(row.settings || '{}'), creds: row.creds, addedAt: row.addedAt
+        };
+      });
+      if (rows.length) console.log(`📦 Loaded ${rows.length} sessions from SQLite (Firebase blocked)`);
     }
 
-    // Load dashboard users
+    // ── Dashboard users ────────────────────────────────────────────────────────
     const fbUsers = await fbGet('dashboard_users');
     if (fbUsers && typeof fbUsers === 'object') {
       Object.assign(dashboardUsersCache, fbUsers);
@@ -278,7 +336,7 @@ async function bootstrapFromFirebase() {
         } catch {}
       }
       console.log(`📥 Loaded ${Object.keys(fbUsers).length} dashboard users from Firebase`);
-    } else {
+    } else if (!isFirebaseBlocked()) {
       const rows = db.prepare('SELECT * FROM dashboard_users').all();
       if (rows.length > 0) {
         const users = {};
@@ -289,16 +347,22 @@ async function bootstrapFromFirebase() {
         await fbSet('dashboard_users', users);
         console.log(`📤 Migrated ${rows.length} dashboard users to Firebase`);
       }
+    } else {
+      const rows = db.prepare('SELECT * FROM dashboard_users').all();
+      rows.forEach(row => {
+        dashboardUsersCache[row.username] = { password: row.password, data: JSON.parse(row.data || '{}') };
+      });
+      if (rows.length) console.log(`📦 Loaded ${rows.length} dashboard users from SQLite (Firebase blocked)`);
     }
 
-    // Load moderators
+    // ── Moderators ─────────────────────────────────────────────────────────────
     const fbMods = await fbGet('moderators');
     if (fbMods && typeof fbMods === 'object') {
       moderatorsCache = Object.keys(fbMods).map(k => desanitizeKey(k));
       for (const userId of moderatorsCache) {
         try { db.prepare(`INSERT OR IGNORE INTO moderators (userId) VALUES (?)`).run(userId); } catch {}
       }
-    } else {
+    } else if (!isFirebaseBlocked()) {
       const rows = db.prepare('SELECT userId FROM moderators').all();
       if (rows.length > 0) {
         moderatorsCache = rows.map(r => r.userId);
@@ -307,9 +371,11 @@ async function bootstrapFromFirebase() {
         await fbSet('moderators', modsObj);
         console.log(`📤 Migrated ${rows.length} moderators to Firebase`);
       }
+    } else {
+      moderatorsCache = db.prepare('SELECT userId FROM moderators').all().map(r => r.userId);
     }
 
-    // Load group settings
+    // ── Group settings ─────────────────────────────────────────────────────────
     const fbGroups = await fbGet('group_settings');
     if (fbGroups && typeof fbGroups === 'object') {
       for (const [gKey, settings] of Object.entries(fbGroups)) {
@@ -321,7 +387,7 @@ async function bootstrapFromFirebase() {
         } catch {}
       }
       console.log(`📥 Loaded ${Object.keys(fbGroups).length} group settings from Firebase`);
-    } else {
+    } else if (!isFirebaseBlocked()) {
       const rows = db.prepare('SELECT * FROM group_settings').all();
       if (rows.length > 0) {
         const groups = {};
@@ -335,9 +401,15 @@ async function bootstrapFromFirebase() {
         await fbSet('group_settings', groups);
         console.log(`📤 Migrated ${rows.length} group settings to Firebase`);
       }
+    } else {
+      const rows = db.prepare('SELECT * FROM group_settings').all();
+      rows.forEach(row => {
+        try { groupSettingsCache[row.groupId] = JSON.parse(row.settings); } catch {}
+      });
+      if (rows.length) console.log(`📦 Loaded ${rows.length} group settings from SQLite (Firebase blocked)`);
     }
 
-    // Load user settings
+    // ── User settings ──────────────────────────────────────────────────────────
     const fbUserSettings = await fbGet('user_settings');
     if (fbUserSettings && typeof fbUserSettings === 'object') {
       for (const [username, settings] of Object.entries(fbUserSettings)) {
@@ -347,7 +419,7 @@ async function bootstrapFromFirebase() {
             .run(username, JSON.stringify(userSettingsCache[username]));
         } catch {}
       }
-    } else {
+    } else if (!isFirebaseBlocked()) {
       const rows = db.prepare('SELECT * FROM user_settings').all();
       if (rows.length > 0) {
         const usettings = {};
@@ -360,9 +432,14 @@ async function bootstrapFromFirebase() {
         });
         await fbSet('user_settings', usettings);
       }
+    } else {
+      const rows = db.prepare('SELECT * FROM user_settings').all();
+      rows.forEach(row => {
+        try { userSettingsCache[row.username] = JSON.parse(row.settings || '{}'); } catch {}
+      });
     }
 
-    // Load warnings
+    // ── Warnings ───────────────────────────────────────────────────────────────
     const fbWarnings = await fbGet('warnings');
     if (fbWarnings && typeof fbWarnings === 'object') {
       for (const [gKey, userWarns] of Object.entries(fbWarnings)) {
@@ -370,12 +447,11 @@ async function bootstrapFromFirebase() {
         warningsCache[groupId] = {};
         if (userWarns && typeof userWarns === 'object') {
           for (const [uKey, count] of Object.entries(userWarns)) {
-            const userId = desanitizeKey(uKey);
-            warningsCache[groupId][userId] = count;
+            warningsCache[groupId][desanitizeKey(uKey)] = count;
           }
         }
       }
-    } else {
+    } else if (!isFirebaseBlocked()) {
       try {
         const rows = db.prepare('SELECT * FROM warnings').all();
         if (rows.length > 0) {
@@ -390,35 +466,35 @@ async function bootstrapFromFirebase() {
           await fbSet('warnings', warns);
         }
       } catch {}
+    } else {
+      const rows = db.prepare('SELECT * FROM warnings').all();
+      rows.forEach(row => {
+        if (!warningsCache[row.groupId]) warningsCache[row.groupId] = {};
+        warningsCache[row.groupId][row.userId] = row.count;
+      });
     }
 
+    if (isFirebaseBlocked()) {
+      console.warn('⚠️  Firebase is blocked (permission_denied). Running on SQLite only.');
+      console.warn('⚠️  Fix: Go to Firebase Console → Realtime Database → Rules and set:');
+      console.warn('       { "rules": { ".read": true, ".write": true } }');
+      console.warn('       (or use firebase-admin with a service account for proper security)');
+    }
     console.log('✅ Global settings loaded into cache');
 
-    // ── Attach live Firebase listeners (real-time sync) ────────────────────────
-    attachLiveListeners();
+    // ── Attach live Firebase listeners (only if Firebase is accessible) ─────────
+    if (!isFirebaseBlocked()) {
+      attachLiveListeners();
+    } else {
+      console.log('⏭️  Skipping Firebase listeners (Firebase blocked — using SQLite only)');
+    }
 
     _ready = true;
-    _readyResolve(true);
+    _readyResolve(!isFirebaseBlocked());
   } catch (e) {
     console.error('❌ Firebase bootstrap error:', e.message);
-    // Fall back to SQLite only
-    try {
-      const rows = db.prepare('SELECT * FROM global_settings').all();
-      rows.forEach(row => {
-        try { globalSettingsCache[row.key] = JSON.parse(row.value); }
-        catch { globalSettingsCache[row.key] = row.value; }
-      });
-      moderatorsCache = db.prepare('SELECT userId FROM moderators').all().map(r => r.userId);
-      const sessionRows = db.prepare('SELECT * FROM sessions').all();
-      sessionRows.forEach(row => {
-        sessionsCache[row.id] = {
-          userId: row.userId, folder: row.folder, name: row.name,
-          ownerName: row.ownerName, ownerNumber: row.ownerNumber,
-          settings: JSON.parse(row.settings || '{}'),
-          creds: row.creds, addedAt: row.addedAt
-        };
-      });
-    } catch {}
+    // Hard fallback — load everything from SQLite
+    try { loadAllFromSQLite(); } catch {}
     console.log('✅ Global settings loaded into cache (SQLite fallback)');
     _ready = true;
     _readyResolve(false);

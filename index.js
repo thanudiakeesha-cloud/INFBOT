@@ -209,15 +209,15 @@ server.listen(PORT, '0.0.0.0', () => {
       || !!process.env.RAILWAY_ENVIRONMENT
       || !!process.env.RAILWAY_SERVICE_NAME;
 
-    // Use Firebase-backed session store so sessions survive Railway restarts
-    // and are shared across zero-downtime deploy instances.
+    // Use SQLite-backed session store — reliable, no Firebase permission issues,
+    // survives restarts by persisting to disk in database/bot.db.
     let sessionStore;
     try {
-      const FirebaseSessionStore = require('./utils/firebaseSessionStore');
-      sessionStore = new FirebaseSessionStore({ ttl: 7 * 24 * 60 * 60 });
-      console.log('🔐 Firebase session store active');
+      const SqliteSessionStore = require('./utils/sqliteSessionStore');
+      sessionStore = new SqliteSessionStore({ ttl: 7 * 24 * 60 * 60 });
+      console.log('🔐 SQLite session store active');
     } catch (e) {
-      console.warn('⚠️ Firebase session store unavailable — using memory store:', e.message);
+      console.warn('⚠️ SQLite session store unavailable — using memory store:', e.message);
     }
 
     app.use(expressSession({
