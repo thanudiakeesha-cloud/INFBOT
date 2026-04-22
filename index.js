@@ -220,16 +220,12 @@ server.listen(PORT, '0.0.0.0', () => {
     const cookieSameSite = isReplit ? 'none' : 'lax';
     const cookieSecure = isReplit ? true : 'auto';
 
-    // Use SQLite-backed session store — reliable, no Firebase permission issues,
-    // survives restarts by persisting to disk in database/bot.db.
-    let sessionStore;
-    try {
-      const SqliteSessionStore = require('./utils/sqliteSessionStore');
-      sessionStore = new SqliteSessionStore({ ttl: 7 * 24 * 60 * 60 });
-      console.log('🔐 SQLite session store active');
-    } catch (e) {
-      console.warn('⚠️ SQLite session store unavailable — using memory store:', e.message);
-    }
+    // Use the default in-memory session store. SQLite-backed sessions caused
+    // intermittent "login refreshes back to sign-in" on Railway because writes
+    // could silently fail or be racy across deploys. Memory store is rock-solid
+    // for a single-instance bot dashboard; sessions only reset on restart.
+    let sessionStore; // undefined → express-session uses MemoryStore
+    console.log('🔐 In-memory session store active');
 
     app.use(expressSession({
       secret: process.env.SESSION_SECRET || 'infinity-md-secret-2025',
