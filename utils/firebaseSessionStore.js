@@ -96,7 +96,12 @@ class FirebaseSessionStore extends Store {
 
     fbSet(FB_PREFIX + this._cKey(sid), payload)
       .then(() => callback(null))
-      .catch(() => callback(null)); // never crash a request over a session save failure
+      .catch((err) => {
+        // Surface failures so we can spot issues in Railway logs instead of
+        // silently letting the user appear "logged in" with no persisted session.
+        console.error('⚠️ Firebase session set failed (login may not persist):', err?.message || err);
+        callback(null);
+      });
   }
 
   destroy(sid, callback) {
