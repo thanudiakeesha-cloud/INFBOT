@@ -38,8 +38,15 @@ class SqliteSessionStore extends Store {
         this.destroy(sid, () => {});
         return callback(null, null);
       }
-      try { callback(null, JSON.parse(row.session)); } catch { callback(null, null); }
-    } catch { callback(null, null); }
+      try { callback(null, JSON.parse(row.session)); }
+      catch (parseErr) {
+        console.error('⚠️ SQLite session JSON parse error for sid', sid, '-', parseErr.message);
+        callback(null, null);
+      }
+    } catch (err) {
+      console.error('⚠️ SQLite session get error:', err.message);
+      callback(err);
+    }
   }
 
   set(sid, session, callback) {
@@ -51,11 +58,15 @@ class SqliteSessionStore extends Store {
         .prepare('INSERT OR REPLACE INTO web_sessions (sid, session, expires) VALUES (?, ?, ?)')
         .run(sid, JSON.stringify(session), expires);
       callback(null);
-    } catch { callback(null); }
+    } catch (err) {
+      console.error('⚠️ SQLite session set error (login will fail):', err.message);
+      callback(err);
+    }
   }
 
   destroy(sid, callback) {
-    try { getDb().prepare('DELETE FROM web_sessions WHERE sid = ?').run(sid); } catch (_) {}
+    try { getDb().prepare('DELETE FROM web_sessions WHERE sid = ?').run(sid); }
+    catch (err) { console.error('⚠️ SQLite session destroy error:', err.message); }
     callback(null);
   }
 

@@ -206,13 +206,19 @@ server.listen(PORT, '0.0.0.0', () => {
     // Secure cookies only when running behind HTTPS proxy (production).
     // In local dev (plain HTTP) secure:true would silently drop the cookie.
     const isReplit = !!process.env.REPL_ID || !!process.env.REPLIT_DEV_DOMAIN || !!process.env.REPLIT_DOMAINS;
-    const cookieIsSecure = process.env.NODE_ENV === 'production'
+    const isBehindProxy = process.env.NODE_ENV === 'production'
       || !!process.env.RAILWAY_ENVIRONMENT
       || !!process.env.RAILWAY_SERVICE_NAME
       || isReplit;
-    // Replit preview embeds the app in a cross-site iframe. The browser will
-    // drop session cookies on subsequent requests unless SameSite=None;Secure.
+    // Replit preview embeds the app in a cross-site iframe — needs SameSite=None;Secure.
+    // On Railway/production, 'lax' works for normal browser navigation. We force
+    // SameSite=None on Replit AND require Secure there. Elsewhere we use 'auto'
+    // for the Secure flag so Express only marks the cookie Secure when it truly
+    // sees HTTPS via X-Forwarded-Proto. This avoids Express silently DROPPING
+    // the Set-Cookie when the proxy header isn't forwarded as expected (a common
+    // cause of "login refreshes back to sign in" on Railway custom domains).
     const cookieSameSite = isReplit ? 'none' : 'lax';
+    const cookieSecure = isReplit ? true : 'auto';
 
     // Use SQLite-backed session store — reliable, no Firebase permission issues,
     // survives restarts by persisting to disk in database/bot.db.
@@ -230,10 +236,10 @@ server.listen(PORT, '0.0.0.0', () => {
       resave: false,
       saveUninitialized: false,
       rolling: true,
-      proxy: cookieIsSecure, // trust X-Forwarded-Proto for secure cookies on Railway
-      store: sessionStore,   // persistent store (Firebase) — falls back to memory if null
+      proxy: isBehindProxy, // trust X-Forwarded-Proto for secure cookies behind a proxy
+      store: sessionStore,   // persistent store (SQLite) — falls back to memory if null
       cookie: {
-        secure: cookieIsSecure,
+        secure: cookieSecure,
         httpOnly: true,
         sameSite: cookieSameSite,
         maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days
