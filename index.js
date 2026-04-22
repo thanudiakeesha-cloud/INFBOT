@@ -205,9 +205,14 @@ server.listen(PORT, '0.0.0.0', () => {
     const expressSession = require('express-session');
     // Secure cookies only when running behind HTTPS proxy (production).
     // In local dev (plain HTTP) secure:true would silently drop the cookie.
+    const isReplit = !!process.env.REPL_ID || !!process.env.REPLIT_DEV_DOMAIN || !!process.env.REPLIT_DOMAINS;
     const cookieIsSecure = process.env.NODE_ENV === 'production'
       || !!process.env.RAILWAY_ENVIRONMENT
-      || !!process.env.RAILWAY_SERVICE_NAME;
+      || !!process.env.RAILWAY_SERVICE_NAME
+      || isReplit;
+    // Replit preview embeds the app in a cross-site iframe. The browser will
+    // drop session cookies on subsequent requests unless SameSite=None;Secure.
+    const cookieSameSite = isReplit ? 'none' : 'lax';
 
     // Use SQLite-backed session store — reliable, no Firebase permission issues,
     // survives restarts by persisting to disk in database/bot.db.
@@ -230,7 +235,7 @@ server.listen(PORT, '0.0.0.0', () => {
       cookie: {
         secure: cookieIsSecure,
         httpOnly: true,
-        sameSite: 'lax',
+        sameSite: cookieSameSite,
         maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days
       }
     }));
