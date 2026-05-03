@@ -174,12 +174,22 @@ server = http.createServer((req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log('✅ Web server listening on', PORT);
 
+  // Suppress the libsignal "Session error: Bad MAC" spam before it floods the logs.
+  // These are non-fatal decryption noise from stale signal sessions and don't cause disconnects.
+  const _origConsoleError = console.error.bind(console);
+  console.error = (...args) => {
+    const msg = String(args[0] || '');
+    if (msg.includes('Session error') && (msg.includes('Bad MAC') || msg.includes('decrypt'))) return;
+    if (msg.includes('Bad MAC') || msg.includes('Decipheriv')) return;
+    _origConsoleError(...args);
+  };
+
   process.on('uncaughtException', (err) => {
     const msg = err?.message || '';
     if (msg.includes('Decipheriv') || msg.includes('Bad MAC') || msg.includes('decrypt')) {
-      console.error('⚠️ Caught Baileys decryption error (non-fatal):', msg);
+      // silently swallow — already filtered above
     } else {
-      console.error('⚠️ Uncaught exception (kept alive):', err);
+      _origConsoleError('⚠️ Uncaught exception (kept alive):', err);
     }
   });
   process.on('unhandledRejection', (reason) => {
@@ -2212,12 +2222,15 @@ async function initAllSessions() {
     await database.ready();
     const sessions = await database.getAllSessions();
 
-    // Startup cleanup: immediately delete paused/dead sessions
+    // On startup, clear the paused flag and reset retry count so sessions that were
+    // paused during a previous run (e.g. while Replit was sleeping) get a fresh chance.
+    // A restart is the natural recovery mechanism — we never permanently delete on startup.
     for (const id in sessions) {
       if (sessions[id]?.paused) {
-        console.log(`🗑️ Startup cleanup: deleting permanently offline session ${id}`);
-        try { await database.deleteSession(id); } catch (_) {}
-        delete sessions[id];
+        console.log(`🔄 Startup: clearing paused flag for session ${id} — giving it a fresh retry`);
+        sessions[id].paused = false;
+        sessions[id]._retryCount = 0;
+        database.patchSession(id, { paused: false }).catch(() => {});
       }
     }
 
@@ -2257,7 +2270,7 @@ function initSessions() {
 
 // ── Self-Ping: keeps the process awake on platforms that sleep idle apps ──────
 function startSelfPing() {
-  const PING_INTERVAL = parseInt(process.env.SELF_PING_INTERVAL_MS || String(4 * 60 * 1000), 10);
+  const PING_INTERVAL = parseInt(process.env.SELF_PING_INTERVAL_MS || String(2 * 60 * 1000), 10);
   setInterval(() => {
     try {
       // Support Replit, Railway, and generic PUBLIC_URL env vars
@@ -2296,11 +2309,9 @@ async function startSessionHealthMonitor() {
         }
         if (reconnectingSet.has(id)) continue; // already scheduled for reconnect
 
-        // Auto-delete paused sessions (exceeded max retry count — will never reconnect)
+        // Skip paused sessions — they are only cleared/retried on server restart,
+        // never auto-deleted by the health monitor.
         if (sessions[id]?.paused) {
-          console.log(`🗑️ Health monitor: auto-deleting permanently offline (paused) session ${id}`);
-          try { await database.deleteSession(id); } catch (_) {}
-          sessionOfflineSince.delete(id);
           continue;
         }
 
