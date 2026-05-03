@@ -12,7 +12,6 @@ nixPkgs = [
   "pixman",
   "python3",
   "git",
-  "openssh",
   "gcc",
   "gnumake"
 ]
@@ -20,6 +19,9 @@ aptPkgs = []
 
 [phases.install]
 cmds = ["PUPPETEER_SKIP_DOWNLOAD=true PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true npm install --legacy-peer-deps"]
+
+[phases.build]
+cmds = []
 
 [start]
 cmd = "node index.js"

@@ -174,15 +174,25 @@ server = http.createServer((req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log('✅ Web server listening on', PORT);
 
-  // Suppress the libsignal "Session error: Bad MAC" spam before it floods the logs.
-  // These are non-fatal decryption noise from stale signal sessions and don't cause disconnects.
-  const _origConsoleError = console.error.bind(console);
-  console.error = (...args) => {
+  // Suppress libsignal noise: Bad MAC, decrypt failures, session churn logs.
+  // These come from session_cipher.js (console.error), session_builder.js (console.warn),
+  // and session_record.js (console.info). None of them cause disconnects — pure noise.
+  function _isLibsignalNoise(...args) {
     const msg = String(args[0] || '');
-    if (msg.includes('Session error') && (msg.includes('Bad MAC') || msg.includes('decrypt'))) return;
-    if (msg.includes('Bad MAC') || msg.includes('Decipheriv')) return;
-    _origConsoleError(...args);
-  };
+    return (
+      msg.includes('Bad MAC') ||
+      msg.includes('Decipheriv') ||
+      msg.includes('Failed to decrypt message') ||
+      msg.includes('Closing open session in favor') ||
+      (msg.includes('Session error') && (msg.includes('Bad MAC') || msg.includes('decrypt')))
+    );
+  }
+  const _origConsoleError = console.error.bind(console);
+  const _origConsoleWarn  = console.warn.bind(console);
+  const _origConsoleInfo  = console.info.bind(console);
+  console.error = (...args) => { if (_isLibsignalNoise(...args)) return; _origConsoleError(...args); };
+  console.warn  = (...args) => { if (_isLibsignalNoise(...args)) return; _origConsoleWarn(...args); };
+  console.info  = (...args) => { if (_isLibsignalNoise(...args)) return; _origConsoleInfo(...args); };
 
   process.on('uncaughtException', (err) => {
     const msg = err?.message || '';
