@@ -9,6 +9,9 @@ const { pipeline } = require("stream/promises");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 const execFileAsync = promisify(execFile);
+const vm = require("vm");
+const CryptoJS = require("crypto-js");
+const protobuf = require("protobufjs");
 const { sendBtn, btn } = require("../../utils/sendBtn");
 
 // Patch Baileys upload timeout from 30s → 30 minutes so large files can upload
@@ -508,12 +511,200 @@ async function getDownloadLinks(movieUrl) {
   return items;
 }
 
+// ─── CDN Proto Schema (static, encrypted with key "kasun") ───────────────────
+const CDN_ENC_SCHEMA = "U2FsdGVkX1+CVcLAKUn+B9jJNjbj4hWoRKZqOjH78O2EHohZ9kRPcbq2hRrl9kx/7RhNrcZ7A+GjzyQaRmDPrORUo51NjzkskDIOVtOaYmBLQOcEEUQUqakDok5/nBKuO4+7pB1K7bmEYXaqeK6fGUXP3GeApIa2agVnQnTWZKuRZHBbzYAYZAIZq0hVxJmlUObvDk9H2vfdlyUWefysHQ==";
+
+function cdnDecrypt(enc, key) {
+  return CryptoJS.AES.decrypt(enc, key).toString(CryptoJS.enc.Utf8);
+}
+function cdnB64toUtf8(b64) {
+  return Buffer.from(b64, "base64").toString("utf8");
+}
+
+let _cdnDownloadData = null;
+function getCdnProto() {
+  if (_cdnDownloadData) return _cdnDownloadData;
+  const schema = cdnB64toUtf8(cdnDecrypt(CDN_ENC_SCHEMA, "kasun"));
+  const root = protobuf.parse(schema, { keepCase: true }).root;
+  _cdnDownloadData = root.lookupType("responceEnc.DownloadData");
+  return _cdnDownloadData;
+}
+
 async function resolveZtLink(ztUrl) {
-  const { data } = await cineFetch(ztUrl);
-  const $ = cheerio.load(data);
-  const rawHref = $("#link").attr("href") || $("a#link").attr("href") || "";
-  if (!rawHref) return null;
-  return transformCineSubzUrl(rawHref);
+  const CDN_UA = "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36";
+  const noop = () => {};
+  const pUrl = new URL(ztUrl);
+
+  // Step 1: GET portal to obtain session cookie
+  const r1 = await axios.get(ztUrl, { headers: { "User-Agent": CDN_UA }, timeout: 15000 });
+  const cookieMap = {};
+  (r1.headers["set-cookie"] || []).forEach(c => {
+    const [k, ...v] = c.split(";")[0].split("=");
+    cookieMap[k] = v.join("=");
+  });
+
+  // Step 2: GET /api/download-data to authenticate the session
+  const authUrl = `https://bot3.sonic-cloud.online/api/download-data${pUrl.pathname}${pUrl.search}`;
+  const r2 = await axios.get(authUrl, {
+    headers: {
+      "Cookie": Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; "),
+      "User-Agent": CDN_UA,
+      "Referer": ztUrl,
+      "Origin": "https://bot3.sonic-cloud.online",
+      "Accept": "application/json"
+    },
+    timeout: 15000,
+    validateStatus: () => true
+  });
+  if (!r2.data?.success) throw new Error(`CDN auth failed: ${JSON.stringify(r2.data).slice(0, 80)}`);
+  (r2.headers["set-cookie"] || []).forEach(c => {
+    const [k, ...v] = c.split(";")[0].split("=");
+    cookieMap[k] = v.join("=");
+  });
+  const sid = Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; ");
+
+  // Step 3: GET authenticated portal page (contains hex payload strings + obfuscated script)
+  const r3 = await axios.get(ztUrl, {
+    headers: { "Cookie": sid, "User-Agent": CDN_UA, "Accept": "text/html" },
+    timeout: 15000
+  });
+  const hexList = [...new Set(
+    [...r3.data.matchAll(/['"]([0-9a-f]{300,})['"]/gi)].map(m => m[1])
+  )];
+  if (!hexList.length) throw new Error("CDN: no hex payloads found on page");
+
+  const scripts = r3.data.match(/<script[^>]*>([\s\S]*?)<\/script>/g) || [];
+  const pageScript = scripts
+    .map(s => s.replace(/<\/?script[^>]*>/g, ""))
+    .sort((a, b) => b.length - a.length)[0] || "";
+  if (pageScript.length < 5000) throw new Error("CDN: page script too small");
+
+  // Step 4: POST with each hex payload until we get an encrypted protobuf response
+  const DownloadData = getCdnProto();
+  let encUrl = null;
+  for (const hexStr of hexList) {
+    try {
+      const r = await axios.post(ztUrl, Buffer.from(hexStr, "hex"), {
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Cookie": sid,
+          "User-Agent": CDN_UA,
+          "Referer": ztUrl,
+          "Origin": "https://bot3.sonic-cloud.online"
+        },
+        timeout: 15000,
+        validateStatus: () => true,
+        responseType: "arraybuffer"
+      });
+      if (r.status === 200 && r.data.length > 30 && r.data.length < 500) {
+        const dec = DownloadData.toObject(DownloadData.decode(new Uint8Array(r.data)));
+        if (dec.url && dec.url.startsWith("U2FsdGVk")) {
+          encUrl = dec.url;
+          break;
+        }
+      }
+    } catch (_) {}
+  }
+  if (!encUrl) throw new Error("CDN: POST flow did not return encrypted URL");
+
+  // Step 5: Run the page script in a Node VM with an instrumented CryptoJS.
+  //         The script registers onclick handlers on mocked DOM elements.
+  //         When we call those handlers, they call fetch() (mocked to return the
+  //         encrypted protobuf), decode the protobuf, then call
+  //         CryptoJS.AES.decrypt(encUrl, secretKey) — which we intercept.
+  //         The handler then calls window.open(decryptedUrl) — which we also capture.
+  const pbBuf = Buffer.from(
+    DownloadData.encode(DownloadData.create({ url: encUrl, error: "" })).finish()
+  );
+
+  let capturedUrl = null;
+  let capturedKey = null;
+
+  const instrCJS = {
+    ...CryptoJS,
+    AES: {
+      ...CryptoJS.AES,
+      decrypt: (enc, key) => {
+        if (key !== "kasun" && !capturedKey) capturedKey = key;
+        return CryptoJS.AES.decrypt(enc, key);
+      }
+    }
+  };
+
+  function mockEl() {
+    return {
+      style: {}, href: "", textContent: "", innerHTML: "",
+      classList: { add: noop, remove: noop, contains: () => false },
+      onclick: null,
+      querySelector: () => mockEl(),
+      querySelectorAll: () => []
+    };
+  }
+
+  const btnHandlers = {};
+  const vmCtx = vm.createContext({
+    navigator: { userAgent: CDN_UA, maxTouchPoints: 5, webdriver: undefined, plugins: { length: 3 }, languages: ["en-US"], platform: "Android" },
+    window: {
+      location: { pathname: pUrl.pathname, search: pUrl.search, href: ztUrl, reload: noop },
+      stop: noop, addEventListener: noop,
+      open: (url) => { if (url && url.startsWith("http")) capturedUrl = url; }
+    },
+    document: {
+      getElementById: (id) => { if (!btnHandlers[id]) btnHandlers[id] = mockEl(); return btnHandlers[id]; },
+      querySelector: () => mockEl(),
+      querySelectorAll: () => [],
+      addEventListener: (e, fn) => { if (e === "DOMContentLoaded") { try { fn(); } catch (_) {} } },
+      removeEventListener: noop,
+      body: { classList: { add: noop }, innerText: "" },
+      documentElement: { innerHTML: "", style: {} }
+    },
+    location: { pathname: pUrl.pathname, search: pUrl.search, href: ztUrl, reload: noop },
+    fetch: async () => ({
+      ok: true, status: 200,
+      arrayBuffer: async () => {
+        const ab = new ArrayBuffer(pbBuf.length);
+        new Uint8Array(ab).set(pbBuf);
+        return ab;
+      }
+    }),
+    DisableDevtool: noop, CryptoJS: instrCJS, protobuf,
+    TextDecoder, TextEncoder,
+    atob: s => Buffer.from(s, "base64").toString("binary"),
+    btoa: s => Buffer.from(s, "binary").toString("base64"),
+    Uint8Array, Uint8ClampedArray, Int8Array, Int16Array, Uint16Array,
+    Int32Array, Uint32Array, ArrayBuffer, DataView,
+    setTimeout: (fn, ms) => { try { if (typeof fn === "function") fn(); } catch (_) {} },
+    clearTimeout: noop, setInterval: () => 0, clearInterval: noop,
+    console: { log: noop, error: noop, warn: noop },
+    checkPageValid: () => true, qjdnwymk: false,
+    nfvdufpg: noop, alart: noop, showAlert: noop, hideAlert: noop,
+    Promise, Error, JSON, Math, Date, Object, Array, String, Number, Boolean,
+    parseInt, parseFloat, isNaN, encodeURIComponent, decodeURIComponent,
+    RegExp, Map, Set, Symbol, WeakMap
+  });
+
+  try { vm.runInContext(pageScript, vmCtx, { timeout: 8000 }); } catch (_) {}
+
+  // Step 6: Fire every button onclick handler until we capture the URL
+  const handlers = Object.entries(btnHandlers).filter(([, v]) => typeof v.onclick === "function");
+  for (const [, btn] of handlers) {
+    try { await btn.onclick(); } catch (_) {}
+    if (capturedUrl) break;
+  }
+
+  // Step 7: If window.open gave us the URL directly, return it
+  if (capturedUrl) return capturedUrl;
+
+  // Fallback: decrypt manually if we captured the key but window.open wasn't called
+  if (capturedKey) {
+    const raw = cdnDecrypt(encUrl, capturedKey);
+    if (raw) {
+      const url = cdnB64toUtf8(raw);
+      if (url.startsWith("http")) return url;
+    }
+  }
+
+  throw new Error("CDN: could not extract download URL from page script");
 }
 
 // ─── Queue Engine ─────────────────────────────────────────────────────────────
