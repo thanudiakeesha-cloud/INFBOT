@@ -386,6 +386,11 @@ textarea{resize:vertical;min-height:88px}
     </div>
 
     <div class="sb-foot">
+      <div style="display:flex;gap:5px;padding:4px 2px 10px;flex-wrap:wrap">
+        <button onclick="dashSetLang('en')" id="dlang-en" style="flex:1;min-width:52px;padding:5px 4px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:rgba(124,58,237,0.18);color:#f1f5f9;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s">🇬🇧 EN</button>
+        <button onclick="dashSetLang('si')" id="dlang-si" style="flex:1;min-width:52px;padding:5px 4px;border-radius:7px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.04);color:#94a3b8;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s">🇱🇰 සිං</button>
+        <button onclick="dashSetLang('pk')" id="dlang-pk" style="flex:1;min-width:52px;padding:5px 4px;border-radius:7px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.04);color:#94a3b8;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s">🇵🇰 اردو</button>
+      </div>
       <div class="ni" onclick="logout()" style="color:var(--text3)">
         <svg class="ni-ic" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         Sign Out
@@ -939,6 +944,29 @@ async function doChannelReact(){
   }catch(e){toast('Network error','error')}
   finally{btn.disabled=false;btn.innerHTML='<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>React with All Bots'}
 }
+
+/* ── Language Switcher ── */
+const DASH_LANGS={
+  en:{signOut:'Sign Out'},
+  si:{signOut:'ඉවත් වන්න'},
+  pk:{signOut:'سائن آؤٹ'}
+};
+function dashSetLang(lang){
+  localStorage.setItem('dash_lang',lang);
+  const ids=['dlang-en','dlang-si','dlang-pk'];
+  ids.forEach(id=>{
+    const b=document.getElementById(id);
+    if(!b)return;
+    const isActive=id==='dlang-'+lang;
+    b.style.background=isActive?'rgba(124,58,237,0.25)':'rgba(255,255,255,0.04)';
+    b.style.border=isActive?'1px solid rgba(124,58,237,0.45)':'1px solid rgba(255,255,255,0.06)';
+    b.style.color=isActive?'#f1f5f9':'#94a3b8';
+  });
+  const t=DASH_LANGS[lang]||DASH_LANGS.en;
+  const so=document.querySelector('.sb-foot .ni');
+  if(so)so.childNodes[so.childNodes.length-1].textContent=' '+t.signOut;
+}
+(function(){const l=localStorage.getItem('dash_lang')||'en';dashSetLang(l)})();
 
 /* ── Auth ── */
 let _loginRoute='/login';

@@ -422,7 +422,7 @@
     }
     .lang-box h2{font-size:20px;font-weight:800;margin-bottom:6px}
     .lang-box .lang-sub-text{color:var(--dim);font-size:13px;line-height:1.65;margin-bottom:32px}
-    .lang-btns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .lang-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
     .lang-btn{
         display:flex;flex-direction:column;align-items:center;gap:8px;
         padding:22px 12px;background:var(--surface);
@@ -565,6 +565,8 @@
             <div class="lang-switcher">
                 <button class="lang-sw-btn" data-lang="si" onclick="setLang('si')">🇱🇰 සිං</button>
                 <span class="lang-divider">|</span>
+                <button class="lang-sw-btn" data-lang="pk" onclick="setLang('pk')">🇵🇰 اردو</button>
+                <span class="lang-divider">|</span>
                 <button class="lang-sw-btn active" data-lang="en" onclick="setLang('en')">🇬🇧 EN</button>
             </div>
             <a href="/dashboard" class="nav-cta" id="nav-cta-btn">
@@ -585,6 +587,7 @@
     <a href="#faq"      data-nav="faq" onclick="closeMenu()"><i class="fas fa-circle-question" style="width:18px;color:var(--purple-light)"></i> FAQ</a>
     <div style="display:flex;gap:8px;padding:8px 10px">
         <button class="lang-sw-btn" data-lang="si" onclick="setLang('si');closeMenu()" style="flex:1;padding:12px;border-radius:10px;font-size:14px">🇱🇰 සිංහල</button>
+        <button class="lang-sw-btn" data-lang="pk" onclick="setLang('pk');closeMenu()" style="flex:1;padding:12px;border-radius:10px;font-size:14px">🇵🇰 اردو</button>
         <button class="lang-sw-btn active" data-lang="en" onclick="setLang('en');closeMenu()" style="flex:1;padding:12px;border-radius:10px;font-size:14px">🇬🇧 English</button>
     </div>
     <a href="/dashboard" class="mm-cta">
@@ -909,12 +912,17 @@
     <div class="lang-box">
         <span class="lang-logo">∞</span>
         <h2>Infinity MD Mini</h2>
-        <p class="lang-sub-text">ඔබේ භාෂාව තෝරන්න<br>Choose your language</p>
+        <p class="lang-sub-text">ඔබේ භාෂාව තෝරන්න<br>Choose your language · اپنی زبان چنیں</p>
         <div class="lang-btns">
             <button class="lang-btn" onclick="setLang('si')">
                 <span class="lang-flag">🇱🇰</span>
                 <span class="lang-name">සිංහල</span>
                 <span class="lang-name-sub">Sinhala</span>
+            </button>
+            <button class="lang-btn" onclick="setLang('pk')">
+                <span class="lang-flag">🇵🇰</span>
+                <span class="lang-name">اردو</span>
+                <span class="lang-name-sub">Urdu</span>
             </button>
             <button class="lang-btn" onclick="setLang('en')">
                 <span class="lang-flag">🇬🇧</span>
@@ -993,6 +1001,42 @@ const T = {
         't-cta-h2':'ඔබේ bot deploy කිරීමට<br><span class="grad-text">සූදානම්ද?</span>',
         't-cta-p':'WhatsApp bot deploy කරන්න — දශ ගණනකින් ගෙදර.<br>Setup headaches නැහැ. ප්‍රතිඵල ලැබේ.',
         't-cta-btn':'Dashboard වෙත යන්න',
+    },
+    pk: {
+        'nav-feat':'خصوصیات','nav-stats':'اعداد','nav-prev':'پیش نظارہ','nav-faq':'سوالات','nav-cta':'ڈیش بورڈ',
+        't-badge':'پاکستان کا #1 WhatsApp Bot · ذاتی اور کاروباری',
+        't-h1':"پاکستان کا #1<br><span class='grad-text'>WhatsApp Bot</span>",
+        't-hero-p':'ذاتی تفریح یا مکمل کاروباری آٹومیشن — Infinity MD Mini ایک جدید WhatsApp bot. 200+ کمانڈز، AI auto-reply، anti-ban، اور live dashboard۔ 1 سیکنڈ میں live ہوں۔',
+        't-btn-dash':'ڈیش بورڈ جائیں','t-btn-login':'لاگ ان',
+        't-tr1':'ذاتی اور کاروباری','t-tr2':'AI Auto-Reply','t-tr3':'Anti-Ban','t-tr4':'پاکستان کا #1',
+        't-feat-chip':'خصوصیات',
+        't-feat-h2':"ذاتی یا کاروباری،<br><span class='grad-text'>Infinity MD Mini سب کچھ کرتا ہے۔</span>",
+        't-feat-p':'پاکستان کا پسندیدہ WhatsApp bot — عام صارفین اور کاروبار دونوں کے لیے۔',
+        't-f1-title':'ذہین آٹو ریپلائی','t-f1-desc':'<strong>.autoreply on</strong> ٹائپ کریں اور فوری فعال کریں۔ 4 موڈ: AI ہمیشہ، آف لائن، وقت مقرر، یا کی ورڈز۔',
+        't-f2-title':'AI Chat Assistant','t-f2-desc':'AI سے چیٹ کریں، سوالوں کے جواب پائیں، کسٹمر سوالات handle کریں — سب WhatsApp سے۔',
+        't-who-chip':'Infinity MD Mini کون استعمال کرتا ہے؟',
+        't-who-h2':"سب کے لیے بنایا گیا<br><span class='grad-text'>پاکستان میں</span>",
+        't-who-p':'طالب علم، content creator، یا کمپنی — Infinity MD Mini آپ کے لیے ہے۔',
+        't-w1-title':'ذاتی صارفین','t-w1-desc':'200+ ذاتی کمانڈز — stickers، AI chat، موسیقی، گیمز، گروپ ٹولز، میڈیا ڈاؤنلوڈ — WhatsApp سے۔',
+        't-w2-title':'چھوٹے کاروبار','t-w2-desc':'WhatsApp auto reply سے کسٹمر سوالات، قیمت کی فہرستیں، اور آرڈر خودکار handle کریں — سوتے وقت بھی۔',
+        't-w3-title':'بڑی کمپنیاں','t-w3-desc':'ایک dashboard سے متعدد WhatsApp نمبروں پر support، sales، اور notifications manage کریں۔',
+        't-sticky-dash':'ڈیش بورڈ جائیں','t-mm-cta':'ڈیش بورڈ جائیں',
+        't-faq-chip':'سوالات','t-faq-h2':'عام <span class="grad-text">سوالوں کے جواب</span>',
+        't-faq1-q':'پاکستان کا بہترین WhatsApp auto reply bot کون سا ہے؟',
+        't-faq1-a':'Infinity MD Mini پاکستان کا #1 WhatsApp auto reply bot ہے۔ 200+ کمانڈز، AI replies، اور live dashboard — روزانہ 100+ صارفین کا اعتماد۔',
+        't-faq2-q':'کیا Infinity MD Mini ایک AI WhatsApp bot ہے؟',
+        't-faq2-a':'ہاں۔ مکمل featured AI WhatsApp bot — auto-reply، group management، intelligent commands، اور central dashboard۔',
+        't-faq3-q':'کیا یہ کمپنی chatbot کے طور پر کام کرتا ہے؟',
+        't-faq3-a':'بالکل۔ Multiple numbers، custom auto-reply rules، AI responses، shared team dashboard — کسی بھی سائز کی کمپنی کے لیے۔',
+        't-faq4-q':'Auto-Reply کیسے سیٹ اپ کریں؟',
+        't-faq4-a':'<strong>.autoreply on</strong> ٹائپ کریں۔ 4 موڈ: AI ہمیشہ، آف لائن، وقت مقرر، keywords — dashboard سے مکمل control۔',
+        't-faq5-q':'کیا میرا نمبر ban ہوگا؟',
+        't-faq5-a':'Infinity MD Mini میں anti-ban kernel ہے جو intelligent rate-limiting اور WhatsApp behavior mimicry استعمال کرتا ہے۔ ہزاروں پیغامات روزانہ بغیر کسی مسئلے کے۔',
+        't-faq6-q':'کتنی جلدی شروع کر سکتے ہیں؟',
+        't-faq6-a':'1 سیکنڈ میں live۔ لاگ ان کریں، QR code یا pairing code سے نمبر pair کریں، اور فوری auto-reply شروع کریں۔',
+        't-cta-h2':'اپنا پہلا bot<br><span class="grad-text">launch کریں؟</span>',
+        't-cta-p':'1 منٹ سے کم میں WhatsApp bot deploy کریں۔<br>کوئی پیچیدگی نہیں۔ بس نتائج۔',
+        't-cta-btn':'ڈیش بورڈ جائیں',
     }
 };
 
