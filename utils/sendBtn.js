@@ -7,6 +7,7 @@ const { sendButtons } = require('gifted-btns');
 const config = require('../config');
 
 const CHANNEL_URL = 'https://infinitymd.online';
+const FTGM_CHANNEL_URL = 'https://whatsapp.com/channel/0029VbAVaylCnA7pF6IP0R46';
 const GITHUB_URL = config.social?.github || 'https://github.com/mruniquehacker';
 const YT_URL = config.social?.youtube || 'https://youtube.com/@mr_unique_hacker';
 
@@ -66,4 +67,4 @@ async function sendBtn(sock, jid, opts, sendOpts = {}) {
   }, sendOpts);
 }
 
-module.exports = { btn, urlBtn, callBtn, copyBtn, sendBtn, navButtons, devButtons, CHANNEL_URL, GITHUB_URL, YT_URL };
+module.exports = { btn, urlBtn, callBtn, copyBtn, sendBtn, navButtons, devButtons, CHANNEL_URL, FTGM_CHANNEL_URL, GITHUB_URL, YT_URL };

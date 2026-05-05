@@ -2,7 +2,7 @@ const config  = require('../../config');
 const fs      = require('fs');
 const path    = require('path');
 const os      = require('os');
-const { sendBtn, btn, urlBtn } = require('../../utils/sendBtn');
+const { sendBtn, btn, urlBtn, FTGM_CHANNEL_URL } = require('../../utils/sendBtn');
 const { getLang, t, LANGUAGES } = require('../../utils/lang');
 
 function formatUptime(sec) {
@@ -134,6 +134,7 @@ const MAIN_BUTTONS = [
   btn('ownermenu', '👑 Owner'),
   btn('toolsmenu', '🛠️ Tools'),
   btn('funmenu',   '🎮 Fun'),
+  urlBtn('Follow the 𝗙𝗧𝗚𝗠 𝗛𝗔𝗖𝗞𝗦© channel on WhatsApp', FTGM_CHANNEL_URL),
 ];
 
 function buildMainMenu({ botName, ownerName, senderNum, uptimeStr, ramMB, prefix, lang }) {
@@ -258,6 +259,7 @@ module.exports = {
         buttons: [
           btn('menu', '🏠 ' + t('backMenu', lang).replace('🔙 ', '')),
           urlBtn('💬 Support', 'https://wa.me/94770612011'),
+          urlBtn('Follow the 𝗙𝗧𝗚𝗠 𝗛𝗔𝗖𝗞𝗦© channel on WhatsApp', FTGM_CHANNEL_URL),
         ],
       }, { quoted: msg });
     }
