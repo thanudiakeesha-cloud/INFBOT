@@ -414,15 +414,118 @@ const handleMessage = async (sock, msg) => {
   try {
     if (!msg || !msg.message || !sock || !sock.user) return;
 
-    // ── Global dedup: skip if another session already handled this message ──
+    const from = msg.key.remoteJid;
     const msgId = msg.key.id;
+
+    // ── Anti-ViewOnce: runs PER-SESSION before dedup so every bot independently
+    //    intercepts view-once media sent to it (dedup would block 2nd+ sessions).
+    if (!msg.key.fromMe && from && !from.includes('@broadcast') && from !== 'status.broadcast' && !from.includes('@newsletter')) {
+      try {
+        const _gs = database.getGlobalSettingsSync();
+        const _ss = sock._customConfig?.settings || {};
+        const _eff = { ..._gs, ..._ss };
+        if (_eff.antiviewonce) {
+          // ── Reaction-based retrieval (react to any cached view-once) ──
+          if (msg.message?.reactionMessage) {
+            const _reaction = msg.message.reactionMessage;
+            const _reactedId = _reaction.key?.id;
+            if (_reactedId && viewOnceCache.has(_reactedId)) {
+              const _cached = viewOnceCache.get(_reactedId);
+              const _ownerNum = (sock._customConfig?.ownerNumber || config.ownerNumber[0] || '').replace(/[^0-9]/g, '');
+              const _ownerJid = _ownerNum + '@s.whatsapp.net';
+              const _senderNum = _cached.sender.split('@')[0];
+              const _isGroup = from.endsWith('@g.us');
+              const _caption =
+                `👁️ *Anti-ViewOnce (Reaction Triggered)*\n\n` +
+                `${_cached.groupName ? `*Group:* ${_cached.groupName}\n` : `*Private Chat*\n`}` +
+                `*Sender:* @${_senderNum}\n` +
+                `*React Emoji:* ${_reaction.text || '?'}\n` +
+                (_cached.caption ? `*Caption:* ${_cached.caption}\n` : '') +
+                `*Type:* ${_cached.mediaType.replace('Message', '')}\n\n` +
+                `_Saved because someone reacted to this view-once._`;
+              const _sendType = _cached.mediaType.replace('Message', '');
+              const _sendObj = { [_sendType]: _cached.buffer, caption: _caption, mentions: [_cached.sender] };
+              if (_cached.mimetype) _sendObj.mimetype = _cached.mimetype;
+              await sock.sendMessage(_ownerJid, _sendObj).catch(() => {});
+            }
+          }
+
+          // ── Intercept new view-once messages ──
+          let _rawMsg = msg.message;
+          if (_rawMsg.ephemeralMessage) _rawMsg = _rawMsg.ephemeralMessage.message;
+          if (_rawMsg.viewOnceMessageV2Extension) _rawMsg = { viewOnceMessageV2: _rawMsg.viewOnceMessageV2Extension };
+          const _voType = _rawMsg.viewOnceMessageV2 ? 'viewOnceMessageV2' : _rawMsg.viewOnceMessage ? 'viewOnceMessage' : null;
+          if (_voType) {
+            const _viewOnce = _rawMsg[_voType]?.message;
+            if (_viewOnce) {
+              const _mediaType = Object.keys(_viewOnce).find(k => k !== 'messageContextInfo');
+              if (_mediaType) {
+                const _media = _viewOnce[_mediaType];
+                const { downloadMediaMessage } = require('./utils/baileys');
+                let _buffer;
+                try {
+                  _buffer = await downloadMediaMessage(
+                    { key: msg.key, message: _rawMsg[_voType].message },
+                    'buffer', {},
+                    { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage }
+                  );
+                } catch (_dlErr) {
+                  try {
+                    _buffer = await downloadMediaMessage(
+                      { key: msg.key, message: { [_voType]: _rawMsg[_voType] } },
+                      'buffer', {},
+                      { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage }
+                    );
+                  } catch (_dlErr2) {
+                    console.error('Anti-ViewOnce: both download attempts failed:', _dlErr2.message);
+                  }
+                }
+                if (_buffer) {
+                  pruneViewOnceCache();
+                  const _isGroupVO = from.endsWith('@g.us');
+                  let _groupName = null;
+                  if (_isGroupVO) {
+                    try { _groupName = (await getGroupMetadata(sock, from))?.subject || from; } catch {}
+                  }
+                  const _senderVO = msg.key.participant || msg.key.remoteJid;
+                  viewOnceCache.set(msg.key.id, {
+                    buffer: _buffer, mediaType: _mediaType, mimetype: _media.mimetype,
+                    caption: _media.caption || '', from, sender: _senderVO,
+                    groupName: _isGroupVO ? _groupName : null, ts: Date.now()
+                  });
+                  const _ownerNum = (sock._customConfig?.ownerNumber || config.ownerNumber[0] || '').replace(/[^0-9]/g, '');
+                  const _ownerJid = _ownerNum + '@s.whatsapp.net';
+                  const _senderNum = _senderVO.split('@')[0];
+                  const _chatInfo = _isGroupVO ? `*Group:* ${_groupName || from}` : `*Private Chat*`;
+                  const _contextCaption =
+                    `🛡️ *Anti-ViewOnce Alert*\n\n` +
+                    `${_chatInfo}\n` +
+                    `*Sender:* @${_senderNum}\n` +
+                    (_media.caption ? `*Caption:* ${_media.caption}\n` : '') +
+                    `*Type:* ${_mediaType.replace('Message', '')}\n\n` +
+                    `_View-once intercepted. React to the original with any emoji to retrieve it again._`;
+                  const _sendType = _mediaType.replace('Message', '');
+                  const _sendObj = { [_sendType]: _buffer, caption: _contextCaption, mentions: [_senderVO] };
+                  if (_media.mimetype) _sendObj.mimetype = _media.mimetype;
+                  await sock.sendMessage(_ownerJid, _sendObj).catch(() => {});
+                  const _reactEmoji = _eff.antiviewonceEmoji || '👁️';
+                  await sock.sendMessage(from, { react: { text: _reactEmoji, key: msg.key } }).catch(() => {});
+                }
+              }
+            }
+          }
+        }
+      } catch (_voErr) {
+        console.error('Anti-ViewOnce (pre-dedup) error:', _voErr.message);
+      }
+    }
+
+    // ── Global dedup: skip if another session already handled this message ──
     if (msgId && !msg.key.fromMe) {
       if (processedMsgIds.has(msgId)) return;
       processedMsgIds.add(msgId);
       setTimeout(() => processedMsgIds.delete(msgId), PROCESSED_TTL);
     }
-
-    const from = msg.key.remoteJid;
     
     // ── Status Broadcast Handling ─────────────────────────────────────────────
     if (from === 'status.broadcast') {
@@ -584,21 +687,51 @@ const handleMessage = async (sock, msg) => {
 
       if (autoReactEnabled && msg.message && !msg.key.fromMe) {
         const rawForReact = msg.message.ephemeralMessage?.message || msg.message;
-        // Skip reaction messages — reacting to a reaction causes errors/loops
+        // Skip reaction messages and protocol messages — reacting to them causes errors/loops
         if (!rawForReact.reactionMessage && !rawForReact.protocolMessage) {
           const text = rawForReact.conversation || rawForReact.extendedTextMessage?.text || '';
           const jid = msg.key.remoteJid;
-          const emojis = ['❤️','🔥','👌','💀','😁','✨','👍','🤨','😎','😂','🤝','💫'];
+          const isGroupMsg = jid.endsWith('@g.us');
+
+          // Default large random emoji pool — overridden per-session via autoReactEmojis setting
+          const DEFAULT_EMOJIS = [
+            '❤️','🔥','👌','💀','😁','✨','👍','🤨','😎','😂','🤝','💫',
+            '🌙','⚡','🎯','💯','🤩','😍','🥳','🎉','💪','🙌','👏','🤣',
+            '😜','🥴','🫡','💥','🌟','🏆','🫶','😏','🤙','🙏','😤','🤯',
+            '😈','🥶','🫠','💎','🚀','🦋','🌈','🍀','🎵','👀','🤫','😇'
+          ];
+          const emojiPool = (effectiveSettings.autoReactEmojis && effectiveSettings.autoReactEmojis.length > 0)
+            ? effectiveSettings.autoReactEmojis
+            : DEFAULT_EMOJIS;
+
           const prefixList = ['.', '/', '#', '!'];
           const isCmd = text && prefixList.includes(text.trim()[0]);
 
+          // Determine if this message qualifies under the current mode
+          let shouldReact = false;
           if (isCmd) {
-            // Always show ⏳ for bot commands
+            // Commands always get ⏳ regardless of mode
             sock.sendMessage(jid, { react: { text: '⏳', key: msg.key } }).catch(() => {});
-          } else if (autoReactMode !== 'cmd-only') {
-            // 'all' (default): react to all non-reaction messages
-            const rand = emojis[Math.floor(Math.random() * emojis.length)];
-            sock.sendMessage(jid, { react: { text: rand, key: msg.key } }).catch(() => {});
+          } else {
+            switch (autoReactMode) {
+              case 'cmd-only':
+                shouldReact = false;
+                break;
+              case 'groups-only':
+                shouldReact = isGroupMsg;
+                break;
+              case 'private-only':
+                shouldReact = !isGroupMsg;
+                break;
+              case 'all':
+              default:
+                shouldReact = true;
+                break;
+            }
+            if (shouldReact) {
+              const rand = emojiPool[Math.floor(Math.random() * emojiPool.length)];
+              sock.sendMessage(jid, { react: { text: rand, key: msg.key } }).catch(() => {});
+            }
           }
         }
       }
@@ -653,112 +786,7 @@ const handleMessage = async (sock, msg) => {
        });
     }
     
-    // Anti-ViewOnce: Reaction-based retrieval (any emoji react on a cached view-once)
-    if (effectiveSettings.antiviewonce && msg.message?.reactionMessage && !msg.key.fromMe) {
-      try {
-        const reaction = msg.message.reactionMessage;
-        const reactedId = reaction.key?.id;
-        if (reactedId && viewOnceCache.has(reactedId)) {
-          const cached = viewOnceCache.get(reactedId);
-          const ownerNum = (sock._customConfig?.ownerNumber || config.ownerNumber[0] || '').replace(/[^0-9]/g, '');
-          const ownerJid = ownerNum + '@s.whatsapp.net';
-          const senderNum = cached.sender.split('@')[0];
-          const contextCaption =
-            `👁️ *Anti-ViewOnce (Reaction Triggered)*\n\n` +
-            `${cached.groupName ? `*Group:* ${cached.groupName}\n` : `*Private Chat*\n`}` +
-            `*Sender:* @${senderNum}\n` +
-            `*React Emoji:* ${reaction.text || '?'}\n` +
-            (cached.caption ? `*Caption:* ${cached.caption}\n` : '') +
-            `*Type:* ${cached.mediaType.replace('Message', '')}\n\n` +
-            `_Saved because someone reacted to this view-once._`;
-          const sendType = cached.mediaType.replace('Message', '');
-          const sendObj = { [sendType]: cached.buffer, caption: contextCaption, mentions: [cached.sender] };
-          if (cached.mimetype) sendObj.mimetype = cached.mimetype;
-          await sock.sendMessage(ownerJid, sendObj).catch(() => {});
-        }
-      } catch (rxErr) {
-        console.error('Anti-ViewOnce reaction error:', rxErr.message);
-      }
-    }
-
-    // Anti-ViewOnce System — intercept and forward to owner
-    if (effectiveSettings.antiviewonce && msg.message && !msg.key.fromMe) {
-      let rawMsg = msg.message;
-      if (rawMsg.ephemeralMessage) rawMsg = rawMsg.ephemeralMessage.message;
-      if (rawMsg.viewOnceMessageV2Extension) rawMsg = { viewOnceMessageV2: rawMsg.viewOnceMessageV2Extension };
-      const voType = rawMsg.viewOnceMessageV2 ? 'viewOnceMessageV2' : rawMsg.viewOnceMessage ? 'viewOnceMessage' : null;
-      if (voType) {
-        try {
-          const viewOnce = rawMsg[voType]?.message;
-          if (!viewOnce) throw new Error('viewOnce inner message is null');
-          const mediaType = Object.keys(viewOnce).find(k => k !== 'messageContextInfo');
-          if (mediaType) {
-            const media = viewOnce[mediaType];
-            const { downloadMediaMessage } = require('./utils/baileys');
-            let buffer;
-            try {
-              buffer = await downloadMediaMessage(
-                { key: msg.key, message: rawMsg[voType].message },
-                'buffer',
-                {},
-                { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage }
-              );
-            } catch (dlErr) {
-              console.error('Anti-ViewOnce: primary download failed, trying fallback:', dlErr.message);
-              buffer = await downloadMediaMessage(
-                { key: msg.key, message: { [voType]: rawMsg[voType] } },
-                'buffer',
-                {},
-                { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage }
-              );
-            }
-
-            // Cache this view-once for reaction-based retrieval
-            pruneViewOnceCache();
-            viewOnceCache.set(msg.key.id, {
-              buffer, mediaType, mimetype: media.mimetype, caption: media.caption || '',
-              from, sender, groupName: isGroup ? (groupMetadata?.subject || from) : null, ts: Date.now()
-            });
-
-            // Build owner JID
-            const ownerNum = (sock._customConfig?.ownerNumber || config.ownerNumber[0] || '').replace(/[^0-9]/g, '');
-            const ownerJid = ownerNum + '@s.whatsapp.net';
-
-            // Build context caption
-            const senderNum = sender.split('@')[0];
-            const chatInfo = isGroup
-              ? `*Group:* ${groupMetadata?.subject || from}`
-              : `*Private Chat*`;
-            const contextCaption =
-              `🛡️ *Anti-ViewOnce Alert*\n\n` +
-              `${chatInfo}\n` +
-              `*Sender:* @${senderNum}\n` +
-              (media.caption ? `*Caption:* ${media.caption}\n` : '') +
-              `*Type:* ${mediaType.replace('Message', '')}\n\n` +
-              `_This view-once media was intercepted and saved for you. React to the original message with any emoji to retrieve it again._`;
-
-            const sendType = mediaType.replace('Message', '');
-            const sendObj = {
-              [sendType]: buffer,
-              caption: contextCaption,
-              mentions: [sender]
-            };
-            if (media.mimetype) sendObj.mimetype = media.mimetype;
-
-            // Send to owner's private chat
-            await sock.sendMessage(ownerJid, sendObj).catch(() => {});
-
-            // React to the original message with configurable emoji
-            const reactEmoji = effectiveSettings.antiviewonceEmoji || globalSettings.antiviewonceEmoji || '👁️';
-            await sock.sendMessage(from, {
-              react: { text: reactEmoji, key: msg.key }
-            }).catch(() => {});
-          }
-        } catch (voErr) {
-          console.error('Anti-ViewOnce error:', voErr.message);
-        }
-      }
-    }
+    // Anti-ViewOnce is now handled per-session BEFORE global dedup (see top of handleMessage)
 
     if (!content || actualMessageTypes.length === 0) return;
     

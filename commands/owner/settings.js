@@ -9,10 +9,46 @@ function formatUptime(sec) {
   return `${h}h ${m}m ${s}s`;
 }
 
+// Write a setting to the session (per-session) with in-memory update + DB persist
+async function writeSessionSetting(sock, key, value) {
+  if (!sock._customConfig.settings) sock._customConfig.settings = {};
+  sock._customConfig.settings[key] = value;
+  const sessionId = sock._customConfig?.sessionId;
+  if (sessionId) {
+    await database.updateSessionSettings(sessionId, { [key]: value });
+  }
+}
+
+// Write a global setting (maintenance, forceBot) — affects all sessions
+async function writeGlobalSetting(sock, key, value) {
+  await database.updateGlobalSettings({ [key]: value });
+}
+
+// Settings that are per-session (each bot instance controls independently)
+const SESSION_SETTINGS = {
+  'antiviewonce' : 'antiviewonce',
+  'antidelete'   : 'antidelete',
+  'anticall'     : 'anticall',
+  'autoreact'    : 'autoReact',
+  'autostatus'   : 'autoStatus',
+  'autotyping'   : 'autoTyping',
+  'autovoice'    : 'autoVoice',
+};
+
+// Settings that are global (affect all sessions / the entire bot service)
+const GLOBAL_SETTINGS = {
+  'maintenance'  : 'maintenance',
+  'privatemode'  : 'forceBot',
+  'forcebot'     : 'forceBot',
+};
+
 async function showSettingsPanel(sock, msg, extra) {
   const gs = database.getGlobalSettingsSync();
+  const ss = sock._customConfig?.settings || {};
+  const eff = { ...gs, ...ss };
   const on = '✅', off = '❌';
   const s = (v) => v ? on : off;
+  const src = (key, sessionKey) => ss[sessionKey] !== undefined ? '🔑' : '🌐';
 
   let text = `⚙️ *BOT SETTINGS*\n`;
   text += `╭───〔 🤖 Bot Info 〕───\n`;
@@ -21,53 +57,49 @@ async function showSettingsPanel(sock, msg, extra) {
   text += `│ ⏱ *Uptime* : ${formatUptime(process.uptime())}\n`;
   text += `╰────────────────────\n\n`;
 
-  text += `╭───〔 🔐 Bot Mode 〕───\n`;
-  text += `│ ${s(gs.forceBot)} *Private Mode*\n`;
-  text += `│ ${s(gs.maintenance)} *Maintenance Mode*\n`;
+  text += `╭───〔 🔐 Global Mode 〕───\n`;
+  text += `│ ${s(gs.forceBot)} *Private Mode* 🌐\n`;
+  text += `│ ${s(gs.maintenance)} *Maintenance Mode* 🌐\n`;
   text += `╰────────────────────\n\n`;
 
-  text += `╭───〔 🛡️ Protection 〕───\n`;
-  text += `│ ${s(gs.antidelete)} *Anti-Delete*\n`;
-  text += `│ ${s(gs.antiviewonce)} *Anti-ViewOnce*\n`;
-  text += `│ ${s(gs.anticall)} *Anti-Call*\n`;
+  text += `╭───〔 🛡️ Protection (per-session) 〕───\n`;
+  text += `│ ${s(eff.antidelete)} *Anti-Delete* ${src('antidelete','antidelete')}\n`;
+  text += `│ ${s(eff.antiviewonce)} *Anti-ViewOnce* ${src('antiviewonce','antiviewonce')}\n`;
+  text += `│ ${s(eff.anticall)} *Anti-Call* ${src('anticall','anticall')}\n`;
   text += `╰────────────────────\n\n`;
 
-  text += `╭───〔 🤖 Auto Features 〕───\n`;
-  text += `│ ${s(gs.autoReact)} *Auto-React*\n`;
-  text += `│ ${s(gs.autoStatus)} *Auto-Status View*\n`;
-  text += `│ ${s(gs.autoTyping)} *Auto-Typing*\n`;
-  text += `│ ${s(gs.autoVoice)} *Auto-Voice*\n`;
+  text += `╭───〔 🤖 Auto Features (per-session) 〕───\n`;
+  text += `│ ${s(eff.autoReact)} *Auto-React* ${src('autoReact','autoReact')}\n`;
+  text += `│ ${s(eff.autoStatus)} *Auto-Status View* ${src('autoStatus','autoStatus')}\n`;
+  text += `│ ${s(eff.autoTyping)} *Auto-Typing* ${src('autoTyping','autoTyping')}\n`;
+  text += `│ ${s(eff.autoVoice)} *Auto-Voice* ${src('autoVoice','autoVoice')}\n`;
   text += `╰────────────────────\n\n`;
 
-  text += `╭───〔 📋 Commands 〕───\n`;
-  text += `│ .settings <name> on/off\n`;
-  text += `│ Names: antidelete, antiviewonce\n`;
-  text += `│ anticall, autoreact, autostatus\n`;
-  text += `│ autotyping, autovoice\n`;
-  text += `│ maintenance, privatemode\n`;
+  text += `╭───〔 ℹ️ Legend 〕───\n`;
+  text += `│ 🔑 = session setting  🌐 = global\n`;
   text += `╰────────────────────`;
 
   return sendBtn(sock, extra.from, {
     text,
-    footer: `⚙️ Tap to toggle • Changes apply immediately`,
+    footer: `⚙️ Per-session settings apply to this bot only`,
     buttons: [
-      btn(gs.antidelete    ? 'settings_antidelete_off'    : 'settings_antidelete_on',
-          `🛡️ AntiDelete: ${gs.antidelete    ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
-      btn(gs.antiviewonce  ? 'settings_antiviewonce_off'  : 'settings_antiviewonce_on',
-          `👁️ AntiViewOnce: ${gs.antiviewonce  ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
-      btn(gs.anticall      ? 'settings_anticall_off'      : 'settings_anticall_on',
-          `📵 AntiCall: ${gs.anticall      ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
-      btn(gs.autoReact     ? 'settings_autoreact_off'     : 'settings_autoreact_on',
-          `⚡ AutoReact: ${gs.autoReact     ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
-      btn(gs.autoStatus    ? 'settings_autostatus_off'    : 'settings_autostatus_on',
-          `👀 AutoStatus: ${gs.autoStatus    ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
-      btn(gs.autoTyping    ? 'settings_autotyping_off'    : 'settings_autotyping_on',
-          `⌨️ AutoTyping: ${gs.autoTyping    ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
-      btn(gs.autoVoice     ? 'settings_autovoice_off'     : 'settings_autovoice_on',
-          `🎙️ AutoVoice: ${gs.autoVoice     ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
-      btn(gs.maintenance   ? 'settings_maintenance_off'   : 'settings_maintenance_on',
+      btn(eff.antidelete    ? 'settings_antidelete_off'    : 'settings_antidelete_on',
+          `🛡️ AntiDelete: ${eff.antidelete    ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
+      btn(eff.antiviewonce  ? 'settings_antiviewonce_off'  : 'settings_antiviewonce_on',
+          `👁️ AntiViewOnce: ${eff.antiviewonce  ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
+      btn(eff.anticall      ? 'settings_anticall_off'      : 'settings_anticall_on',
+          `📵 AntiCall: ${eff.anticall      ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
+      btn(eff.autoReact     ? 'settings_autoreact_off'     : 'settings_autoreact_on',
+          `⚡ AutoReact: ${eff.autoReact     ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
+      btn(eff.autoStatus    ? 'settings_autostatus_off'    : 'settings_autostatus_on',
+          `👀 AutoStatus: ${eff.autoStatus    ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
+      btn(eff.autoTyping    ? 'settings_autotyping_off'    : 'settings_autotyping_on',
+          `⌨️ AutoTyping: ${eff.autoTyping    ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
+      btn(eff.autoVoice     ? 'settings_autovoice_off'     : 'settings_autovoice_on',
+          `🎙️ AutoVoice: ${eff.autoVoice     ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
+      btn(gs.maintenance    ? 'settings_maintenance_off'   : 'settings_maintenance_on',
           `🔧 Maintenance: ${gs.maintenance   ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
-      btn(gs.forceBot      ? 'settings_privatemode_off'   : 'settings_privatemode_on',
+      btn(gs.forceBot       ? 'settings_privatemode_off'   : 'settings_privatemode_on',
           `🔒 PrivateMode: ${gs.forceBot      ? '✅ ON  →  Turn OFF' : '❌ OFF  →  Turn ON'}`),
     ]
   }, { quoted: msg });
@@ -76,65 +108,64 @@ async function showSettingsPanel(sock, msg, extra) {
 module.exports = {
   name: 'settings',
   aliases: ['botsettings', 'botconfig'],
-  description: 'View and manage all bot settings',
+  description: 'View and manage all bot settings (per-session)',
   usage: '.settings [setting] [on/off]',
   category: 'owner',
   ownerOnly: true,
 
   async execute(sock, msg, args, extra) {
     try {
-      // Enforce owner-only
       if (!extra.isOwner) {
         return extra.reply('👑 Only the bot owner can access settings.');
       }
 
-      // No args → show panel
       if (!args[0]) {
         return showSettingsPanel(sock, msg, extra);
       }
 
-      const toggleSettings = {
-        'antiviewonce' : 'antiviewonce',
-        'antidelete'   : 'antidelete',
-        'anticall'     : 'anticall',
-        'autoreact'    : 'autoReact',
-        'autostatus'   : 'autoStatus',
-        'autotyping'   : 'autoTyping',
-        'autovoice'    : 'autoVoice',
-        'maintenance'  : 'maintenance',
-        'privatemode'  : 'forceBot',
-        'forcebot'     : 'forceBot',
-      };
-
       const setting = args[0].toLowerCase();
       const value   = args[1] ? args[1].toLowerCase() : null;
-      const settingKey = toggleSettings[setting];
+
+      const allSettings = { ...SESSION_SETTINGS, ...GLOBAL_SETTINGS };
+      const settingKey = allSettings[setting];
 
       if (!settingKey) {
         return extra.reply(
           `❌ Unknown setting: *${setting}*\n\n` +
-          `Available:\n` +
-          Object.keys(toggleSettings).map(k => `• ${k}`).join('\n') +
+          `*Per-session settings:*\n` +
+          Object.keys(SESSION_SETTINGS).map(k => `• ${k}`).join('\n') +
+          `\n\n*Global settings:*\n` +
+          Object.keys(GLOBAL_SETTINGS).map(k => `• ${k}`).join('\n') +
           `\n\nUsage: .settings <name> on/off`
         );
       }
 
+      const isGlobal = !!GLOBAL_SETTINGS[setting];
       const gs = database.getGlobalSettingsSync();
+      const ss = sock._customConfig?.settings || {};
+      const eff = { ...gs, ...ss };
 
       if (!value || (value !== 'on' && value !== 'off')) {
-        const current = gs[settingKey] ? 'ON' : 'OFF';
+        const current = eff[settingKey] ? 'ON' : 'OFF';
         return extra.reply(
-          `⚙️ *${setting}* is currently: *${current}*\n\nUsage: .settings ${setting} on/off`
+          `⚙️ *${setting}* is currently: *${current}*\n` +
+          `Scope: ${isGlobal ? '🌐 Global' : '🔑 Per-session'}\n\n` +
+          `Usage: .settings ${setting} on/off`
         );
       }
 
       const newValue = value === 'on';
-      await database.updateGlobalSettings({ [settingKey]: newValue });
+
+      if (isGlobal) {
+        await writeGlobalSetting(sock, settingKey, newValue);
+      } else {
+        await writeSessionSetting(sock, settingKey, newValue);
+      }
 
       const emoji = newValue ? '✅' : '❌';
-      await extra.reply(`${emoji} *${setting}* turned *${value.toUpperCase()}*`);
+      const scope = isGlobal ? '🌐 Global' : '🔑 This session';
+      await extra.reply(`${emoji} *${setting}* turned *${value.toUpperCase()}*\nScope: ${scope}`);
 
-      // Re-show updated settings panel
       return showSettingsPanel(sock, msg, extra);
 
     } catch (error) {

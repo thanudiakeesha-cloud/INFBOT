@@ -407,6 +407,7 @@ async function connectSession(id, sessionData) {
   });
 
   newSock._customConfig = {
+     sessionId: id,
      botName: sessionData.name || 'Infinity MD',
      ownerName: sessionData.ownerName || config.ownerName[0],
      ownerNumber: sessionData.ownerNumber || config.ownerNumber[0],

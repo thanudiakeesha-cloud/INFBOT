@@ -609,6 +609,21 @@ module.exports = {
     return true;
   },
 
+  // Update only the settings sub-object of a session (merges, does not replace)
+  updateSessionSettings: async (id, settings) => {
+    if (!sessionsCache[id]) return false;
+    const current = sessionsCache[id].settings || {};
+    const updated = { ...current, ...settings };
+    sessionsCache[id].settings = updated;
+    firebaseUpdate(`sessions/${sanitizeKey(id)}`, { settings: updated });
+    try { db.prepare(`UPDATE sessions SET settings = ? WHERE id = ?`).run(JSON.stringify(updated), id); } catch {}
+    return updated;
+  },
+
+  getSessionSettings: (id) => {
+    return sessionsCache[id]?.settings || {};
+  },
+
   saveSession: async (id, data) => {
     const existing = sessionsCache[id] || {};
     const sessionData = {
