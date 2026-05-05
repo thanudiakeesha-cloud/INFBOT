@@ -14,6 +14,7 @@ let app, server, serverReady = false;
 const activeSessions = new Map();
 const pendingNotifications = new Map(); // sessionId → [{ jid, text }, ...]
 const reconnectingSet = new Set(); // tracks sessions currently scheduled for reconnect
+const replacedSessions = new Set(); // tracks sessions that stepped aside due to 440 (another instance holds them)
 const sessionsDbPath = path.join(__dirname, 'database', 'sessions.json');
 
 function queueNotification(sessionId, jid, text) {
@@ -449,6 +450,7 @@ async function connectSession(id, sessionData) {
       // This ensures the welcome message is sent only once, even after server restarts.
       const isFirstConnect = !sessionData.firstConnectDone;
       activeSessions.set(id, newSock);
+      replacedSessions.delete(id); // clear 440 step-aside flag — this instance now owns the session
       sessionData._retryCount = 0;
       sessionData._connectedAt = Date.now();
       console.log(`✅ Session ${id} connected!`);
@@ -528,10 +530,14 @@ async function connectSession(id, sessionData) {
           safeRemoveDir(folderPath);
         }
       } else if (isConnectionReplaced) {
-        // 440 = another server/device is already holding this session — step aside
+        // 440 = another server/device is already holding this session — step aside.
+        // Mark in replacedSessions so the health monitor doesn't keep reconnecting it
+        // and creating an infinite 440 loop. This flag resets on server restart so
+        // sessions always get a fresh chance after a clean redeploy.
         activeSessions.delete(id);
         reconnectingSet.delete(id);
-        console.log(`⏸️ Session ${id} is active on another instance — this instance will not reconnect (session kept in database).`);
+        replacedSessions.add(id);
+        console.log(`⏸️ Session ${id} is active on another instance — stepping aside (health monitor will skip).`);
       } else {
         // Exponential backoff retry with a hard ceiling to avoid infinite restart loops.
         // Sessions that never successfully connect (e.g. banned/timed-out accounts) are
@@ -2318,6 +2324,10 @@ async function startSessionHealthMonitor() {
           continue;
         }
         if (reconnectingSet.has(id)) continue; // already scheduled for reconnect
+
+        // Skip sessions that stepped aside due to a 440 (another instance holds them).
+        // Reconnecting them just causes an infinite 440 loop. They re-enter on server restart.
+        if (replacedSessions.has(id)) continue;
 
         // Skip paused sessions — they are only cleared/retried on server restart,
         // never auto-deleted by the health monitor.
