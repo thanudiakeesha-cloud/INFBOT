@@ -185,6 +185,7 @@ server.listen(PORT, '0.0.0.0', () => {
       msg.includes('Decipheriv') ||
       msg.includes('Failed to decrypt message') ||
       msg.includes('Closing open session in favor') ||
+      msg.includes('Closing session: SessionEntry') ||
       (msg.includes('Session error') && (msg.includes('Bad MAC') || msg.includes('decrypt')))
     );
   }
@@ -400,8 +401,8 @@ async function connectSession(id, sessionData) {
     browser: [sessionData.name || 'Infinity MD', 'Chrome', '1.0.0'],
     syncFullHistory: false,
     markOnlineOnConnect: true,
-    connectTimeoutMs: 30000,
-    keepAliveIntervalMs: 30000,
+    connectTimeoutMs: 60000,
+    keepAliveIntervalMs: 15000, // 15s beats Railway's proxy NAT timeout (was 30s)
     retryRequestDelayMs: 1500,
     generateHighQualityLinkPreview: false,
   });
@@ -531,33 +532,48 @@ async function connectSession(id, sessionData) {
           safeRemoveDir(folderPath);
         }
       } else if (isConnectionReplaced) {
-        // 440 = another server/device is already holding this session — step aside.
-        // Mark in replacedSessions so the health monitor doesn't keep reconnecting it
-        // and creating an infinite 440 loop. This flag resets on server restart so
-        // sessions always get a fresh chance after a clean redeploy.
+        // 440 = another instance (e.g. previous Railway deploy) is holding this session.
+        // Step aside temporarily — auto-retry after 5 minutes so that once the old
+        // instance fully shuts down, this one picks the session back up automatically.
         activeSessions.delete(id);
         reconnectingSet.delete(id);
         replacedSessions.add(id);
-        console.log(`⏸️ Session ${id} is active on another instance — stepping aside (health monitor will skip).`);
+        console.log(`⏸️ Session ${id} got 440 (connection replaced) — stepping aside for 5 min then auto-retrying.`);
+        setTimeout(() => {
+          if (replacedSessions.has(id)) {
+            replacedSessions.delete(id);
+            console.log(`🔄 Session ${id}: 440 cooldown done — health monitor will reconnect.`);
+          }
+        }, 5 * 60 * 1000); // 5 minutes
       } else {
-        // Exponential backoff retry with a hard ceiling to avoid infinite restart loops.
-        // Sessions that never successfully connect (e.g. banned/timed-out accounts) are
-        // automatically paused after MAX_RETRY_COUNT consecutive failures.
+        // Exponential backoff with a long-backoff fallback — NEVER permanently pause.
+        // After MAX_RETRY_COUNT fast retries, switch to a slow 10-minute retry cadence
+        // so transient WhatsApp/Railway outages are recovered automatically.
         if (!sessionData._retryCount) sessionData._retryCount = 0;
         sessionData._retryCount++;
 
-        if (sessionData._retryCount > MAX_RETRY_COUNT) {
+        const LONG_BACKOFF_THRESHOLD = MAX_RETRY_COUNT;
+        const LONG_BACKOFF_MS = 10 * 60 * 1000; // 10 minutes
+
+        if (sessionData._retryCount > LONG_BACKOFF_THRESHOLD) {
+          // Long-backoff mode: cap the counter so it never overflows, retry every 10 min
+          sessionData._retryCount = LONG_BACKOFF_THRESHOLD + 1;
           activeSessions.delete(id);
-          reconnectingSet.delete(id);
-          console.warn(`⛔ Session ${id} exceeded ${MAX_RETRY_COUNT} reconnect attempts (last status: ${statusCode}) — auto-pausing. Delete the session from the dashboard if it is no longer valid.`);
-          // Mark paused in DB so health monitor won't keep trying
-          sessionData.paused = true;
-          database.patchSession(id, { paused: true }).catch(() => {});
+          console.warn(`⚠️ Session ${id} entering long-backoff mode (status: ${statusCode}) — retrying every ${LONG_BACKOFF_MS / 60000} min indefinitely.`);
+          reconnectingSet.add(id);
+          setTimeout(() => {
+            reconnectingSet.delete(id);
+            if (!activeSessions.has(id)) connectSession(id, sessionData).catch(e =>
+              console.error(`Long-backoff reconnect failed for ${id}:`, e.message)
+            );
+          }, LONG_BACKOFF_MS);
           return;
         }
 
-        const delay = Math.min(5000 * Math.pow(1.5, sessionData._retryCount - 1), 30000);
-        console.log(`🔄 Reconnecting session ${id} (Status: ${statusCode}, attempt ${sessionData._retryCount}/${MAX_RETRY_COUNT}, delay ${Math.round(delay/1000)}s)...`);
+        activeSessions.delete(id);
+        // Backoff caps at 60s (not 30s) to be gentler on Railway rate limits
+        const delay = Math.min(5000 * Math.pow(1.5, sessionData._retryCount - 1), 60000);
+        console.log(`🔄 Reconnecting session ${id} (status: ${statusCode}, attempt ${sessionData._retryCount}/${LONG_BACKOFF_THRESHOLD}, delay ${Math.round(delay / 1000)}s)...`);
         reconnectingSet.add(id);
         setTimeout(() => {
           reconnectingSet.delete(id);
@@ -2312,62 +2328,76 @@ function startSelfPing() {
 
 // ── Session Health Monitor: reconnects sessions that silently dropped ─────────
 const sessionOfflineSince = new Map(); // tracks when each session first went offline
-const OFFLINE_AUTO_DELETE_MS = 24 * 60 * 60 * 1000; // 24 hours
+const sessionPausedSince  = new Map(); // tracks when each session entered paused state
+const AUTO_UNPAUSE_MS     = 15 * 60 * 1000; // auto-un-pause after 15 minutes
 
 async function startSessionHealthMonitor() {
-  const HEALTH_CHECK_INTERVAL = 90 * 1000; // every 90 seconds
+  const HEALTH_CHECK_INTERVAL = 30 * 1000; // every 30 seconds (was 90s)
   setInterval(async () => {
     try {
       const sessions = await database.getAllSessions();
       for (const id of Object.keys(sessions)) {
-        if (activeSessions.has(id)) {
-          sessionOfflineSince.delete(id); // back online — clear offline timer
-          continue;
-        }
-        if (reconnectingSet.has(id)) continue; // already scheduled for reconnect
 
-        // Skip sessions that stepped aside due to a 440 (another instance holds them).
-        // Reconnecting them just causes an infinite 440 loop. They re-enter on server restart.
+        // ── Zombie socket detection: in activeSessions but WebSocket is dead ──
+        if (activeSessions.has(id)) {
+          const liveSock = activeSessions.get(id);
+          const wsState = liveSock?.ws?.readyState;
+          // WebSocket.OPEN = 1; anything else (CLOSING=2, CLOSED=3, CONNECTING=0) is bad
+          const isZombie = wsState !== undefined && wsState !== 1;
+          if (!isZombie) {
+            sessionOfflineSince.delete(id);
+            sessionPausedSince.delete(id);
+            continue; // healthy — skip
+          }
+          // Zombie: force-remove and fall through to reconnect logic
+          console.warn(`🧟 Health monitor: session ${id} has dead socket (ws=${wsState}) — forcing reconnect.`);
+          activeSessions.delete(id);
+          try { liveSock?.end?.(); } catch (_) {}
+          try { liveSock?.ev?.removeAllListeners(); } catch (_) {}
+        }
+
+        if (reconnectingSet.has(id)) continue; // already scheduled
+
+        // Skip sessions whose 440 cooldown hasn't expired yet
         if (replacedSessions.has(id)) continue;
 
-        // Skip paused sessions — they are only cleared/retried on server restart,
-        // never auto-deleted by the health monitor.
+        // Auto-un-pause: if a session was paused (e.g. by long-backoff ceiling) for
+        // more than AUTO_UNPAUSE_MS, clear the flag and let the health monitor retry.
         if (sessions[id]?.paused) {
-          continue;
+          if (!sessionPausedSince.has(id)) sessionPausedSince.set(id, Date.now());
+          const pausedMs = Date.now() - sessionPausedSince.get(id);
+          if (pausedMs < AUTO_UNPAUSE_MS) continue; // still in cooldown
+          console.log(`🔄 Health monitor: auto-un-pausing session ${id} after ${Math.round(pausedMs / 60000)} min cooldown.`);
+          sessions[id].paused = false;
+          sessionPausedSince.delete(id);
+          database.patchSession(id, { paused: false }).catch(() => {});
+          // fall through to reconnect
         }
 
-        // Track how long this session has been offline
-        if (!sessionOfflineSince.has(id)) {
-          sessionOfflineSince.set(id, Date.now());
-        }
-        const offlineMs = Date.now() - sessionOfflineSince.get(id);
-
-        // Auto-delete sessions offline for more than 24 hours
-        if (offlineMs > OFFLINE_AUTO_DELETE_MS) {
-          console.log(`🗑️ Health monitor: auto-deleting session ${id} offline for ${Math.round(offlineMs / 3600000)}h`);
-          try { await database.deleteSession(id); } catch (_) {}
-          sessionOfflineSince.delete(id);
-          continue;
-        }
+        // Track offline duration (for logging; we no longer auto-delete)
+        if (!sessionOfflineSince.has(id)) sessionOfflineSince.set(id, Date.now());
+        const offlineMin = Math.round((Date.now() - sessionOfflineSince.get(id)) / 60000);
 
         // Session exists in DB but is not in activeSessions — schedule reconnect
-        console.log(`🔍 Health monitor: session ${id} is offline — scheduling reconnect...`);
+        console.log(`🔍 Health monitor: session ${id} offline ${offlineMin}min — scheduling reconnect...`);
         reconnectingSet.add(id);
+        // Fetch latest sessionData from DB (includes current creds) for a clean reconnect
+        const freshData = sessions[id];
         setTimeout(() => {
           reconnectingSet.delete(id);
           if (!activeSessions.has(id)) {
             console.log(`♻️ Health monitor reconnecting: ${id}`);
-            connectSession(id, sessions[id]).catch(e =>
+            connectSession(id, freshData).catch(e =>
               console.error(`Health monitor reconnect failed for ${id}:`, e.message)
             );
           }
-        }, 5000 + Math.random() * 5000); // stagger by 5–10s to avoid thundering herd
+        }, 5000 + Math.random() * 5000); // stagger 5–10s to avoid thundering herd
       }
     } catch (e) {
       console.error('Session health monitor error:', e.message);
     }
   }, HEALTH_CHECK_INTERVAL);
-  console.log('🏥 Session health monitor started (checks every 90s)');
+  console.log('🏥 Session health monitor started (checks every 30s, zombie detection ON)');
 }
 
 function clearReconnectTimer() {
